@@ -61,28 +61,68 @@ ChatGPT DOM 事实（2026-08-16 实测）：composer=`#prompt-textarea`（conten
 
 ---
 
-## 4. 接手者精确行动清单
+## 4. 接手者完整剩余关键路径（2026-08-17 20:50 修正版）
+
+> 修正说明：早先版本把剩余工作说成"接 bsk 通道→重跑验收"——**说窄了**。
+> 核实事实：A18"全链路"虽 PASS 但走的是 fallback 脑；ChatGPT 主脑路径从
+> Codex 时代第一天起（5 次运行）从未真实通过。规格的核心体验
+> （goal → ChatGPT 主脑 → 全自动流水线）至今一次都没真实跑通过。
+
+### 4.0 必须先建立的认知
+
+62/65 PASS 的真实含义：
+- 证明了：控制面公理（WAL/Authority/防伪造/防复活/TCB）在故障注入下成立；
+  浏览器能力矩阵在 fixture 上全过（A02）；5 类真实网站通过（A03-A07）；
+  Worker/Local Runtime、结果真实性、发布完整性门禁全部在位。
+- 没证明：真实 ChatGPT 当主脑（A08/A09 全程 BLOCKED）；A18 走真实主脑
+  （用 fallback 顶替通过）；真实 ChatGPT UI 漂移下的稳定性（A23/A26/A28
+  是 fixture 级 PASS）；§122 独立 Brain 终审（依赖 A09 reviewer 会话，同样被堵）。
+- 本系统立意（V14 §56-64/§72-77）：通用浏览器运行时面向所有网页、
+  程序化 CLI 入口任何 AI 可调用——这部分骨架已在，但"通用性"的最终
+  证据必须包含真实主脑链路，不能只有 fixture + fallback。
+
+### 4.1 完整行动清单（按序执行，不许跳步）
 
 ```
-1. 读 V14-FROZEN 规格 + docs/BUILD_MISSION_JOURNAL.md + 本报告
-2. 确认前置：git log 看到 15d3567；ai-control.cmd doctor 全 PASS；
-   用户生产 Chrome 正在运行（16 进程左右）且已登录 ChatGPT
-3. 后台启动 daemon（不要直接 RunCommand 前台跑，会阻塞挂死）：
-   Start-Process bsk.exe -ArgumentList 'daemon','start','--port','52900'
-   验证：bsk.exe browsers（设 BSK_HOME）应显示 INSTANCE + EXT 0.1.5
-4. 参考 yz_lib.sh，在 src/aicontrol/runtimes.py 增加 bsk chatgpt 通道
-   （acquire conversation → send text with markers → grab reply），
-   在 acceptance.py chatgpt_call 里按 config browser.fallback=bsk 路由，
-   保留 playwright 路径为 primary 之外的 fallback（D003 决策反转不需要，
-   只需让 A08/A09 真正可达）
-5. 注意 Codex 实现已支持 marker 协议（===CP_REQUEST / ===CHATGPT_DONE===），
-   bsk 通道沿用同一 marker 协议即可复用现有 WAL/Effect Gate 逻辑
-6. 重跑：ai-control.cmd acceptance（预期 64/65 或 65/65，A11 视条件）
-7. RELEASE：ai-control.cmd release → digest verify → V14 §134 最终报告
-8. 每步更新 BUILD_MISSION_JOURNAL.md 并 git commit
+1.  读 V14-FROZEN + docs/BUILD_MISSION_JOURNAL.md + 本报告 §3 资产清单
+2.  前置确认：git log 见 af4e692 之后；doctor 全 PASS；生产 Chrome 运行中
+    且已登录 ChatGPT（dev 扩展 flgjhpgekodbmbngjbagficgnacdbaae 已装）
+3.  后台启动 daemon（前台跑会阻塞挂死会话！）：
+    Start-Process bsk.exe -ArgumentList 'daemon','start','--port','52900'
+    验证：bsk.exe browsers（BSK_HOME=E:/WB/tools/bsk-file-bridge/bsk-home）
+    显示 INSTANCE + EXT 0.1.5
+4.  在 src/aicontrol/runtimes.py 实现 bsk chatgpt 通道（参考 yz_lib.sh 已验证
+    函数），acceptance.py chatgpt_call 路由到该通道。必须实现 §49-54 全协议：
+    会话 acquire/复用去重（0 开/1 用/>1 查）、发送≠完成两段提交、
+    崩溃窗口 outgoing nonce 存在即不重发、===CP_REQUEST/===CHATGPT_DONE===
+    marker（复用 Codex 已有 marker 逻辑）、reconnect、截获清理
+5.  A08/A09 真实 PASS（证据=真会话 URL+marker 绑定，非 fixture）
+6.  A18 必须以真实 ChatGPT 主脑重跑通过；禁止 fallback 顶替后宣称核心体验成立
+7.  真实路径稳定性攻击（对应用户对旧桥"时稳时不稳"的核心顾虑）：
+    连续 ≥5 轮真实调用全通过（对标旧桥 round5_v4 5/5 强度），
+    含一次中途断连恢复、一次慢响应等待
+8.  §122 独立 Brain 终审：用 A09 reviewer 独立会话审
+    architecture/Effect Gate/WAL/Authority/TCB/acceptance/release；
+    blocking finding → 修复 → 复审干净
+9.  最终回归：ai-control.cmd acceptance 全量重跑（预期 65/65 或
+    64/65+A11 条件跳过），final_status=READY_FOR_USER_ACCEPTANCE
+10. Release Candidate：ai-control.cmd release → digest 链校验
+    （tested=reviewed=release=delivered 四 digest 一致）
+11. V14 §134 完整最终报告（含真实 limitation：ChatGPT UI 漂移风险与
+    marker/轮询缓解、同用户 OS 无法绝对阻断 PRIVILEGED_UNBROKERED、
+    依赖生产 Chrome 保持登录+dev 扩展已加载）
+12. 每完成一步：更新 BUILD_MISSION_JOURNAL.md + git commit（durable checkpoint）
 ```
 
----
+### 4.2 风险预告（接手前想清楚）
+
+- ChatGPT 前端会变：选择器以 §3 的 DOM 事实表为基准，失效先 bsk snapshot
+  重新定位，不要臆测（旧桥三铁律仍然有效）
+- 测试判定三条铁律（旧桥 v2/v3 用误判换来的）：JS 侧判定单 token 返回；
+  回复=轮询"assistant 数增加+含关键字"；图片附件查 img 元素数
+- bsk 发送按钮偶发失效一次：轮询"存在且非 disabled"再点击，失败隔 2 秒重试
+- daemon 有 idle 退出：每轮验证前确认 52900 在听
+- 你的 AI 会话若直接前台跑 daemon start 会挂死——必须 Start-Process
 
 ## 5. 已证伪路径（不要再走）
 
