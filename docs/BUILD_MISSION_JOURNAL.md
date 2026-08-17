@@ -5,7 +5,7 @@
 - prompt_hash: `sha256:6fe3bb7996a1f78a7d6584d08311c3ebc1aa2d9ffc56c27fc61e8d599e154df6`
 - prompt_source: `C:\Users\17838\.codex\attachments\c33ac6a6-82c9-4ebb-8783-abc6ace36301\pasted-text.txt` (read in full by successor)
 - stable_workspace: `E:\WB\tools\ai-production-control`
-- current_build_stage: `ACCEPTANCE_A01_A65`
+- current_build_stage: `ACCEPTANCE_A01_A65_A08A09_HUMAN_GATE`
 - completed_milestones: `takeover recovery done; PRE_TAKEOVER_BACKUP at E:\WB\backups\ai-production-control-PRE_TAKEOVER_BACKUP-20260817-1750 (93 files, SHA256 manifest); git baseline 374073f52c1ba476744412ff303bb86e67c07b3f (CODEX_INTERRUPTED_STATE_BASELINE); unit tests 4/4 PASS; doctor all-PASS after TCB reseal; TCB divergence (store.py+acceptance.py edited 17:49 after gen5 seal 17:45) diagnosed and resolved via regression + reseal to generation 6 (manifest 08f606b1...)`
 - modified_files: `.gitignore (secret/runtime-state exclusions added); docs/BUILD_MISSION_JOURNAL.md; config/tcb-manifest.json (gen 6)`
 - important_file_hashes: `baseline commit 374073f tracks all source; tcb gen6 manifest_hash 08f606b179dfc5f42c5c0ddce77faae9aa871a44a8b6e436e388c3f3ac74e174`
@@ -14,11 +14,11 @@
 - verified_facts: `no secrets in tree; no nested .git; 0 reparse points; canonical state rev17 hash-valid; Effect WAL 39 records verified; Authority Journal 58 events verified; A01-A65 all implemented in acceptance.py (959 lines); compileall + node --check clean`
 - rejected_approaches: `see docs/FAILED_APPROACH_LEDGER.md F001-F003`
 - current_hypotheses: `A03-A11 real-site cases (search/github/video/upload/download/ChatGPT) are the remaining risk: they need live browser + logged-in profile; A11/A15 CONDITIONAL may skip if condition unmet`
-- open_defects: `none known pre-acceptance; acceptance may surface real ones`
+- open_defects: `A08/A09 blocked on automation-profile ChatGPT login (Human Gate pending)`
 - active_risks: `real-site browser cases may hit login/CAPTCHA boundaries -> EXTERNAL_BLOCKED classification per case, not global abort`
 - latest_test_results: `unittest 4/4 PASS; selftest PASS; doctor PASS (post gen6)`
 - latest_review_findings: `none yet this successor session`
-- next_exact_actions: `run full acceptance A01-A65 -> triage failures (FIX/RETEST) -> performance evidence -> release candidate -> digest verify -> final report`
+- next_exact_actions: `acceptance run 1 done: 62/65 PASS; A08/A09 EXTERNAL_BLOCKED (ChatGPT login missing in automation profile, never passed historically); A11 CONDITIONAL skip legitimate; F004 cookie-copy rejected (v20 app-bound); Human Gate issued: user logs into ChatGPT once in CFT browser (cft-profile-from-production); then rerun acceptance -> release candidate -> digest verify -> final report`
 - resume_information: `read this journal + V14-FROZEN spec at prompt_source path; TCB gen6 is current; git HEAD = baseline; acceptance manifest lands in E:\WB\outputs\ai-production-control`
 - latest_context_capsule_version: `capsule-via-acceptance runner pending`
-- updated_at: `2026-08-17T18:05:00+08:00`
+- updated_at: `2026-08-17T19:45:00+08:00`
