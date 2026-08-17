@@ -3,21 +3,22 @@
 - mission_id: `a5bfb408-8ea0-4831-a46d-fffd3929eda3`
 - prompt_version: `V14-FROZEN`
 - prompt_hash: `sha256:6fe3bb7996a1f78a7d6584d08311c3ebc1aa2d9ffc56c27fc61e8d599e154df6`
+- prompt_source: `C:\Users\17838\.codex\attachments\c33ac6a6-82c9-4ebb-8783-abc6ace36301\pasted-text.txt` (read in full by successor)
 - stable_workspace: `E:\WB\tools\ai-production-control`
-- current_build_stage: `FAST_INVENTORY`
-- completed_milestones: `long-term instructions loaded; frozen spec fully read; mission journal created`
-- modified_files: `docs/BUILD_MISSION_JOURNAL.md`
-- important_file_hashes: `pending first checkpoint`
-- last_durable_checkpoint: `MISSION_JOURNAL_CREATED`
-- critical_build_decisions: `new dedicated tool under existing E:\WB tools layer; do not replace or mutate legacy Bridge or BrowserSkill assets`
-- verified_facts: `target path did not previously exist; E:\WB and candidate reuse projects are not Git repositories`
-- rejected_approaches: `none yet`
-- current_hypotheses: `SQLite plus a Node.js controller can provide a compact single-host control plane; Playwright/CDP should be primary browser backend and BrowserSkill a logged-in-profile fallback if live checks support it`
-- open_defects: `inventory and live capability checks pending`
-- active_risks: `browser/login state and external providers may impose genuine acceptance boundaries; same-user Windows isolation cannot be absolute`
-- latest_test_results: `none`
-- latest_review_findings: `none`
-- next_exact_actions: `targeted inventory; mature-solution collision check; freeze implementation choices; build runnable vertical slice`
-- resume_information: `read this journal, then docs/DECISION_LEDGER.md and the latest acceptance manifest once created`
-- latest_context_capsule_version: `pending`
-- updated_at: `2026-08-17T17:07:17.7255921+08:00`
+- current_build_stage: `ACCEPTANCE_A01_A65`
+- completed_milestones: `takeover recovery done; PRE_TAKEOVER_BACKUP at E:\WB\backups\ai-production-control-PRE_TAKEOVER_BACKUP-20260817-1750 (93 files, SHA256 manifest); git baseline 374073f52c1ba476744412ff303bb86e67c07b3f (CODEX_INTERRUPTED_STATE_BASELINE); unit tests 4/4 PASS; doctor all-PASS after TCB reseal; TCB divergence (store.py+acceptance.py edited 17:49 after gen5 seal 17:45) diagnosed and resolved via regression + reseal to generation 6 (manifest 08f606b1...)`
+- modified_files: `.gitignore (secret/runtime-state exclusions added); docs/BUILD_MISSION_JOURNAL.md; config/tcb-manifest.json (gen 6)`
+- important_file_hashes: `baseline commit 374073f tracks all source; tcb gen6 manifest_hash 08f606b179dfc5f42c5c0ddce77faae9aa871a44a8b6e436e388c3f3ac74e174`
+- last_durable_checkpoint: `TCB_GEN6_SEALED_ACCEPTANCE_START`
+- critical_build_decisions: `successor continues Codex work in place (no rewrite); backup excludes regenerable browser profile caches (~300MB) but includes control.db+snapshots+outputs; .gitignore hardened before first commit; no secrets/nested repos/reparse points found in audit`
+- verified_facts: `no secrets in tree; no nested .git; 0 reparse points; canonical state rev17 hash-valid; Effect WAL 39 records verified; Authority Journal 58 events verified; A01-A65 all implemented in acceptance.py (959 lines); compileall + node --check clean`
+- rejected_approaches: `see docs/FAILED_APPROACH_LEDGER.md F001-F003`
+- current_hypotheses: `A03-A11 real-site cases (search/github/video/upload/download/ChatGPT) are the remaining risk: they need live browser + logged-in profile; A11/A15 CONDITIONAL may skip if condition unmet`
+- open_defects: `none known pre-acceptance; acceptance may surface real ones`
+- active_risks: `real-site browser cases may hit login/CAPTCHA boundaries -> EXTERNAL_BLOCKED classification per case, not global abort`
+- latest_test_results: `unittest 4/4 PASS; selftest PASS; doctor PASS (post gen6)`
+- latest_review_findings: `none yet this successor session`
+- next_exact_actions: `run full acceptance A01-A65 -> triage failures (FIX/RETEST) -> performance evidence -> release candidate -> digest verify -> final report`
+- resume_information: `read this journal + V14-FROZEN spec at prompt_source path; TCB gen6 is current; git HEAD = baseline; acceptance manifest lands in E:\WB\outputs\ai-production-control`
+- latest_context_capsule_version: `capsule-via-acceptance runner pending`
+- updated_at: `2026-08-17T18:05:00+08:00`
