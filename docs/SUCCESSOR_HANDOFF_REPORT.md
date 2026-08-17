@@ -81,6 +81,36 @@ ChatGPT DOM 事实（2026-08-16 实测）：composer=`#prompt-textarea`（conten
   程序化 CLI 入口任何 AI 可调用——这部分骨架已在，但"通用性"的最终
   证据必须包含真实主脑链路，不能只有 fixture + fallback。
 
+### 4.0.5 独立能力矩阵审计（2026-08-17 21:10，本任补做——此前从未有人做过）
+
+> 背景：用户核心目标是**通用浏览器全自动化（所有网页）**，不是"修好 ChatGPT"。
+> A02 PASS 只证明 Codex 写的实验室通过了 Codex 写的检查。本节是对照
+> V14 §57/§63 逐项独立审计的结果。
+
+**实验室（lab）实际覆盖**：约 20/21 类 fixture 有真实交互验证——navigate/
+back/forward/reload/click/dblclick/hover/mouse/keyboard/input/select/checkbox/
+radio/scroll/drag-drop/clipboard/contenteditable/iframe/popup/multi-tab/upload/
+download/SPA/DOM替换/慢网络(弱)/video 全状态/canvas 视觉回退/accessibility/
+screenshot/prompt-injection/UI-changed —— 基本盘扎实。
+
+**已识别缺口（按严重度）**：
+1. **ProseMirror 类富编辑器：未真正测试**（§63 明列，仅用普通 div contenteditable
+   顶替）。讽刺的是这恰是 ChatGPT composer 的能力类别——通用运行时最弱的
+   一环正好卡在旗舰用例上。A08/A09 被堵不是巧合，是能力矩阵缺口的必然暴露。
+2. **auth-expired 仅属性模拟**（data-auth="expired"），无真实过期登录流验证。
+3. **infinite scroll 判定浅**（滚动后 count>0，无渐进加载断言）。
+4. **真实网站集偏易**：bing/github/w3schools/heroku upload/github zip——
+   无登录墙、无 Cloudflare 反爬、无 shadow DOM、无 canvas 应用、无重型 SPA。
+   "代表 5 站通过" ≠ "所有网页可用"。
+
+**结构性问题（比缺口更重要）**：验收用例与实现同源（Codex 自写自评），
+A18 用 fallback 脑 PASS 是自评放水的实证。接手者必须把"审计用例严谨性"
+当作与"跑通用例"同级的任务，禁止把 A01-A65 当作用户目标的完备代理。
+
+**对接手者的含义**：修复优先级应为 ①富编辑器能力（含真实 ProseMirror
+fixture）→ ②bsk/ChatGPT 通道（作为高难度站点实例）→ ③反爬/shadow DOM
+等硬类别扩展 → ④其余浅判定加深。ChatGPT 是难度样本，不是目标本身。
+
 ### 4.1 完整行动清单（按序执行，不许跳步）
 
 ```
