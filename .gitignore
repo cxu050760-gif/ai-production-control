@@ -1,0 +1,26 @@
+﻿__pycache__/
+*.py[cod]
+node_modules/
+.pytest_cache/
+.coverage
+npm-debug.log*
+config/tcb-manifest.json
+lab/tiny-video.mp4
+
+# secrets / credentials -- never commit
+.env
+.env.*
+*.pem
+*.key
+auth.json
+*token*.json
+*credential*
+
+# runtime-generated state (canonical state lives in E:\WB\state, outside this repo)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+snapshots/
+logs/
+*.log

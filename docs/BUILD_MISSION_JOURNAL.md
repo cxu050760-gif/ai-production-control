@@ -1,0 +1,23 @@
+# Build Mission Journal
+
+- mission_id: `a5bfb408-8ea0-4831-a46d-fffd3929eda3`
+- prompt_version: `V14-FROZEN`
+- prompt_hash: `sha256:6fe3bb7996a1f78a7d6584d08311c3ebc1aa2d9ffc56c27fc61e8d599e154df6`
+- stable_workspace: `E:\WB\tools\ai-production-control`
+- current_build_stage: `FAST_INVENTORY`
+- completed_milestones: `long-term instructions loaded; frozen spec fully read; mission journal created`
+- modified_files: `docs/BUILD_MISSION_JOURNAL.md`
+- important_file_hashes: `pending first checkpoint`
+- last_durable_checkpoint: `MISSION_JOURNAL_CREATED`
+- critical_build_decisions: `new dedicated tool under existing E:\WB tools layer; do not replace or mutate legacy Bridge or BrowserSkill assets`
+- verified_facts: `target path did not previously exist; E:\WB and candidate reuse projects are not Git repositories`
+- rejected_approaches: `none yet`
+- current_hypotheses: `SQLite plus a Node.js controller can provide a compact single-host control plane; Playwright/CDP should be primary browser backend and BrowserSkill a logged-in-profile fallback if live checks support it`
+- open_defects: `inventory and live capability checks pending`
+- active_risks: `browser/login state and external providers may impose genuine acceptance boundaries; same-user Windows isolation cannot be absolute`
+- latest_test_results: `none`
+- latest_review_findings: `none`
+- next_exact_actions: `targeted inventory; mature-solution collision check; freeze implementation choices; build runnable vertical slice`
+- resume_information: `read this journal, then docs/DECISION_LEDGER.md and the latest acceptance manifest once created`
+- latest_context_capsule_version: `pending`
+- updated_at: `2026-08-17T17:07:17.7255921+08:00`

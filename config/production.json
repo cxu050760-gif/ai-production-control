@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "prompt_version": "V14-FROZEN",
+  "code_root": "E:\\WB\\tools\\ai-production-control",
+  "state_root": "E:\\WB\\state\\ai-production-control",
+  "output_root": "E:\\WB\\outputs\\ai-production-control",
+  "release_root": "E:\\WB\\outputs\\ai-production-control\\release",
+  "evidence_root": "E:\\WB\\outputs\\ai-production-control\\evidence",
+  "database_path": "E:\\WB\\state\\ai-production-control\\control.db",
+  "browser": {
+    "primary": "playwright-cdp",
+    "fallback": "bsk",
+    "chrome_executable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "generic_profile": "E:\\WB\\state\\ai-production-control\\browser-profile",
+    "authenticated_profile": "E:\\WB\\tools\\bsk-file-bridge\\cft-profile-from-production",
+    "bsk_executable": "E:\\WB\\tools\\bsk-file-bridge\\repo\\target\\release\\bsk.exe",
+    "bsk_home": "E:\\WB\\tools\\bsk-file-bridge\\bsk-home",
+    "bsk_daemon_port": 52900,
+    "bsk_extension": "E:\\WB\\tools\\bsk-file-bridge\\repo\\apps\\extension\\dist\\chrome-mv3",
+    "cft_executable": "E:\\WB\\tools\\bsk-file-bridge\\cft\\chrome-win64\\chrome.exe"
+  },
+  "brains": {
+    "default_primary": "chatgpt-web",
+    "fallbacks": ["workbuddy-deepseek-v4-flash", "codex-local"]
+  },
+  "workers": {
+    "local_python": "C:\\Users\\17838\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "workbuddy_node": "C:\\Users\\17838\\.workbuddy\\binaries\\node\\versions\\22.22.2\\node.exe",
+    "workbuddy_cli": "C:\\Program Files\\WorkBuddy\\resources\\app.asar.unpacked\\cli\\bin\\codebuddy",
+    "codex_cli": "C:\\Users\\17838\\AppData\\Roaming\\npm\\codex.cmd"
+  },
+  "policy": {
+    "unknown_data_classification": "PRIVATE_LOCAL",
+    "default_external_effect": "DENY",
+    "max_review_cycles": 3,
+    "max_worker_retries": 2,
+    "max_browser_retries": 2,
+    "max_external_brain_calls": 6,
+    "controller_lease_seconds": 120,
+    "lock_lease_seconds": 120
+  },
+  "allowed_roots": [
+    "E:\\WB\\tools\\ai-production-control",
+    "E:\\WB\\state\\ai-production-control",
+    "E:\\WB\\outputs\\ai-production-control"
+  ]
+}
+

@@ -1,0 +1,9 @@
+[project]
+name = "ai-production-control"
+version = "1.0.0"
+requires-python = ">=3.12"
+description = "Windows-local AI production control plane"
+
+[tool.unittest]
+start-directory = "tests"
+
