@@ -134,10 +134,13 @@ class RealWorkerPipelineTests(RealWorkerPipelineFixture):
             tracker = []
             pipeline = self.make_pipeline(worker_id=worker_id, task_id=tid,
                                           context_fence=task["context_fence"], produced_tracker=tracker)
+            before = {p for p in (self.root / "release").glob("delivery-*.md")}
             report = pipeline.run()
             self.assertEqual(report["status"], "COMPLETE", worker_id)
-            delivered = list((self.root / "release").glob("delivery-*.md"))
-            outputs[variant] = sorted(delivered)[-1].read_text(encoding="utf-8")
+            after = {p for p in (self.root / "release").glob("delivery-*.md")}
+            new_files = after - before
+            self.assertEqual(len(new_files), 1)
+            outputs[variant] = new_files.pop().read_text(encoding="utf-8")
             self.assertEqual(len(tracker), 1)
             self.assertEqual(tracker[0]["source_binding"]["worker_id"], worker_id)
         self.assertIn("variant: alpha", outputs["alpha"])
