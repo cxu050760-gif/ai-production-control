@@ -24,7 +24,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from aicontrol.directives import commit_directive  # noqa: E402
-from aicontrol.pipeline import GoalPipeline  # noqa: E402
+from aicontrol.pipeline import ContinuationDriver, GoalPipeline  # noqa: E402
 from aicontrol.store import ControlStore  # noqa: E402
 from aicontrol.util import read_json, write_json  # noqa: E402
 
@@ -192,6 +192,51 @@ class GoalPipelineE2ETests(PipelineFixture):
         report2 = pipeline.run()
         self.assertEqual(report2["status"], "COMPLETE")
         self.assertEqual(len(list((self.root / "release").glob("delivery-*.md"))), 1)
+
+
+class ContinuationDriverTests(PipelineFixture):
+    def test_single_goal_auto_continues_without_user(self) -> None:
+        calls = []
+
+        def work(attempt, artifact):
+            calls.append(attempt)
+            artifact.write_text("ok", encoding="utf-8")
+
+        def test(produced):
+            return True, []
+
+        driver = ContinuationDriver(self.store)
+        result = driver.advance(
+            task_id="task-driver-ok", objective="g",
+            artifact=self.root / "a.md", release_root=self.root / "release",
+            work=work, test=test, review=self.make_reviewer(always_pass=True),
+            per_invocation_step_budget=1, max_invocations=50,
+        )
+        # one submission -> multiple automatic invocations -> delivery; no user "continue".
+        self.assertEqual(result["status"], "COMPLETE")
+        self.assertGreaterEqual(len(result["invocations"]), 3)
+        self.assertEqual(len(list((self.root / "release").glob("delivery-*.md"))), 1)
+
+    def test_driver_gate_no_delivery_without_reviewer(self) -> None:
+        self.store.upsert_registry("reviewer_registry", "reviewer_id", "rdr",
+                                   {"reviewer_id": "rdr", "availability": "PENDING"})
+
+        def work(attempt, artifact):
+            artifact.write_text("x", encoding="utf-8")
+
+        def test(produced):
+            return True, []
+
+        driver = ContinuationDriver(self.store)
+        result = driver.advance(
+            task_id="task-driver-gate", objective="g",
+            artifact=self.root / "a.md", release_root=self.root / "release",
+            work=work, test=test, review=self.make_reviewer(always_pass=True),
+            required_reviewer_id="rdr", per_invocation_step_budget=1, max_invocations=5,
+        )
+        self.assertEqual(result["status"], "READY_FOR_REVIEW")
+        self.assertEqual(len(result["invocations"]), 1)
+        self.assertEqual(list((self.root / "release").glob("delivery-*.md")), [])
 
 
 if __name__ == "__main__":

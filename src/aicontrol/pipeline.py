@@ -201,3 +201,48 @@ class GoalPipeline:
         )
         self._set_meta("delivered_digest", digest)
         return str(delivered)
+
+
+class ContinuationDriver:
+    """Outer auto-continuation: re-invokes the GoalPipeline from durable state,
+    so a single GOAL survives many AI/provider invocations without user input."""
+
+    def __init__(self, store: ControlStore) -> None:
+        self.store = store
+
+    def advance(
+        self,
+        *,
+        task_id: str,
+        objective: str,
+        artifact: Path,
+        release_root: Path,
+        work: Callable[[int, Path], Any],
+        test: Callable[[Path], tuple[bool, list[str]]],
+        review: Callable[[Path], dict[str, Any]],
+        required_reviewer_id: str | None = None,
+        per_invocation_step_budget: int = 1,
+        max_invocations: int = 50,
+    ) -> dict[str, Any]:
+        invocations: list[dict[str, Any]] = []
+        for index in range(max_invocations):
+            gate, reason = has_work_gate(self.store, task_id=task_id)
+            if gate:
+                return {"status": "BLOCKED_BY_DIRECTIVE", "reason": reason, "invocations": invocations}
+            pipeline = GoalPipeline(
+                self.store,
+                task_id=task_id,
+                objective=objective,
+                artifact=artifact,
+                release_root=release_root,
+                work=work,
+                test=test,
+                review=review,
+                required_reviewer_id=required_reviewer_id,
+            )
+            report = pipeline.run(limit_steps=per_invocation_step_budget)
+            invocations.append({"index": index, "status": report.get("status")})
+            if report.get("status") in ("COMPLETE", "BLOCKED", "READY_FOR_REVIEW"):
+                return {**report, "invocations": invocations}
+            # status RUNNING => more work is pending; continue automatically.
+        return {"status": "INVOCATION_LIMIT", "invocations": invocations}
