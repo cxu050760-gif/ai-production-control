@@ -49,6 +49,23 @@ CREATE TABLE IF NOT EXISTS stable_lineage (
 """
 
 
+
+
+VOUCHER_SCHEMA = '''
+CREATE TABLE IF NOT EXISTS review_vouchers (
+  voucher_id TEXT PRIMARY KEY,
+  candidate_record_id TEXT NOT NULL UNIQUE,
+  reviewer_identity TEXT NOT NULL,
+  reviewer_role TEXT NOT NULL,
+  controller_commit TEXT NOT NULL,
+  tree_digest TEXT NOT NULL,
+  delivered_digest TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+'''
+
+
 class LineageError(RuntimeError):
     pass
 
@@ -58,7 +75,7 @@ class PromotionRequiresReview(LineageError):
 
 
 def _ensure_schema(store: ControlStore) -> None:
-    store.connection.executescript(LINEAGE_SCHEMA)
+    store.connection.executescript(LINEAGE_SCHEMA + "\n" + VOUCHER_SCHEMA)
     store.durable_barrier()
 
 
@@ -153,6 +170,53 @@ class StableLineage:
             )
         self.store.durable_barrier()
         return {"rolled_back_stable": stable_version, "current_stable": self.current_stable()}
+
+
+    def get_candidate(self, record_id: str) -> dict[str, Any] | None:
+        row = self.store.connection.execute(
+            "SELECT * FROM stable_lineage WHERE record_id=? AND kind=?",
+            (record_id, KIND_CANDIDATE),
+        ).fetchone()
+        return dict(row) if row else None
+
+    @staticmethod
+    def _parsed_delivered(candidate: dict[str, Any]) -> str | None:
+        for entry in json.loads(candidate.get("known_limitations_json") or "[]"):
+            if isinstance(entry, str) and entry.startswith("delivered_sha256="):
+                return entry.split("=", 1)[1]
+        return None
+
+    def issue_voucher(self, *, candidate_record_id: str, reviewer_identity: str,
+                      reviewer_role: str, delivered_digest: str) -> dict[str, Any]:
+        cand = self.get_candidate(candidate_record_id)
+        if not cand or cand["status"] != STATUS_CANDIDATE:
+            raise LineageError("cannot voucher a non-active Candidate")
+        if str(reviewer_role or "").upper() != "R_PROD":
+            raise PromotionRequiresReview("independent review must come from an R_PROD reviewer")
+        stored = self._parsed_delivered(cand)
+        if stored is None or delivered_digest != stored:
+            raise LineageError("review voucher delivered_digest does not match the Candidate release digest")
+        vid = f"voucher-{uuid.uuid4()}"
+        with self.store.transaction() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO review_vouchers(voucher_id,candidate_record_id,reviewer_identity,reviewer_role,controller_commit,tree_digest,delivered_digest,verdict,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (vid, cand["record_id"], reviewer_identity, str(reviewer_role).upper(),
+                 cand["controller_commit"], cand["tree_digest"], delivered_digest, "PASS", utc_now()),
+            )
+        self.store.durable_barrier()
+        return dict(self.store.connection.execute(
+            "SELECT * FROM review_vouchers WHERE voucher_id=?", (vid,)
+        ).fetchone())
+
+    def promote_by_voucher(self, voucher_id: str) -> dict[str, Any]:
+        v = self.store.connection.execute(
+            "SELECT * FROM review_vouchers WHERE voucher_id=?", (voucher_id,)
+        ).fetchone()
+        if not v or v["verdict"] != "PASS":
+            raise PromotionRequiresReview("no valid independent-review voucher for promotion")
+        return self.promote(v["candidate_record_id"], independent_review={
+            "verdict": "PASS", "reviewer": v["reviewer_identity"], "reviewer_role": v["reviewer_role"],
+        })
 
     def lineage(self) -> list[dict[str, Any]]:
         return [

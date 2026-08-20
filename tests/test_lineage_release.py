@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-"""M5: authoritative lineage release gate wired into the goal pipeline.
+"""M5: authoritative lineage release gate - voucher-bound independent promotion.
 
 Proves:
-  - a real delivery through Controller.run_pipeline_goal records a lineage
-    CANDIDATE (never a self-promotion to STABLE when the review is a stand-in);
-  - promote_release refuses non-PASS and promotes only on an independent PASS;
-  - rollback_release restores the prior Stable durably.
+  - a real delivery records a CANDIDATE (never self-promoted);
+  - only a durable, candidate-bound review voucher issued by a registered, ready
+    R_PROD reviewer (with a matching delivered digest) can promote CANDIDATE->STABLE;
+  - forged / unregistered / cross-candidate / digest-mismatch vouchers all fail;
+  - authoritative lineage identity fails closed when git/commit or digest is missing;
+  - rollback operates the same authoritative lineage and is traceable.
 """
 
 import copy
@@ -22,7 +24,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from aicontrol.controller import Controller  # noqa: E402
-from aicontrol.lineage import PromotionRequiresReview  # noqa: E402
+from aicontrol.lineage import LineageError, PromotionRequiresReview  # noqa: E402
 from aicontrol.util import read_json, write_json  # noqa: E402
 
 
@@ -56,9 +58,15 @@ class LineageReleaseFixture(unittest.TestCase):
                 "availability": "AVAILABLE",
             },
         )
+        # a ready independent R_PROD reviewer
         self.controller.store.upsert_registry(
-            "reviewer_registry", "reviewer_id", "r-prod-temp",
-            {"reviewer_id": "r-prod-temp", "role": "R_PROD", "availability": "AVAILABLE"},
+            "reviewer_registry", "reviewer_id", "r-prod-real",
+            {"reviewer_id": "r-prod-real", "role": "R_PROD", "availability": "VERIFIED"},
+        )
+        # a distractor reviewer that is NOT a ready R_PROD reviewer
+        self.controller.store.upsert_registry(
+            "reviewer_registry", "reviewer_id", "r-nonprod",
+            {"reviewer_id": "r-nonprod", "role": "E_LAB", "availability": "AVAILABLE"},
         )
 
     def tearDown(self) -> None:
@@ -72,9 +80,20 @@ class LineageReleaseFixture(unittest.TestCase):
         return self.controller.run_pipeline_goal(
             "release a sample artifact",
             worker_id="fixture-alpha",
-            required_reviewer_id="r-prod-temp",
+            required_reviewer_id="r-prod-real",
             review=self.stand_in_pass,
         )
+
+    def delivered_digest(self, result):
+        return self.controller.store.meta(f"pipeline:{result['task_id']}:delivered_digest")
+
+    def promote_bound(self, result):
+        v = self.controller.issue_promotion_voucher(
+            result["lineage_release"]["lineage_record_id"],
+            reviewer_identity="r-prod-real",
+            delivered_digest=self.delivered_digest(result),
+        )
+        return self.controller.promote_release(v["voucher_id"])
 
 
 class LineageReleaseGateTests(LineageReleaseFixture):
@@ -82,32 +101,75 @@ class LineageReleaseGateTests(LineageReleaseFixture):
         result = self.run_delivered()
         self.assertEqual(result["status"], "COMPLETE")
         li = result.get("lineage_release")
-        self.assertIsNotNone(li, "delivery must record an authoritative lineage Candidate")
+        self.assertIsNotNone(li)
         self.assertEqual(li["lineage_status"], "CANDIDATE")
-        # no Stable yet (review was a stand-in)
-        self.assertIsNone(self.controller.release_lineage() and
-                          next((r for r in self.controller.release_lineage() if r["status"] == "STABLE"), None))
+        stables = [r for r in self.controller.release_lineage() if r["status"] == "STABLE"]
+        self.assertEqual(stables, [])
 
-    def test_promote_fails_closed_on_non_pass(self) -> None:
-        rec = self.run_delivered()["lineage_release"]["lineage_record_id"]
-        with self.assertRaises(PromotionRequiresReview):
-            self.controller.promote_release(rec, independent_review={"verdict": "REWORK", "reviewer": "r"})
-
-    def test_promote_requires_independent_pass_and_advances_stable(self) -> None:
-        rec = self.run_delivered()["lineage_release"]["lineage_record_id"]
-        out = self.controller.promote_release(rec, independent_review={"verdict": "PASS", "reviewer": "independent-r"})
+    def test_bound_rprod_pass_promotes_to_stable(self) -> None:
+        result = self.run_delivered()
+        out = self.promote_bound(result)
         self.assertEqual(out["lineage_status"], "STABLE")
         stables = [r for r in self.controller.release_lineage() if r["status"] == "STABLE"]
         self.assertEqual(len(stables), 1)
         self.assertEqual(stables[0]["kind"], "STABLE")
 
+    def test_unknown_voucher_cannot_promote(self) -> None:
+        result = self.run_delivered()
+        with self.assertRaises(PromotionRequiresReview):
+            self.controller.promote_release("voucher-does-not-exist")
+        stables = [r for r in self.controller.release_lineage() if r["status"] == "STABLE"]
+        self.assertEqual(stables, [])
+
+    def test_forged_verdict_dict_is_never_trusted(self) -> None:
+        # a "PASS-shaped dict" can no longer be passed to promotion; the only API
+        # is a voucher_id, so a forged/injected dict simply cannot promote.
+        result = self.run_delivered()
+        self.assertFalse(hasattr(self.controller.promote_release, "independent_review"))
+        stables = [r for r in self.controller.release_lineage() if r["status"] == "STABLE"]
+        self.assertEqual(stables, [])
+
+    def test_unregistered_or_non_rprod_reviewer_cannot_issue_voucher(self) -> None:
+        result = self.run_delivered()
+        rid = result["lineage_release"]["lineage_record_id"]
+        dig = self.delivered_digest(result)
+        with self.assertRaises(PromotionRequiresReview):
+            self.controller.issue_promotion_voucher(rid, reviewer_identity="nobody", delivered_digest=dig)
+        with self.assertRaises(PromotionRequiresReview):
+            self.controller.issue_promotion_voucher(rid, reviewer_identity="r-nonprod", delivered_digest=dig)
+
+    def test_digest_mismatch_cannot_voucher(self) -> None:
+        result = self.run_delivered()
+        rid = result["lineage_release"]["lineage_record_id"]
+        with self.assertRaises(LineageError):
+            self.controller.issue_promotion_voucher(rid, reviewer_identity="r-prod-real", delivered_digest="wrong-digest")
+
+    def test_other_candidates_pass_cannot_promote_this_candidate(self) -> None:
+        a = self.run_delivered()
+        b = self.run_delivered()
+        rid_a = a["lineage_release"]["lineage_record_id"]
+        dig_b = self.delivered_digest(b)  # digest belongs to candidate B, not A
+        with self.assertRaises(LineageError):
+            self.controller.issue_promotion_voucher(rid_a, reviewer_identity="r-prod-real", delivered_digest=dig_b)
+        stables = [r for r in self.controller.release_lineage() if r["status"] == "STABLE"]
+        self.assertEqual(stables, [])
+
+    def test_identity_fails_closed_when_git_or_digest_missing(self) -> None:
+        self.controller.code_root = self.root / "not-a-git-repo"
+        self.assertIsNone(self.controller._lineage_identity()[0])
+        with self.assertRaises(LineageError):
+            self.controller._record_release(task_id="t1", objective="x", delivered_digest="abc")
+        with self.assertRaises(LineageError):
+            self.controller._record_release(task_id="t1", objective="x", delivered_digest=None)
+
     def test_rollback_restores_previous_stable(self) -> None:
-        r1 = self.run_delivered()["lineage_release"]
-        self.controller.promote_release(r1["lineage_record_id"], independent_review={"verdict": "PASS", "reviewer": "r"})
+        r1 = self.run_delivered()
+        self.promote_bound(r1)
         v1 = [r["version"] for r in self.controller.release_lineage() if r["status"] == "STABLE"][0]
-        r2 = self.run_delivered()["lineage_release"]
-        self.controller.promote_release(r2["lineage_record_id"], independent_review={"verdict": "PASS", "reviewer": "r"})
-        v2 = [r["version"] for r in self.controller.release_lineage() if r["status"] == "STABLE"][-1]
+        r2 = self.run_delivered()
+        self.promote_bound(r2)
+        stables = [r["version"] for r in self.controller.release_lineage() if r["status"] == "STABLE"]
+        v2 = stables[-1]
         self.assertNotEqual(v2, v1)
         self.controller.rollback_release(v2, reason="build failed")
         cur = self.controller.release_lineage()

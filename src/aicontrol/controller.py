@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from .runtimes import RuntimeFailure, RuntimeManager
 from .pipeline import GoalPipeline
-from .lineage import StableLineage
+from .lineage import LineageError, PromotionRequiresReview, StableLineage
 from .security import browser_profile_identity, egress_allowed, seal_tcb, verify_tcb
 from .store import (
     AuthorityStateUncertain,
@@ -599,17 +599,22 @@ class Controller:
             )
         return out
 
-    def _lineage_identity(self) -> tuple[str, str]:
+    def _lineage_identity(self) -> tuple[str | None, str | None]:
         try:
             proc = subprocess.run(
                 ["git", "-C", str(self.code_root), "rev-parse", "HEAD"],
                 capture_output=True, text=True, timeout=10,
             )
-            commit = proc.stdout.strip()
         except Exception:  # noqa
-            commit = "unknown"
-        _, tree_digest, _ = tree_manifest(self.code_root)
-        return commit or "unknown", tree_digest
+            return None, None
+        commit = proc.stdout.strip()
+        if proc.returncode != 0 or not commit:
+            return None, None
+        try:
+            _, tree_digest, _ = tree_manifest(self.code_root)
+        except Exception:  # noqa
+            return None, None
+        return commit, tree_digest
 
     def _record_release(self, *, task_id: str, objective: str, delivered_digest: str | None) -> dict[str, Any]:
         """Record an authoritative release Candidate in the Stable/Candidate
@@ -619,13 +624,15 @@ class Controller:
         Promotion to STABLE requires an independent PASS via promote_release().
         """
         commit, tree_digest = self._lineage_identity()
+        if not commit or not tree_digest or not delivered_digest:
+            raise LineageError("authoritative lineage identity unresolved; refusing to record release")
         cand = StableLineage(self.store).create_candidate(
             controller_commit=commit,
             tree_digest=tree_digest,
             known_limitations=[
                 f"task={task_id}",
                 f"objective={objective}",
-                f"delivered_sha256={delivered_digest or 'n/a'}",
+                f"delivered_sha256={delivered_digest}",
             ],
         )
         return {
@@ -636,16 +643,32 @@ class Controller:
             "lineage_tree_digest": tree_digest,
         }
 
-    def promote_release(self, lineage_record_id: str, *, independent_review: dict[str, Any]) -> dict[str, Any]:
-        """Promote a released CANDIDATE to STABLE via the authoritative lineage
-        gate. StableLineage.promote fails closed unless the review verdict is
-        PASS - an injected/stand-in reviewer must never promote."""
-        record = StableLineage(self.store).promote(lineage_record_id, independent_review=independent_review)
-        return {
-            "lineage_record_id": lineage_record_id,
-            "lineage_status": record["status"],
-            "lineage_version": record["version"],
-        }
+    def issue_promotion_voucher(self, lineage_record_id: str, *, reviewer_identity: str, delivered_digest: str) -> dict[str, Any]:
+        """Issue a durable, candidate-bound independent-review voucher (verdict=PASS)
+        ONLY for a registered, ready R_PROD reviewer. A stand-in / self-reported /
+        unregistered reviewer can never obtain one, so it can never promote."""
+        ready = False
+        for entry in self.store.registry("reviewer_registry"):
+            if entry.get("reviewer_id") == reviewer_identity:
+                role = str(entry.get("role") or "").upper()
+                availability = str(entry.get("availability") or entry.get("health") or "").upper()
+                ready = role == "R_PROD" and availability in ("AVAILABLE", "VERIFIED")
+                break
+        if not ready:
+            raise PromotionRequiresReview(f"reviewer {reviewer_identity!r} is not a ready R_PROD reviewer")
+        return StableLineage(self.store).issue_voucher(
+            candidate_record_id=lineage_record_id,
+            reviewer_identity=reviewer_identity,
+            reviewer_role="R_PROD",
+            delivered_digest=delivered_digest,
+        )
+
+    def promote_release(self, voucher_id: str) -> dict[str, Any]:
+        """Promote a released CANDIDATE to STABLE using the durable, candidate-bound
+        review voucher. No caller-supplied verdict dict is trusted: the voucher
+        exists iff a registered, ready R_PROD reviewer issued a matching PASS."""
+        record = StableLineage(self.store).promote_by_voucher(voucher_id)
+        return {"lineage_voucher": voucher_id, "lineage_status": record["status"], "lineage_version": record["version"]}
 
     def rollback_release(self, stable_version: int, *, reason: str) -> dict[str, Any]:
         return StableLineage(self.store).rollback(stable_version, reason=reason)
