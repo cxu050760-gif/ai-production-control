@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .runtimes import RuntimeFailure, RuntimeManager
+from .pipeline import GoalPipeline
 from .security import browser_profile_identity, egress_allowed, seal_tcb, verify_tcb
 from .store import (
     AuthorityStateUncertain,
@@ -530,6 +531,64 @@ class Controller:
             "state_revision": revision,
             "review": review,
         }
+
+    def run_pipeline_goal(
+        self,
+        goal: str,
+        *,
+        worker_id: str = "fixture-alpha",
+        required_reviewer_id: str | None = None,
+        review: Callable[[Path], dict[str, Any]] | None = None,
+        objective: str | None = None,
+    ) -> dict[str, Any]:
+        """Goal-only entry over the resumable Goal pipeline.
+
+        A single Goal drives PLAN -> ITERATE(real worker -> test -> review) ->
+        DELIVER. Delivery is gated: if `required_reviewer_id` is set but no such
+        reviewer is registered as AVAILABLE/VERIFIED, the pipeline returns
+        READY_FOR_REVIEW and writes NO delivery (honest, never a fake PASS).
+        """
+        lease = self.acquire_lease()
+        self.runtime.register_defaults()
+        task = self.bootstrap_task(
+            goal=goal,
+            expected_final_artifact="delivered artifact",
+            acceptance_criteria=["worker produced artifact", "review completed", "delivery digest bound"],
+            data_classification="PRIVATE_LOCAL",
+        )
+        task_id = task["task_id"]
+        context_fence = task["context_fence"]
+        release_root = self.output_root / "tasks" / task_id / "release"
+        artifact = self.output_root / "tasks" / task_id / "workspace" / "artifact.md"
+
+        def work(attempt, artifact):
+            result = self.runtime.invoke_worker_adapter(
+                task_id=task_id,
+                context_fence=context_fence,
+                worker_id=worker_id,
+                objective=objective or goal,
+            )
+            produced = Path(result["envelope"]["artifact_paths"][0])
+            return produced
+
+        def review_with_provider(produced):
+            if review is not None:
+                return review(produced)
+            return {"verdict": "REWORK", "findings": ["no reviewer provider configured"]}
+
+        pipeline = GoalPipeline(
+            self.store,
+            task_id=task_id,
+            objective=objective or goal,
+            artifact=artifact,
+            release_root=release_root,
+            work=work,
+            test=lambda p: (p.exists() and p.stat().st_size > 0, []),
+            review=review_with_provider,
+            required_reviewer_id=required_reviewer_id,
+        )
+        result = pipeline.run()
+        return {"task_id": task_id, **result}
 
     def doctor(self, *, live_browser: bool = False) -> dict[str, Any]:
         checks: dict[str, Any] = {}
