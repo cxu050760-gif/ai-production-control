@@ -21,6 +21,18 @@ from .store import (
 from .util import canonical_json, read_json, sha256_file, sha256_text, tree_manifest, utc_now, windows_boot_session_id, write_json
 
 
+def worker_result_is_delivery_candidate(envelope: dict[str, Any], artifact: Path, artifact_digest: str) -> bool:
+    """Validate a Worker's delivery claim without promoting that claim to canonical fact."""
+    return (
+        envelope.get("status") == "DONE"
+        and envelope.get("execution_class") == "GENERAL_GOAL_EXECUTION"
+        and envelope.get("goal_satisfied") is True
+        and artifact.is_file()
+        and artifact.stat().st_size > 0
+        and envelope.get("artifact_hashes", {}).get(str(artifact)) == artifact_digest
+    )
+
+
 class Controller:
     def __init__(self, config_path: str | Path) -> None:
         self.config_path = Path(config_path).resolve(strict=True)
@@ -309,9 +321,54 @@ class Controller:
         )
         artifact = Path(worker["envelope"]["artifact_paths"][0])
         artifact_digest = sha256_file(artifact)
+        delivery_candidate = worker_result_is_delivery_candidate(worker["envelope"], artifact, artifact_digest)
+        if not delivery_candidate:
+            reason_code = "GENERAL_GOAL_WORKER_NOT_CONFIGURED"
+        else:
+            reason_code = "UNIFIED_REVIEWER_NOT_CONFIGURED"
+        if reason_code:
+            state = self.store.read_state()
+            state["tasks"][task_id].update(
+                {
+                    "status": "BLOCKED_CAPABILITY",
+                    "reason_code": reason_code,
+                    "worker_evidence_artifact": str(artifact),
+                    "worker_evidence_digest": artifact_digest,
+                    "brain_route": brain_route,
+                }
+            )
+            revision = self.store.commit_state(state, reason="TASK_BLOCKED_CAPABILITY")
+            capsule = self.store.create_context_capsule(
+                task_id,
+                "BLOCKED_CAPABILITY",
+                {
+                    "current_objective": goal,
+                    "completed_work": ["Goal Contract committed", "worker capability probe recorded"],
+                    "next_required_steps": ["configure general Goal execution and an independent source-bound Reviewer"],
+                    "open_issues": [reason_code],
+                    "last_verified_state": revision,
+                },
+            )
+            return {
+                "task_id": task_id,
+                "status": "PRODUCT_NOT_READY",
+                "reason_code": reason_code,
+                "brain_route": brain_route,
+                "evidence_artifact": str(artifact),
+                "evidence_artifact_digest": artifact_digest,
+                "state_revision": revision,
+                "context_fence": capsule["context_fence"],
+                "review": {
+                    "reviewer": "controller-delivery-contract-gate",
+                    "passed": False,
+                    "findings": [
+                        "A Worker result is evidence or a delivery candidate, not canonical proof that the requested Goal was completed."
+                    ],
+                },
+            }
         review = {
             "reviewer": "controller-deterministic",
-            "passed": artifact.exists() and artifact.stat().st_size > 0 and artifact_digest == worker["envelope"]["artifact_hashes"][str(artifact)],
+            "passed": False,
             "findings": [],
         }
         if not review["passed"]:

@@ -14,6 +14,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from aicontrol.controller import worker_result_is_delivery_candidate  # noqa: E402
 from aicontrol.store import ControlStore, GateDenied  # noqa: E402
 from aicontrol.util import BoundaryError, safe_resolve, sha256_text, utc_now  # noqa: E402
 
@@ -183,6 +184,35 @@ class BoundaryTests(unittest.TestCase):
                 safe_resolve(root / ".." / "escape.txt", [root])
             with self.assertRaises(BoundaryError):
                 safe_resolve("relative.txt", [root])
+
+
+class DeliveryContractTests(unittest.TestCase):
+    def test_capability_probe_cannot_claim_goal_delivery(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="aicontrol-delivery-") as temporary:
+            artifact = Path(temporary) / "artifact.md"
+            artifact.write_text("probe only", encoding="utf-8")
+            digest = sha256_text("probe only")
+            envelope = {
+                "status": "DONE",
+                "execution_class": "CAPABILITY_PROBE",
+                "goal_satisfied": False,
+                "artifact_hashes": {str(artifact): digest},
+            }
+            self.assertFalse(worker_result_is_delivery_candidate(envelope, artifact, digest))
+
+    def test_general_goal_claim_is_only_a_digest_bound_delivery_candidate(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="aicontrol-delivery-") as temporary:
+            artifact = Path(temporary) / "artifact.md"
+            artifact.write_text("completed result", encoding="utf-8")
+            digest = sha256_text("completed result")
+            envelope = {
+                "status": "DONE",
+                "execution_class": "GENERAL_GOAL_EXECUTION",
+                "goal_satisfied": True,
+                "artifact_hashes": {str(artifact): digest},
+            }
+            self.assertTrue(worker_result_is_delivery_candidate(envelope, artifact, digest))
+            self.assertFalse(worker_result_is_delivery_candidate(envelope, artifact, "wrong-digest"))
 
 
 if __name__ == "__main__":

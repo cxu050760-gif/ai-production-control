@@ -62,7 +62,8 @@ def main() -> int:
         f"Task: {request['task_id']}\n\n"
         f"Goal: {goal}\n\n"
         f"Browser observation: {browser_observation}\n\n"
-        "Execution: created by the brokered local worker inside its isolated workspace.\n"
+        "Execution: capability probe created by the brokered local worker inside its isolated workspace.\n\n"
+        "Goal satisfaction: NOT EVALUATED. This worker does not execute a general Goal.\n"
     )
     atomic_write(output, content)
     envelope = {
@@ -75,13 +76,15 @@ def main() -> int:
         "request_state_revision": request["request_state_revision"],
         "request_context_fence": request["request_context_fence"],
         "status": "DONE",
+        "execution_class": "CAPABILITY_PROBE",
+        "goal_satisfied": False,
         "artifact_paths": [str(output)],
         "artifact_hashes": {str(output): digest(output)},
         "evidence": [{"kind": "worker-output", "sha256": digest(output)}],
-        "unresolved_issues": [],
+        "unresolved_issues": ["GENERAL_GOAL_WORKER_NOT_CONFIGURED"],
         "action_proposals": [],
         "escalation_needed": False,
-        "human_readable_notes": "BROKERED_LOCAL_WORKER_OK",
+        "human_readable_notes": "BROKERED_LOCAL_WORKER_CAPABILITY_PROBE_ONLY",
         "cold_start_contract_hash": hashlib.sha256(start_contract.encode("utf-8")).hexdigest() if start_contract else None,
     }
     print(json.dumps(envelope, ensure_ascii=False))
@@ -90,4 +93,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

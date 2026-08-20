@@ -447,7 +447,7 @@ def main() -> int:
                 parser.error("unsupported command")
                 return 2
         emit(value)
-        if isinstance(value, dict) and value.get("status") in ("FAIL", "FAILED_INTERNAL", "EXTERNAL_BLOCKED"):
+        if isinstance(value, dict) and value.get("status") in ("FAIL", "FAILED_INTERNAL", "EXTERNAL_BLOCKED", "PRODUCT_NOT_READY"):
             return 1
         return 0
     except Exception as error:
