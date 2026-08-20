@@ -112,7 +112,8 @@ class GoalPipeline:
                     "reviewer_available": False, "handled": 0}
         artifact = Path(self._artifact)
         artifact.parent.mkdir(parents=True, exist_ok=True)
-        self._last_artifact = None
+        last_meta = self._meta("last_artifact")
+        self._last_artifact = Path(last_meta) if last_meta else None
         delivered = 0
         handled = 0
         while limit_steps is None or handled < limit_steps:
@@ -135,6 +136,7 @@ class GoalPipeline:
                 produced = self.work(attempt, artifact)
                 produced_path = Path(produced) if produced else artifact
                 self._last_artifact = produced_path
+                self._set_meta("last_artifact", str(produced_path))
                 outcome = self._iterate_outcome(produced_path)
                 self.workflow.finish_step(step["step_id"], fence=claim["claim"], outcome=outcome)
                 handled += 1
