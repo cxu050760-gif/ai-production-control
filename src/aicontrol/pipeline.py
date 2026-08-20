@@ -95,6 +95,7 @@ class GoalPipeline:
         wfid = self._ensure()
         artifact = Path(self._artifact)
         artifact.parent.mkdir(parents=True, exist_ok=True)
+        self._last_artifact = None
         delivered = 0
         handled = 0
         while limit_steps is None or handled < limit_steps:
@@ -114,8 +115,10 @@ class GoalPipeline:
             if name == ITERATE:
                 claim = self.workflow.claim_step(step["step_id"], owner=self.task_id, process_start_identity="pipeline")
                 attempt = int(step["attempt"])
-                self.work(attempt, artifact)
-                outcome = self._iterate_outcome(artifact)
+                produced = self.work(attempt, artifact)
+                produced_path = Path(produced) if produced else artifact
+                self._last_artifact = produced_path
+                outcome = self._iterate_outcome(produced_path)
                 self.workflow.finish_step(step["step_id"], fence=claim["claim"], outcome=outcome)
                 handled += 1
                 if outcome.get("kind") == OUTCOME_UNKNOWN:
@@ -123,7 +126,7 @@ class GoalPipeline:
                 continue
             if name == DELIVER:
                 claim = self.workflow.claim_step(step["step_id"], owner=self.task_id, process_start_identity="pipeline")
-                self._deliver(artifact)
+                self._deliver(getattr(self, "_last_artifact", None) or artifact)
                 self.workflow.finish_step(step["step_id"], fence=claim["claim"], outcome={"kind": OUTCOME_DONE})
                 delivered += 1
                 handled += 1
