@@ -21,6 +21,7 @@ from .util import (
     utc_now,
     write_json,
 )
+from .adapters import build_task_capsule, validate_capability_grant, validate_worker_artifacts
 
 
 class RuntimeFailure(RuntimeError):
@@ -183,6 +184,52 @@ class RuntimeManager:
         ]
         for brain in brains:
             self.store.upsert_registry("brain_registry", "brain_id", brain["brain_id"], brain)
+        providers = [
+            {
+                "provider_id": "chatgpt-web",
+                "kind": "WEB_SESSION",
+                "class": "WebSessionProvider",
+                "transport_identity_owner": "CONTROLLER",
+                "account_profile": "browser-credential-ref:authenticated-profile",
+                "default_retry_semantics": "RECONCILE_REQUIRED",
+            },
+            {
+                "provider_id": "workbuddy-cli",
+                "kind": "API_MODEL",
+                "class": "APIModelProvider",
+                "transport_identity_owner": "CONTROLLER",
+                "account_profile": "credential-ref:workbuddy-existing-auth",
+                "default_retry_semantics": "RECONCILE_REQUIRED",
+            },
+            {
+                "provider_id": "codex-cli",
+                "kind": "API_MODEL",
+                "class": "APIModelProvider",
+                "transport_identity_owner": "CONTROLLER",
+                "account_profile": "credential-ref:codex-existing-login",
+                "default_retry_semantics": "RECONCILE_REQUIRED",
+            },
+        ]
+        for provider in providers:
+            self.store.upsert_registry("provider_registry", "provider_id", provider["provider_id"], provider)
+        reviewers = [
+            {
+                "reviewer_id": "chatgpt-web",
+                "role": "R_PROD",
+                "provider": "ChatGPT",
+                "contract": "REVIEWER",
+                "health": "UNVERIFIED_CURRENT",
+            },
+            {
+                "reviewer_id": "codex-local",
+                "role": "E_LAB",
+                "provider": "Codex CLI",
+                "contract": "REVIEWER",
+                "health": "UNVERIFIED_CURRENT",
+            },
+        ]
+        for reviewer in reviewers:
+            self.store.upsert_registry("reviewer_registry", "reviewer_id", reviewer["reviewer_id"], reviewer)
 
     def _invocation(
         self,
@@ -489,6 +536,100 @@ class RuntimeManager:
         }
         verification = self.store.verify_and_record_result(receipt["invocation_id"], envelope, source)
         return {"envelope": envelope, "source_binding": source, "verification": verification, "process": result.safe_record()}
+
+    def invoke_worker_adapter(
+        self,
+        *,
+        task_id: str,
+        context_fence: str,
+        worker_id: str,
+        objective: str | None = None,
+        capability_grant: dict[str, Any] | None = None,
+        timeout_seconds: int = 60,
+    ) -> dict[str, Any]:
+        """Run any registered Worker through one generic high-level path.
+
+        Two different worker registrations (scripts) are interchangeable here:
+        there is no per-worker code branch. The worker only sees the stable task
+        capsule and capability grant; its result must satisfy the per-artifact
+        digest proof exactly like the brokered local worker.
+        """
+        registrations = self.store.registry("worker_registry")
+        registration = next((item for item in registrations if item.get("worker_id") == worker_id), None)
+        if not registration:
+            raise RuntimeFailure(f"worker adapter not registered: {worker_id}")
+        workspace = self.output_root / "tasks" / task_id / f"adapter-{worker_id}-{uuid.uuid4().hex[:8]}"
+        workspace.mkdir(parents=True, exist_ok=False)
+        artifact = workspace / "worker-artifact.md"
+        result_channel = workspace / "result.json"
+        grant = capability_grant or {
+            "capabilities": registration.get("capabilities", []),
+            "allowed_effects": registration.get("allowed_effects", []),
+            "network_scope": registration.get("network_scope", "NONE"),
+        }
+        validate_capability_grant(grant)
+        receipt = self._invocation(
+            task_id=task_id,
+            actor_id=worker_id,
+            actor_type="WORKER",
+            trust_class=registration.get("execution_trust_class", "BROKERED"),
+            capability=grant,
+            context_fence=context_fence,
+            result_channel=str(result_channel),
+        )
+        goal = self.store.latest_goal(task_id)
+        capsule = build_task_capsule(
+            task_id=task_id,
+            objective=objective or str(goal.get("goal", "")),
+            goal_contract_hash=goal["contract_hash"],
+            state_revision=receipt["state_revision"],
+            context_fence=context_fence,
+            capability_grant=grant,
+            allowed_roots=[str(workspace)],
+        )
+        request = {
+            "invocation_id": receipt["invocation_id"],
+            "request_nonce": receipt["request_nonce"],
+            "task_id": task_id,
+            "goal_contract_hash": capsule["goal_contract_hash"],
+            "request_state_revision": capsule["state_revision"],
+            "request_context_fence": context_fence,
+            "worker_id": worker_id,
+            "variant": registration.get("variant"),
+            "capsule": capsule,
+            "workspace": str(workspace),
+            "artifact_path": str(artifact),
+        }
+        request_path = workspace / "request.json"
+        write_json(request_path, request)
+        result = run_structured(
+            self.config["workers"]["local_python"],
+            [registration["invocation"], str(request_path)],
+            cwd=str(workspace),
+            allowed_cwd_roots=[str(self.output_root)],
+            timeout_seconds=timeout_seconds,
+            register=self._register_callback(task_id=task_id, invocation_id=receipt["invocation_id"]),
+        )
+        if result.exit_code != 0 or result.timed_out:
+            raise RuntimeFailure(f"worker adapter failed: {result.safe_record()}")
+        envelope = _json_from_stdout(result.stdout)
+        validate_worker_artifacts(envelope, str(workspace), resolve=safe_resolve)
+        source = {
+            "actor_id": worker_id,
+            "worker_id": worker_id,
+            "process_id": result.pid,
+            "process_start_identity": result.process_start_identity,
+            "controlled_stdout_hash": sha256_text(result.stdout),
+            "result_channel": str(result_channel),
+        }
+        verification = self.store.verify_and_record_result(receipt["invocation_id"], envelope, source)
+        return {
+            "envelope": envelope,
+            "capsule": capsule,
+            "source_binding": source,
+            "verification": verification,
+            "process": result.safe_record(),
+        }
 
     def bsk_status(self) -> dict[str, Any]:
         bsk = self.config["browser"]["bsk_executable"]

@@ -399,6 +399,25 @@ CREATE TRIGGER IF NOT EXISTS results_no_update
 BEFORE UPDATE ON results BEGIN SELECT RAISE(ABORT, 'actor results are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS results_no_delete
 BEFORE DELETE ON results BEGIN SELECT RAISE(ABORT, 'actor results are append-only'); END;
+
+CREATE TABLE IF NOT EXISTS provider_registry (
+  provider_id TEXT PRIMARY KEY,
+  registry_json TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reviewer_registry (
+  reviewer_id TEXT PRIMARY KEY,
+  registry_json TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tool_registry (
+  tool_id TEXT PRIMARY KEY,
+  registry_json TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
 """
 
 
@@ -1703,7 +1722,7 @@ class ControlStore:
         return process_record_id
 
     def upsert_registry(self, table: str, key_name: str, key_value: str, value: dict[str, Any]) -> None:
-        if table not in ("worker_registry", "brain_registry"):
+        if table not in ("worker_registry", "brain_registry", "provider_registry", "reviewer_registry", "tool_registry"):
             raise ValueError("invalid registry")
         with self.transaction() as conn:
             row = conn.execute(f"SELECT generation FROM {table} WHERE {key_name}=?", (key_value,)).fetchone()
@@ -1715,7 +1734,7 @@ class ControlStore:
         self.durable_barrier()
 
     def registry(self, table: str) -> list[dict[str, Any]]:
-        if table not in ("worker_registry", "brain_registry"):
+        if table not in ("worker_registry", "brain_registry", "provider_registry", "reviewer_registry", "tool_registry"):
             raise ValueError("invalid registry")
         return [
             {**json.loads(row["registry_json"]), "generation": row["generation"], "updated_at": row["updated_at"]}
