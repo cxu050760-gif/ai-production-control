@@ -14,7 +14,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from aicontrol.acceptance import AcceptanceRunner  # noqa: E402
-from aicontrol.controller import Controller  # noqa: E402
+from aicontrol.controller import Controller, validate_reviewer_envelope  # noqa: E402
 from aicontrol.security import seal_tcb, verify_tcb  # noqa: E402
 from aicontrol.store import GateDenied  # noqa: E402
 from aicontrol.util import (  # noqa: E402
@@ -256,6 +256,21 @@ def command_acceptance(args: argparse.Namespace, controller: Controller) -> dict
         prompt_hash=args.prompt_hash,
     )
     result = runner.run_all()
+    acceptance_evidence_id = controller.store.record_evidence(
+        task_id=task["task_id"],
+        classification="INTERNAL",
+        kind="ACCEPTANCE_MANIFEST",
+        path=result["path"],
+        sha256=result["sha256"],
+        metadata={
+            "schema_version": result["schema_version"],
+            "goal_contract_hash": result["goal_contract_hash"],
+            "state_revision": result["state_revision"],
+            "context_fence": result["context_fence"],
+            "tested_artifact_digest": result["tested_artifact_digest"],
+        },
+    )
+    result["evidence_id"] = acceptance_evidence_id
     result["artifact_manifest_path"] = str(artifact_manifest)
     result["artifact_manifest_sha256"] = sha256_file(artifact_manifest)
     return result
@@ -264,12 +279,15 @@ def command_acceptance(args: argparse.Namespace, controller: Controller) -> dict
 def command_review(args: argparse.Namespace, controller: Controller) -> dict[str, Any]:
     controller.runtime.register_defaults()
     acceptance_path = Path(args.acceptance_manifest).resolve(strict=True)
-    acceptance = read_json(acceptance_path)
-    task_id = args.task_id or acceptance["task_id"]
+    claimed_acceptance = read_json(acceptance_path)
+    task_id = args.task_id or claimed_acceptance["task_id"]
     _, artifact_digest, _ = tree_manifest(controller.code_root)
-    if acceptance.get("tested_artifact_digest") != artifact_digest:
-        raise GateDenied("review refused: acceptance digest does not match current source")
-    context_fence = current_or_fresh_context(controller, task_id, "INDEPENDENT_RELEASE_REVIEW")
+    acceptance, acceptance_evidence = controller.validate_acceptance_manifest(
+        task_id=task_id,
+        acceptance_manifest_path=acceptance_path,
+        artifact_digest=artifact_digest,
+    )
+    context_fence = controller.store.current_context_fence(task_id)
     lease = controller.acquire_lease()
     authorization = controller.scoped_authorization(
         task_id=task_id,
@@ -296,7 +314,7 @@ def command_review(args: argparse.Namespace, controller: Controller) -> dict[str
         "expected_account": "credential-ref:codex-existing-login",
         "resource": "fresh-read-only-review-session",
         "payload_hash": sha256_text(prompt),
-        "critical_params": {"artifact_digest": artifact_digest, "role": "REVIEWER"},
+        "critical_params": {"artifact_digest": artifact_digest, "acceptance_evidence_id": acceptance_evidence["evidence_id"], "role": "REVIEWER"},
         "purpose": "release-review",
         "logical_effect_slot": "INDEPENDENT_CODEX_RELEASE_REVIEW",
         "retry_semantics": "RECONCILE_REQUIRED",
@@ -314,45 +332,90 @@ def command_review(args: argparse.Namespace, controller: Controller) -> dict[str
         intent=intent,
         egress_permitted=True,
         adapter=lambda _: controller.runtime.invoke_codex_brain(
-            task_id=task_id, context_fence=context_fence, prompt=prompt, role="REVIEWER"
+            task_id=task_id,
+            context_fence=context_fence,
+            prompt=prompt,
+            role="REVIEWER",
+            artifact_digest=artifact_digest,
+            acceptance_evidence_id=acceptance_evidence["evidence_id"],
         ),
     )
+    if effect.get("unknown") or effect.get("deduplicated"):
+        raise GateDenied("review refused: Reviewer Effect is unknown or not a fresh committed execution")
     envelope = effect["adapter_result"]["envelope"]
-    findings = envelope.get("findings", [])
-    a09 = next((case for case in acceptance["cases"] if case["case_id"] == "A09"), {})
+    validate_reviewer_envelope(
+        envelope,
+        task_id=task_id,
+        goal_contract_hash=acceptance["goal_contract_hash"],
+        state_revision=acceptance["state_revision"],
+        context_fence=context_fence,
+        artifact_digest=artifact_digest,
+        acceptance_evidence_id=acceptance_evidence["evidence_id"],
+    )
+    reservation = effect["reservation"]
     reviews = [
         {
-            "reviewer": "chatgpt-web-independent-session-A09",
+            "schema_version": 1,
+            "reviewer": effect["adapter_result"]["source_binding"]["actor_id"],
+            "provider": "Codex CLI",
+            "task_id": task_id,
+            "goal_contract_hash": acceptance["goal_contract_hash"],
+            "state_revision": acceptance["state_revision"],
+            "context_fence": context_fence,
             "artifact_digest": artifact_digest,
-            "status": "PASS" if a09.get("result") == "PASS" else "FAIL",
-            "source": str(acceptance_path),
-        },
-        {
-            "reviewer": "codex-cli-read-only-independent-review",
-            "artifact_digest": artifact_digest,
-            "status": "PASS" if envelope.get("status") == "DONE" and not findings else "FAIL",
-            "findings": findings,
-            "recommended_actions": envelope.get("recommended_actions", []),
+            "verdict": envelope["verdict"],
+            "findings": envelope["findings"],
+            "recommended_actions": envelope["recommended_actions"],
+            "result_id": effect["adapter_result"]["verification"]["result_id"],
+            "invocation_id": envelope["invocation_id"],
+            "action_id": reservation.action_id,
+            "logical_effect_id": reservation.logical_effect_id,
             "source_binding": effect["adapter_result"]["source_binding"],
         },
     ]
     output = Path(controller.config["evidence_root"]) / task_id / "independent-reviews.json"
-    write_json(output, {"task_id": task_id, "artifact_digest": artifact_digest, "reviews": reviews, "generated_at": utc_now()})
+    document = {
+        "schema_version": 1,
+        "task_id": task_id,
+        "goal_contract_hash": acceptance["goal_contract_hash"],
+        "state_revision": acceptance["state_revision"],
+        "context_fence": context_fence,
+        "artifact_digest": artifact_digest,
+        "acceptance_evidence_id": acceptance_evidence["evidence_id"],
+        "reviews": reviews,
+        "generated_at": utc_now(),
+    }
+    write_json(output, document)
+    output_hash = sha256_file(output)
+    review_evidence_id = controller.store.record_evidence(
+        task_id=task_id,
+        classification="INTERNAL",
+        kind="INDEPENDENT_REVIEW_MANIFEST",
+        path=str(output),
+        sha256=output_hash,
+        metadata={
+            "schema_version": 1,
+            "goal_contract_hash": acceptance["goal_contract_hash"],
+            "state_revision": acceptance["state_revision"],
+            "context_fence": context_fence,
+            "artifact_digest": artifact_digest,
+            "acceptance_evidence_id": acceptance_evidence["evidence_id"],
+        },
+    )
     return {
-        "status": "PASS" if all(item["status"] == "PASS" for item in reviews) else "FAIL",
+        "status": "PASS" if envelope["verdict"] == "PASS" and envelope["findings"] == [] else "FAIL",
         "reviews": reviews,
         "path": str(output),
-        "sha256": sha256_file(output),
+        "sha256": output_hash,
+        "evidence_id": review_evidence_id,
     }
 
 
 def command_release(args: argparse.Namespace, controller: Controller) -> dict[str, Any]:
-    reviews_document = read_json(Path(args.review_evidence).resolve(strict=True))
-    reviews = reviews_document.get("reviews", reviews_document)
     return controller.create_release_candidate(
         task_id=args.task_id,
         acceptance_manifest_path=args.acceptance_manifest,
-        review_evidence=reviews,
+        review_manifest_path=args.review_evidence,
     )
 
 

@@ -387,7 +387,74 @@ CREATE TRIGGER IF NOT EXISTS canonical_revisions_no_update
 BEFORE UPDATE ON canonical_revisions BEGIN SELECT RAISE(ABORT, 'canonical revisions are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS canonical_revisions_no_delete
 BEFORE DELETE ON canonical_revisions BEGIN SELECT RAISE(ABORT, 'canonical revisions are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS evidence_no_update
+BEFORE UPDATE ON evidence BEGIN SELECT RAISE(ABORT, 'evidence records are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS evidence_no_delete
+BEFORE DELETE ON evidence BEGIN SELECT RAISE(ABORT, 'evidence records are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS test_executions_no_update
+BEFORE UPDATE ON test_executions BEGIN SELECT RAISE(ABORT, 'test executions are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS test_executions_no_delete
+BEFORE DELETE ON test_executions BEGIN SELECT RAISE(ABORT, 'test executions are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS results_no_update
+BEFORE UPDATE ON results BEGIN SELECT RAISE(ABORT, 'actor results are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS results_no_delete
+BEFORE DELETE ON results BEGIN SELECT RAISE(ABORT, 'actor results are append-only'); END;
 """
+
+
+CANONICAL_ACTOR_STATUSES = {
+    "PRODUCT_DONE",
+    "PROJECT_DONE",
+    "STABLE_CANDIDATE",
+    "READY_FOR_USER_ACCEPTANCE",
+    "DELIVERED",
+}
+CANONICAL_ACTOR_FIELDS = {
+    "canonical_state",
+    "goal_contract",
+    "highest_goal",
+    "project_phase",
+    "milestone",
+    "release_status",
+}
+CANONICAL_MUTATION_PROPOSALS = {
+    "CHANGE_GOAL",
+    "CHANGE_HIGHEST_GOAL",
+    "CHANGE_PHASE",
+    "PROMOTE_MILESTONE",
+    "MARK_PRODUCT_DONE",
+    "MARK_PROJECT_DONE",
+    "REWRITE_FROZEN_ASSET",
+}
+
+
+def validate_actor_trajectory(actor_type: str, envelope: dict[str, Any]) -> None:
+    """Enforce the minimum invariants that must exist before the full workflow layer."""
+    if not isinstance(envelope, dict):
+        raise GateDenied("actor result envelope must be an object")
+    reserved = sorted(CANONICAL_ACTOR_FIELDS.intersection(envelope))
+    if reserved:
+        raise GateDenied(f"actor result attempted canonical mutation fields: {reserved}")
+    status = envelope.get("status")
+    if status in CANONICAL_ACTOR_STATUSES:
+        raise GateDenied("actor result status cannot promote product/project completion")
+    proposals = envelope.get("action_proposals", [])
+    if not isinstance(proposals, list):
+        raise GateDenied("actor action_proposals must be a list")
+    for proposal in proposals:
+        if not isinstance(proposal, dict):
+            raise GateDenied("actor action proposal must be an object")
+        operation = str(proposal.get("operation") or proposal.get("action") or "").upper()
+        if operation in CANONICAL_MUTATION_PROPOSALS:
+            raise GateDenied(f"actor proposal cannot perform canonical transition: {operation}")
+    if actor_type == "WORKER" and status == "DONE":
+        evidence = envelope.get("evidence")
+        artifact_paths = envelope.get("artifact_paths")
+        artifact_hashes = envelope.get("artifact_hashes")
+        if not isinstance(evidence, list) or not evidence:
+            raise GateDenied("Worker DONE requires an evidence delta")
+        if not isinstance(artifact_paths, list) or not artifact_paths or not isinstance(artifact_hashes, dict):
+            raise GateDenied("Worker DONE requires digest-bound artifacts")
 
 
 class ControlStore:
@@ -1590,6 +1657,7 @@ class ControlStore:
             raise GateDenied("result Context Fence is no longer current")
         if source_binding.get("actor_id") != invocation["expected_actor_id"]:
             raise GateDenied("result actor source mismatch")
+        validate_actor_trajectory(str(invocation["actor_type"]), envelope)
         result_id = str(uuid.uuid4())
         digest = sha256_text(canonical_json(envelope))
         with self.transaction() as conn:
@@ -1713,7 +1781,19 @@ class ControlStore:
                 "INSERT INTO evidence(evidence_id,task_id,classification,kind,path,sha256,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
                 (evidence_id, task_id, classification, kind, path, sha256, canonical_json(metadata), utc_now()),
             )
+        self.durable_barrier()
         return evidence_id
+
+    def evidence_for_path(self, *, task_id: str, kind: str, path: str, sha256: str) -> dict[str, Any]:
+        row = self.connection.execute(
+            "SELECT * FROM evidence WHERE task_id=? AND kind=? AND path=? AND sha256=? ORDER BY created_at DESC LIMIT 1",
+            (task_id, kind, path, sha256),
+        ).fetchone()
+        if not row:
+            raise GateDenied(f"canonical {kind} evidence record missing")
+        value = dict(row)
+        value["metadata"] = json.loads(value.pop("metadata_json"))
+        return value
 
     def record_test(self, record: dict[str, Any]) -> None:
         with self.transaction() as conn:
@@ -1747,6 +1827,48 @@ class ControlStore:
 
     def tests(self, task_id: str) -> list[dict[str, Any]]:
         return [dict(row) for row in self.connection.execute("SELECT * FROM test_executions WHERE task_id=? ORDER BY case_id", (task_id,))]
+
+    def test_execution(self, test_execution_id: str) -> dict[str, Any]:
+        row = self.connection.execute(
+            "SELECT * FROM test_executions WHERE test_execution_id=?", (test_execution_id,)
+        ).fetchone()
+        if not row:
+            raise GateDenied("canonical test execution missing")
+        value = dict(row)
+        value["evidence"] = json.loads(value.pop("evidence_json"))
+        value["evidence_hashes"] = json.loads(value.pop("evidence_hashes_json"))
+        value["invocation"] = json.loads(value.pop("invocation_json"))
+        return value
+
+    def verified_result(self, result_id: str) -> dict[str, Any]:
+        row = self.connection.execute(
+            """SELECT r.*,i.task_id AS invocation_task_id,i.goal_contract_hash AS invocation_goal_contract_hash,
+                      i.state_revision AS invocation_state_revision,i.context_fence AS invocation_context_fence,
+                      i.expected_actor_id,i.actor_type,i.status AS invocation_status
+               FROM results r JOIN invocations i ON i.invocation_id=r.invocation_id
+               WHERE r.result_id=?""",
+            (result_id,),
+        ).fetchone()
+        if not row or row["verification_status"] != "VERIFIED" or row["invocation_status"] != "COMPLETED":
+            raise GateDenied("verified canonical actor result missing")
+        value = dict(row)
+        value["source_binding"] = json.loads(value.pop("source_binding_json"))
+        value["envelope"] = json.loads(value.pop("envelope_json"))
+        return value
+
+    def committed_effect(self, *, action_id: str, logical_effect_id: str) -> dict[str, Any]:
+        row = self.connection.execute(
+            """SELECT a.*,r.task_id AS reservation_task_id,r.goal_contract_hash,r.state_revision,
+                      r.context_fence,r.authorization_id,r.status AS reservation_status
+               FROM actions a JOIN reservations r ON r.action_id=a.action_id AND r.logical_effect_id=a.logical_effect_id
+               WHERE a.action_id=? AND a.logical_effect_id=?""",
+            (action_id, logical_effect_id),
+        ).fetchone()
+        if not row or row["status"] != "ACTION_COMMITTED" or row["reservation_status"] != "ACTION_COMMITTED":
+            raise GateDenied("review is not bound to a committed external effect")
+        value = dict(row)
+        value["outcome"] = json.loads(value.pop("outcome_json"))
+        return value
 
     def create_release_candidate(self, record: dict[str, Any]) -> None:
         with self.transaction() as conn:

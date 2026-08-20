@@ -413,7 +413,16 @@ class RuntimeManager:
         verification = self.store.verify_and_record_result(receipt["invocation_id"], envelope, source)
         return {"envelope": envelope, "source_binding": source, "verification": verification, "process": result.safe_record()}
 
-    def invoke_codex_brain(self, *, task_id: str, context_fence: str, prompt: str, role: str = "REVIEWER") -> dict[str, Any]:
+    def invoke_codex_brain(
+        self,
+        *,
+        task_id: str,
+        context_fence: str,
+        prompt: str,
+        role: str = "REVIEWER",
+        artifact_digest: str = "NOT_APPLICABLE",
+        acceptance_evidence_id: str = "NOT_APPLICABLE",
+    ) -> dict[str, Any]:
         workspace = self.output_root / "tasks" / task_id / f"codex-{uuid.uuid4().hex[:8]}"
         workspace.mkdir(parents=True, exist_ok=False)
         result_channel = workspace / "codex-final.json"
@@ -432,11 +441,14 @@ class RuntimeManager:
         schema = {
             "type": "object",
             "additionalProperties": False,
-            "required": ["invocation_id", "request_nonce", "task_id", "goal_contract_hash", "request_state_revision", "request_context_fence", "status", "role", "findings", "recommended_actions", "human_readable_content"],
+            "required": ["schema_version", "invocation_id", "request_nonce", "task_id", "goal_contract_hash", "request_state_revision", "request_context_fence", "artifact_digest", "acceptance_evidence_id", "status", "role", "verdict", "findings", "recommended_actions", "human_readable_content"],
             "properties": {
+                "schema_version": {"const": 1},
                 "invocation_id": {"type": "string"}, "request_nonce": {"type": "string"}, "task_id": {"type": "string"},
                 "goal_contract_hash": {"type": "string"}, "request_state_revision": {"type": "integer"}, "request_context_fence": {"type": "string"},
-                "status": {"const": "DONE"}, "role": {"type": "string"}, "findings": {"type": "array", "items": {"type": "string"}},
+                "artifact_digest": {"const": artifact_digest}, "acceptance_evidence_id": {"const": acceptance_evidence_id},
+                "status": {"const": "DONE"}, "role": {"const": "REVIEWER"}, "verdict": {"type": "string", "enum": ["PASS", "REWORK", "BLOCKED"]},
+                "findings": {"type": "array", "items": {"type": "string"}},
                 "recommended_actions": {"type": "array", "items": {"type": "string"}}, "human_readable_content": {"type": "string"}
             }
         }
@@ -444,11 +456,13 @@ class RuntimeManager:
         binding = {
             "invocation_id": receipt["invocation_id"], "request_nonce": receipt["request_nonce"], "task_id": task_id,
             "goal_contract_hash": receipt["goal_contract_hash"], "request_state_revision": receipt["state_revision"],
-            "request_context_fence": context_fence, "role": role,
+            "request_context_fence": context_fence, "artifact_digest": artifact_digest,
+            "acceptance_evidence_id": acceptance_evidence_id, "role": role,
         }
         machine_prompt = (
             "Act only as a read-only proposal/review Brain. Do not modify files and do not perform external writes. "
-            "Return the requested JSON schema and copy every binding field exactly.\n"
+            "Return the requested JSON schema, copy every binding field exactly, and set an explicit verdict. "
+            "PASS requires an empty findings list; otherwise use REWORK or BLOCKED.\n"
             f"BINDING={canonical_json(binding)}\nTASK={prompt}"
         )
         result = run_structured(

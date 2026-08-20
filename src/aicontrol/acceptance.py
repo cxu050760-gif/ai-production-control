@@ -486,6 +486,8 @@ class AcceptanceRunner:
             "definition_version": "V14-FROZEN/A01-A65",
             "task_id": self.task_id,
             "goal_contract_hash": self.goal_hash,
+            "state_revision": self.store.state_head(),
+            "context_fence": self.store.current_context_fence(self.task_id),
             "tested_artifact_digest": self.artifact_digest,
             "controller_instance_id": self.controller.controller_instance_id,
             "generated_at": utc_now(),
@@ -634,7 +636,7 @@ class AcceptanceRunner:
     def case_a22(self):
         fake = self.fixture_root / "failed-acceptance.json"
         write_json(fake, {"cases": [{"case_id": "A01", "requirement_class": "REQUIRED", "result": "FAIL", "tested_artifact_digest": self.artifact_digest}], "known_blocking_defects": 1, "known_core_path_defects": 1})
-        try: self.controller.create_release_candidate(task_id=self.task_id, acceptance_manifest_path=fake, review_evidence=[])
+        try: self.controller.create_release_candidate(task_id=self.task_id, acceptance_manifest_path=fake, review_manifest_path=fake)
         except GateDenied as error: return passed({"release_blocked": str(error)})
         return {"passed": False}
 

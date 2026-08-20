@@ -33,6 +33,57 @@ def worker_result_is_delivery_candidate(envelope: dict[str, Any], artifact: Path
     )
 
 
+def validate_reviewer_envelope(
+    envelope: dict[str, Any],
+    *,
+    task_id: str,
+    goal_contract_hash: str,
+    state_revision: int,
+    context_fence: str,
+    artifact_digest: str,
+    acceptance_evidence_id: str,
+) -> None:
+    required = {
+        "schema_version",
+        "invocation_id",
+        "request_nonce",
+        "task_id",
+        "goal_contract_hash",
+        "request_state_revision",
+        "request_context_fence",
+        "artifact_digest",
+        "acceptance_evidence_id",
+        "status",
+        "role",
+        "verdict",
+        "findings",
+        "recommended_actions",
+        "human_readable_content",
+    }
+    if not isinstance(envelope, dict) or not required.issubset(envelope):
+        raise GateDenied("Reviewer envelope is incomplete")
+    if envelope["schema_version"] != 1 or envelope["status"] != "DONE" or envelope["role"] != "REVIEWER":
+        raise GateDenied("Reviewer envelope schema/status/role rejected")
+    if envelope["task_id"] != task_id or envelope["goal_contract_hash"] != goal_contract_hash:
+        raise GateDenied("Reviewer task/Goal binding mismatch")
+    if envelope["request_state_revision"] != state_revision or envelope["request_context_fence"] != context_fence:
+        raise GateDenied("Reviewer state/context binding mismatch")
+    if envelope["artifact_digest"] != artifact_digest or envelope["acceptance_evidence_id"] != acceptance_evidence_id:
+        raise GateDenied("Reviewer artifact/acceptance Evidence binding mismatch")
+    if envelope["verdict"] not in ("PASS", "REWORK", "BLOCKED"):
+        raise GateDenied("Reviewer verdict is invalid")
+    if not isinstance(envelope["findings"], list) or not all(isinstance(item, str) for item in envelope["findings"]):
+        raise GateDenied("Reviewer findings must be an explicit string list")
+    if not isinstance(envelope["recommended_actions"], list) or not all(
+        isinstance(item, str) for item in envelope["recommended_actions"]
+    ):
+        raise GateDenied("Reviewer recommended_actions must be an explicit string list")
+    if not isinstance(envelope["human_readable_content"], str):
+        raise GateDenied("Reviewer human_readable_content must be explicit")
+    if envelope["verdict"] == "PASS" and envelope["findings"]:
+        raise GateDenied("Reviewer PASS cannot contain findings")
+
+
 class Controller:
     def __init__(self, config_path: str | Path) -> None:
         self.config_path = Path(config_path).resolve(strict=True)
@@ -206,10 +257,16 @@ class Controller:
             )
             try:
                 adapter_result = adapter(reservation)
+                if not isinstance(adapter_result, dict):
+                    raise RuntimeFailure("adapter result must be an object")
+                envelope = adapter_result.get("envelope")
+                if not isinstance(envelope, dict) or not isinstance(envelope.get("status"), str):
+                    raise RuntimeFailure("adapter result envelope/status is malformed")
                 if expected_account.startswith("profile-sha256:"):
-                    returned_identity = adapter_result.get("envelope", {}).get("data", {}).get("profile_identity_hash")
+                    returned_identity = envelope.get("data", {}).get("profile_identity_hash")
                     if returned_identity != expected_account.removeprefix("profile-sha256:"):
                         raise GateDenied("browser returned a different account/profile identity")
+                status = envelope["status"]
             except Exception as error:
                 self.store.finish_effect(
                     reservation,
@@ -217,12 +274,84 @@ class Controller:
                     unknown=True,
                 )
                 raise
-            status = adapter_result.get("envelope", {}).get("status")
             unknown = status in ("TIMEOUT", "UNKNOWN")
             self.store.finish_effect(reservation, {"adapter_status": status, "result": adapter_result}, unknown=unknown)
             return {"reservation": reservation, "deduplicated": False, "adapter_result": adapter_result, "unknown": unknown}
         finally:
             self.store.release_lock(resource_id, self.controller_instance_id)
+
+    def execute_workbuddy_fallback(
+        self,
+        *,
+        task_id: str,
+        goal: str,
+        data_classification: str,
+        lease: dict[str, Any],
+        context_fence: str,
+    ) -> dict[str, Any]:
+        """Invoke the fallback Brain through its own authorization and Effect WAL record."""
+        provider = "WorkBuddy"
+        purpose = "goal-planning"
+        authorization = self.scoped_authorization(
+            task_id=task_id,
+            provider=provider,
+            destination=provider,
+            purpose=purpose,
+            effect_type="AI_MESSAGE",
+            data_classes=[data_classification],
+            max_effect_count=1,
+            user_decision_reference=f"controlled-cli-fallback:{sha256_text(goal)}",
+        )
+        scope_row = self.store.connection.execute(
+            "SELECT scope_json FROM authorizations WHERE authorization_id=?",
+            (authorization["authorization_id"],),
+        ).fetchone()
+        allowed = egress_allowed(
+            classification=data_classification,
+            destination=provider,
+            provider=provider,
+            purpose=purpose,
+            goal_contract=self.store.latest_goal(task_id),
+            authorization_scope=json.loads(scope_row["scope_json"]),
+        )
+        intent = {
+            "task_id": task_id,
+            "operation": "INVOKE_PROPOSAL_ONLY_BRAIN",
+            "provider": provider,
+            "destination": provider,
+            "expected_account": "credential-ref:workbuddy-existing-auth",
+            "resource": "fresh-workbuddy-session",
+            "payload_hash": sha256_text(goal),
+            "critical_params": {"role": "FALLBACK"},
+            "purpose": purpose,
+            "logical_effect_slot": "FALLBACK_BRAIN_PLAN_WORKBUDDY",
+            "retry_semantics": "RECONCILE_REQUIRED",
+            "impact": "LOW",
+            "reversibility": "PARTIALLY_REVERSIBLE",
+            "effect_scope": "EXTERNAL",
+        }
+        effect = self.execute_effect(
+            task_id=task_id,
+            lease=lease,
+            authorization_id=authorization["authorization_id"],
+            context_fence=context_fence,
+            resource_id="brain:workbuddy-fallback",
+            resource_hash=sha256_text(provider),
+            intent=intent,
+            egress_permitted=allowed,
+            adapter=lambda _: self.runtime.invoke_workbuddy_brain(
+                task_id=task_id,
+                context_fence=context_fence,
+                prompt=f"Produce a concise proposal for: {goal}",
+            ),
+        )
+        if effect.get("deduplicated"):
+            raise AuthorityStateUncertain("fallback Brain Effect was deduplicated; reconcile its canonical outcome")
+        if effect.get("unknown"):
+            raise AuthorityStateUncertain("fallback Brain outcome is unknown; reconcile before any retry")
+        if effect["adapter_result"]["envelope"]["status"] != "DONE":
+            raise RuntimeFailure("fallback Brain did not produce a DONE result")
+        return effect
 
     def run_goal(self, goal: str, *, data_classification: str = "PRIVATE_LOCAL") -> dict[str, Any]:
         lease = self.acquire_lease()
@@ -274,41 +403,49 @@ class Controller:
                 "reversibility": "PARTIALLY_REVERSIBLE",
                 "effect_scope": "EXTERNAL",
             }
-            try:
-                effect = self.execute_effect(
+            effect = self.execute_effect(
+                task_id=task_id,
+                lease=lease,
+                authorization_id=auth["authorization_id"],
+                context_fence=context_fence,
+                resource_id="browser:chatgpt-authenticated-profile",
+                resource_hash=sha256_text(self.config["browser"]["authenticated_profile"]),
+                intent=intent,
+                egress_permitted=allowed,
+                observed_account_identity=browser_profile_identity(self.config["browser"]["authenticated_profile"]),
+                adapter=lambda reservation: self.runtime.invoke_browser(
                     task_id=task_id,
-                    lease=lease,
-                    authorization_id=auth["authorization_id"],
                     context_fence=context_fence,
-                    resource_id="browser:chatgpt-authenticated-profile",
-                    resource_hash=sha256_text(self.config["browser"]["authenticated_profile"]),
-                    intent=intent,
-                    egress_permitted=allowed,
-                    observed_account_identity=browser_profile_identity(self.config["browser"]["authenticated_profile"]),
-                    adapter=lambda reservation: self.runtime.invoke_browser(
-                        task_id=task_id,
-                        context_fence=context_fence,
-                        command="chatgpt",
-                        options={
-                            "profile_path": self.config["browser"]["authenticated_profile"],
-                            "authenticated_executable": self.config["browser"]["cft_executable"],
-                            "logical_effect_id": reservation.logical_effect_id,
-                            "outgoing_nonce": uuid.uuid4().hex,
-                            "response_nonce": uuid.uuid4().hex,
-                            "prompt": f"Produce a concise implementation plan for this public goal: {goal}",
-                            "controller_timeout_seconds": 420,
-                        },
-                    ),
-                )
+                    command="chatgpt",
+                    options={
+                        "profile_path": self.config["browser"]["authenticated_profile"],
+                        "authenticated_executable": self.config["browser"]["cft_executable"],
+                        "logical_effect_id": reservation.logical_effect_id,
+                        "outgoing_nonce": uuid.uuid4().hex,
+                        "response_nonce": uuid.uuid4().hex,
+                        "prompt": f"Produce a concise implementation plan for this public goal: {goal}",
+                        "controller_timeout_seconds": 420,
+                    },
+                ),
+            )
+            if effect.get("unknown"):
+                raise AuthorityStateUncertain("primary Brain outcome is unknown; reconcile before fallback")
+            primary_status = effect["adapter_result"]["envelope"]["status"]
+            if primary_status == "DONE":
                 brain_result = effect["adapter_result"]
                 brain_route = "chatgpt-web"
-            except Exception:
-                brain_result = self.runtime.invoke_workbuddy_brain(
+            elif primary_status in ("AUTH_EXPIRED", "UI_CHANGED"):
+                fallback = self.execute_workbuddy_fallback(
                     task_id=task_id,
+                    goal=goal,
+                    data_classification=data_classification,
+                    lease=lease,
                     context_fence=context_fence,
-                    prompt=f"Produce a concise proposal for: {goal}",
                 )
+                brain_result = fallback["adapter_result"]
                 brain_route = "workbuddy-deepseek-v4-flash"
+            else:
+                raise RuntimeFailure(f"primary Brain returned unsupported status: {primary_status}")
 
         observation = None
         if brain_result:
@@ -473,32 +610,258 @@ class Controller:
     def seal_tcb(self, reason: str) -> dict[str, Any]:
         return seal_tcb(self.store, self.code_root, reason=reason)
 
+    def validate_acceptance_manifest(
+        self,
+        *,
+        task_id: str,
+        acceptance_manifest_path: str | Path,
+        artifact_digest: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        manifest_path = Path(acceptance_manifest_path).resolve(strict=True)
+        manifest_hash = sha256_file(manifest_path)
+        evidence_record = self.store.evidence_for_path(
+            task_id=task_id,
+            kind="ACCEPTANCE_MANIFEST",
+            path=str(manifest_path),
+            sha256=manifest_hash,
+        )
+        acceptance = read_json(manifest_path)
+        required_fields = {
+            "schema_version",
+            "definition_version",
+            "task_id",
+            "goal_contract_hash",
+            "state_revision",
+            "context_fence",
+            "tested_artifact_digest",
+            "cases",
+            "known_blocking_defects",
+            "known_core_path_defects",
+            "final_status",
+        }
+        if not isinstance(acceptance, dict) or not required_fields.issubset(acceptance):
+            raise GateDenied("Release Gate: acceptance manifest schema is incomplete")
+        goal = self.store.latest_goal(task_id)
+        if acceptance["schema_version"] != 1 or acceptance["task_id"] != task_id:
+            raise GateDenied("Release Gate: acceptance task/schema mismatch")
+        if acceptance["goal_contract_hash"] != goal["contract_hash"]:
+            raise GateDenied("Release Gate: acceptance Goal Contract mismatch")
+        if acceptance["tested_artifact_digest"] != artifact_digest:
+            raise GateDenied("Release Gate: acceptance tested a different artifact digest")
+        if acceptance["state_revision"] != self.store.state_head():
+            raise GateDenied("Release Gate: acceptance Canonical State is stale")
+        if acceptance["context_fence"] != self.store.current_context_fence(task_id):
+            raise GateDenied("Release Gate: acceptance Context Fence is stale")
+        metadata = evidence_record["metadata"]
+        expected_metadata = {
+            "schema_version": acceptance["schema_version"],
+            "goal_contract_hash": acceptance["goal_contract_hash"],
+            "state_revision": acceptance["state_revision"],
+            "context_fence": acceptance["context_fence"],
+            "tested_artifact_digest": acceptance["tested_artifact_digest"],
+        }
+        if any(metadata.get(key) != value for key, value in expected_metadata.items()):
+            raise GateDenied("Release Gate: acceptance evidence metadata mismatch")
+        cases = acceptance["cases"]
+        if not isinstance(cases, list) or not cases:
+            raise GateDenied("Release Gate: acceptance case set cannot be empty")
+        expected_case_ids = goal.get("acceptance_criteria", [])
+        actual_case_ids = [case.get("case_id") for case in cases if isinstance(case, dict)]
+        if (
+            not isinstance(expected_case_ids, list)
+            or not expected_case_ids
+            or len(actual_case_ids) != len(cases)
+            or len(set(actual_case_ids)) != len(actual_case_ids)
+            or set(actual_case_ids) != set(expected_case_ids)
+        ):
+            raise GateDenied("Release Gate: acceptance cases do not match the Goal Contract")
+        blocking = 0
+        core = 0
+        for case in cases:
+            required_case_fields = {
+                "case_id",
+                "requirement_class",
+                "result",
+                "test_execution_id",
+                "evidence_hashes",
+                "tested_artifact_digest",
+            }
+            if not required_case_fields.issubset(case):
+                raise GateDenied("Release Gate: acceptance case schema is incomplete")
+            canonical_test = self.store.test_execution(str(case["test_execution_id"]))
+            if (
+                canonical_test["case_id"] != case["case_id"]
+                or canonical_test["task_id"] != task_id
+                or canonical_test["goal_contract_hash"] != goal["contract_hash"]
+                or canonical_test["tested_artifact_digest"] != artifact_digest
+                or canonical_test["definition_version"] != acceptance["definition_version"]
+                or canonical_test["requirement_class"] != case["requirement_class"]
+                or canonical_test["exit_or_observed_result"] != case["result"]
+                or canonical_test["evidence_hashes"] != case["evidence_hashes"]
+                or case["tested_artifact_digest"] != artifact_digest
+            ):
+                raise GateDenied("Release Gate: acceptance case is not bound to its canonical test execution")
+            revision = self.store.connection.execute(
+                "SELECT 1 FROM canonical_revisions WHERE revision=?", (canonical_test["state_revision"],)
+            ).fetchone()
+            if not revision or int(canonical_test["state_revision"]) > int(acceptance["state_revision"]):
+                raise GateDenied("Release Gate: test execution state revision is invalid")
+            for evidence_path, expected_hash in canonical_test["evidence_hashes"].items():
+                path = Path(evidence_path)
+                if not path.is_file() or sha256_file(path) != expected_hash:
+                    raise GateDenied("Release Gate: test evidence file digest mismatch")
+            if case["requirement_class"] == "REQUIRED":
+                if case["result"] != "PASS" or canonical_test["verification_status"] != "VERIFIED":
+                    blocking += 1
+                    if case["result"] == "FAIL":
+                        core += 1
+            elif case["requirement_class"] == "CONDITIONAL":
+                if case["result"] not in ("PASS", "SKIPPED_CONDITION_NOT_MET"):
+                    blocking += 1
+            else:
+                raise GateDenied("Release Gate: unknown requirement class")
+        if (
+            blocking != acceptance["known_blocking_defects"]
+            or core != acceptance["known_core_path_defects"]
+            or blocking != 0
+            or core != 0
+            or acceptance["final_status"] != "READY_FOR_USER_ACCEPTANCE"
+        ):
+            raise GateDenied("Release Gate: acceptance defect/final status mismatch")
+        return acceptance, evidence_record
+
+    def validate_review_manifest(
+        self,
+        *,
+        task_id: str,
+        review_manifest_path: str | Path,
+        acceptance: dict[str, Any],
+        acceptance_evidence_id: str,
+        artifact_digest: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        review_path = Path(review_manifest_path).resolve(strict=True)
+        review_hash = sha256_file(review_path)
+        evidence_record = self.store.evidence_for_path(
+            task_id=task_id,
+            kind="INDEPENDENT_REVIEW_MANIFEST",
+            path=str(review_path),
+            sha256=review_hash,
+        )
+        document = read_json(review_path)
+        required_fields = {
+            "schema_version",
+            "task_id",
+            "goal_contract_hash",
+            "state_revision",
+            "context_fence",
+            "artifact_digest",
+            "acceptance_evidence_id",
+            "reviews",
+        }
+        if not isinstance(document, dict) or not required_fields.issubset(document):
+            raise GateDenied("Release Gate: review manifest schema is incomplete")
+        if (
+            document["schema_version"] != 1
+            or document["task_id"] != task_id
+            or document["goal_contract_hash"] != acceptance["goal_contract_hash"]
+            or document["state_revision"] != acceptance["state_revision"]
+            or document["context_fence"] != acceptance["context_fence"]
+            or document["artifact_digest"] != artifact_digest
+            or document["acceptance_evidence_id"] != acceptance_evidence_id
+        ):
+            raise GateDenied("Release Gate: review manifest binding mismatch")
+        metadata = evidence_record["metadata"]
+        for key in ("schema_version", "goal_contract_hash", "state_revision", "context_fence", "artifact_digest", "acceptance_evidence_id"):
+            if metadata.get(key) != document[key]:
+                raise GateDenied("Release Gate: review evidence metadata mismatch")
+        reviews = document["reviews"]
+        if not isinstance(reviews, list) or not reviews:
+            raise GateDenied("Release Gate: independent review set cannot be empty")
+        for review in reviews:
+            required_review_fields = {
+                "schema_version",
+                "reviewer",
+                "provider",
+                "task_id",
+                "goal_contract_hash",
+                "state_revision",
+                "context_fence",
+                "artifact_digest",
+                "verdict",
+                "findings",
+                "result_id",
+                "invocation_id",
+                "action_id",
+                "logical_effect_id",
+            }
+            if not isinstance(review, dict) or not required_review_fields.issubset(review):
+                raise GateDenied("Release Gate: review entry schema is incomplete")
+            if (
+                review["schema_version"] != 1
+                or review["task_id"] != task_id
+                or review["goal_contract_hash"] != acceptance["goal_contract_hash"]
+                or review["state_revision"] != acceptance["state_revision"]
+                or review["context_fence"] != acceptance["context_fence"]
+                or review["artifact_digest"] != artifact_digest
+                or review["verdict"] != "PASS"
+                or review["findings"] != []
+            ):
+                raise GateDenied("Release Gate: independent review did not explicitly PASS this candidate")
+            result = self.store.verified_result(str(review["result_id"]))
+            if (
+                result["invocation_id"] != review["invocation_id"]
+                or result["actor_id"] != review["reviewer"]
+                or result["expected_actor_id"] != review["reviewer"]
+                or result["actor_type"] != "BRAIN"
+            ):
+                raise GateDenied("Release Gate: review result source mismatch")
+            validate_reviewer_envelope(
+                result["envelope"],
+                task_id=task_id,
+                goal_contract_hash=acceptance["goal_contract_hash"],
+                state_revision=acceptance["state_revision"],
+                context_fence=acceptance["context_fence"],
+                artifact_digest=artifact_digest,
+                acceptance_evidence_id=acceptance_evidence_id,
+            )
+            if result["envelope"]["verdict"] != "PASS" or result["envelope"]["findings"] != []:
+                raise GateDenied("Release Gate: canonical Reviewer result did not PASS")
+            effect = self.store.committed_effect(
+                action_id=str(review["action_id"]), logical_effect_id=str(review["logical_effect_id"])
+            )
+            result_in_outcome = effect["outcome"].get("result", {}).get("verification", {}).get("result_id")
+            if (
+                effect["task_id"] != task_id
+                or effect["reservation_task_id"] != task_id
+                or effect["goal_contract_hash"] != acceptance["goal_contract_hash"]
+                or effect["state_revision"] != acceptance["state_revision"]
+                or effect["context_fence"] != acceptance["context_fence"]
+                or effect["provider"] != review["provider"]
+                or result_in_outcome != review["result_id"]
+            ):
+                raise GateDenied("Release Gate: review is not source-bound to its committed Effect")
+        return document, evidence_record
+
     def create_release_candidate(
         self,
         *,
         task_id: str,
         acceptance_manifest_path: str | Path,
-        review_evidence: list[dict[str, Any]],
+        review_manifest_path: str | Path,
     ) -> dict[str, Any]:
-        manifest_path = Path(acceptance_manifest_path).resolve(strict=True)
-        acceptance = read_json(manifest_path)
         entries, artifact_digest, artifact_size = tree_manifest(self.code_root)
-        failures = [
-            case for case in acceptance.get("cases", [])
-            if case["requirement_class"] == "REQUIRED" and case["result"] != "PASS"
-        ]
-        conditional_failures = [
-            case for case in acceptance.get("cases", [])
-            if case["requirement_class"] == "CONDITIONAL" and case["result"] not in ("PASS", "SKIPPED_CONDITION_NOT_MET")
-        ]
-        if failures or conditional_failures:
-            raise GateDenied("Release Gate: acceptance failures remain")
-        if acceptance.get("known_blocking_defects") != 0 or acceptance.get("known_core_path_defects") != 0:
-            raise GateDenied("Release Gate: known blocking/core defects remain")
-        if any(case.get("tested_artifact_digest") != artifact_digest for case in acceptance.get("cases", [])):
-            raise GateDenied("Release Gate: acceptance tested a different artifact digest")
-        if not review_evidence or any(item.get("artifact_digest") != artifact_digest or item.get("status") != "PASS" for item in review_evidence):
-            raise GateDenied("Release Gate: independent reviews do not bind the candidate digest")
+        acceptance, acceptance_evidence = self.validate_acceptance_manifest(
+            task_id=task_id,
+            acceptance_manifest_path=acceptance_manifest_path,
+            artifact_digest=artifact_digest,
+        )
+        review_document, review_evidence_record = self.validate_review_manifest(
+            task_id=task_id,
+            review_manifest_path=review_manifest_path,
+            acceptance=acceptance,
+            acceptance_evidence_id=acceptance_evidence["evidence_id"],
+            artifact_digest=artifact_digest,
+        )
         verify_tcb(self.store, self.code_root)
         candidate_id = f"rc-{uuid.uuid4()}"
         candidate_root = Path(self.config["release_root"]) / candidate_id
@@ -512,7 +875,7 @@ class Controller:
         copied_entries, copied_digest, copied_size = tree_manifest(artifact_root)
         if copied_digest != artifact_digest or copied_size != artifact_size or copied_entries != entries:
             raise GateDenied("Release Candidate copy digest mismatch")
-        acceptance_hash = sha256_file(manifest_path)
+        acceptance_hash = acceptance_evidence["sha256"]
         record = {
             "release_candidate_id": candidate_id,
             "task_id": task_id,
@@ -523,8 +886,21 @@ class Controller:
             "artifact_digest": artifact_digest,
             "artifact_size": artifact_size,
             "tree_manifest": entries,
-            "test_evidence": [{"case_id": case["case_id"], "test_execution_id": case["test_execution_id"], "evidence_hashes": case.get("evidence_hashes", {})} for case in acceptance["cases"]],
-            "review_evidence": review_evidence,
+            "test_evidence": [
+                {
+                    "case_id": case["case_id"],
+                    "test_execution_id": case["test_execution_id"],
+                    "evidence_hashes": case.get("evidence_hashes", {}),
+                    "acceptance_evidence_id": acceptance_evidence["evidence_id"],
+                }
+                for case in acceptance["cases"]
+            ],
+            "review_evidence": [
+                {**review, "review_evidence_id": review_evidence_record["evidence_id"]}
+                for review in review_document["reviews"]
+            ],
+            "acceptance_evidence_id": acceptance_evidence["evidence_id"],
+            "review_evidence_id": review_evidence_record["evidence_id"],
             "acceptance_manifest_hash": acceptance_hash,
             "created_at": utc_now(),
             "status": "VERIFIED",
