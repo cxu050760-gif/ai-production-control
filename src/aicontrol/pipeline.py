@@ -56,6 +56,7 @@ class GoalPipeline:
         work: Callable[[int, Path], None],
         test: Callable[[Path], tuple[bool, list[str]]],
         review: Callable[[Path], dict[str, Any]],
+        required_reviewer_id: str | None = None,
         retry_budget: int = 3,
     ) -> None:
         self.store = store
@@ -66,6 +67,7 @@ class GoalPipeline:
         self.work = work
         self.test = test
         self.review = review
+        self.required_reviewer_id = required_reviewer_id
         self.retry_budget = retry_budget
         self.workflow = Workflow(store)
         self._artifact = str(self.artifact)
@@ -91,8 +93,23 @@ class GoalPipeline:
         self._set_meta("workflow_id", wfid)
         return wfid
 
+    def _reviewer_ready(self) -> bool:
+        """A required reviewer is ready only if explicitly registered as
+        AVAILABLE / VERIFIED in the reviewer_registry. Absent or unknown => not
+        ready, so the pipeline must NOT auto-deliver, never faking a review."""
+        if not self.required_reviewer_id:
+            return True
+        for entry in self.store.registry("reviewer_registry"):
+            if entry.get("reviewer_id") == self.required_reviewer_id:
+                availability = entry.get("availability") or entry.get("health") or ""
+                return availability in ("AVAILABLE", "VERIFIED")
+        return False
+
     def run(self, *, limit_steps: int | None = None) -> dict[str, Any]:
         wfid = self._ensure()
+        if self.required_reviewer_id and not self._reviewer_ready():
+            return {"status": "READY_FOR_REVIEW", "reviewer_id": self.required_reviewer_id,
+                    "reviewer_available": False, "handled": 0}
         artifact = Path(self._artifact)
         artifact.parent.mkdir(parents=True, exist_ok=True)
         self._last_artifact = None

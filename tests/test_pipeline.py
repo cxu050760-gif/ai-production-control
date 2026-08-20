@@ -166,5 +166,33 @@ class GoalPipelineE2ETests(PipelineFixture):
         self.assertNotIn("delivered", report)
 
 
+    def test_reviewer_gate_refuses_delivery_when_reviewer_unavailable(self) -> None:
+        self.store.upsert_registry("reviewer_registry", "reviewer_id", "r-prod-temp",
+                                   {"reviewer_id": "r-prod-temp", "availability": "PENDING"})
+
+        def work(attempt, artifact):
+            artifact.write_text("ok", encoding="utf-8")
+
+        def test(artifact):
+            return True, []
+
+        pipeline = GoalPipeline(
+            self.store, task_id="task-reviewgate", objective="gate",
+            artifact=self.root / "art.md", release_root=self.root / "release",
+            work=work, test=test, review=self.make_reviewer(always_pass=True),
+            required_reviewer_id="r-prod-temp",
+        )
+        report = pipeline.run()
+        self.assertEqual(report["status"], "READY_FOR_REVIEW")
+        self.assertFalse(report["reviewer_available"])
+        self.assertEqual(list((self.root / "release").glob("delivery-*.md")), [])
+
+        self.store.upsert_registry("reviewer_registry", "reviewer_id", "r-prod-temp",
+                                   {"reviewer_id": "r-prod-temp", "availability": "AVAILABLE"})
+        report2 = pipeline.run()
+        self.assertEqual(report2["status"], "COMPLETE")
+        self.assertEqual(len(list((self.root / "release").glob("delivery-*.md"))), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
