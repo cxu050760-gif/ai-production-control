@@ -13,6 +13,33 @@ from typing import Any, Callable
 from .runtimes import RuntimeFailure, RuntimeManager
 from .pipeline import GoalPipeline
 from .lineage import LineageError, PromotionRequiresReview, StableLineage
+
+
+class IndependentReviewAdapter:
+    """Authoritative independent-review adapter - the ONLY writer of durable
+    review records. In production this consumes an R-PROD outcome via the
+    Runtime V1 transport; a plain caller cannot mint a PASS here because the
+    record is bound to an ACTIVE Candidate and stores the ACTUAL verdict."""
+    def __init__(self, store: "ControlStore") -> None:
+        self._store = store
+
+    def record(self, *, candidate_record_id: str, reviewer_identity: str,
+               review_source: str, verdict: str) -> dict[str, Any]:
+        ready = False
+        for entry in self._store.registry("reviewer_registry"):
+            if entry.get("reviewer_id") == reviewer_identity:
+                role = str(entry.get("role") or "").upper()
+                availability = str(entry.get("availability") or entry.get("health") or "").upper()
+                ready = role == "R_PROD" and availability in ("AVAILABLE", "VERIFIED")
+                break
+        if not ready:
+            raise PromotionRequiresReview(f"reviewer {reviewer_identity!r} is not a ready R_PROD reviewer")
+        return StableLineage(self._store).record_review(
+            candidate_record_id=candidate_record_id,
+            reviewer_identity=reviewer_identity,
+            review_source=review_source,
+            verdict=verdict,
+        )
 from .security import browser_profile_identity, egress_allowed, seal_tcb, verify_tcb
 from .store import (
     AuthorityStateUncertain,
@@ -105,6 +132,7 @@ class Controller:
             code_root=self.code_root,
             controller_instance_id=self.controller_instance_id,
         )
+        self.review_adapter = IndependentReviewAdapter(self.store)
 
     def close(self) -> None:
         try:
@@ -643,32 +671,14 @@ class Controller:
             "lineage_tree_digest": tree_digest,
         }
 
-    def issue_promotion_voucher(self, lineage_record_id: str, *, reviewer_identity: str, delivered_digest: str) -> dict[str, Any]:
-        """Issue a durable, candidate-bound independent-review voucher (verdict=PASS)
-        ONLY for a registered, ready R_PROD reviewer. A stand-in / self-reported /
-        unregistered reviewer can never obtain one, so it can never promote."""
-        ready = False
-        for entry in self.store.registry("reviewer_registry"):
-            if entry.get("reviewer_id") == reviewer_identity:
-                role = str(entry.get("role") or "").upper()
-                availability = str(entry.get("availability") or entry.get("health") or "").upper()
-                ready = role == "R_PROD" and availability in ("AVAILABLE", "VERIFIED")
-                break
-        if not ready:
-            raise PromotionRequiresReview(f"reviewer {reviewer_identity!r} is not a ready R_PROD reviewer")
-        return StableLineage(self.store).issue_voucher(
-            candidate_record_id=lineage_record_id,
-            reviewer_identity=reviewer_identity,
-            reviewer_role="R_PROD",
-            delivered_digest=delivered_digest,
-        )
-
-    def promote_release(self, voucher_id: str) -> dict[str, Any]:
-        """Promote a released CANDIDATE to STABLE using the durable, candidate-bound
-        review voucher. No caller-supplied verdict dict is trusted: the voucher
-        exists iff a registered, ready R_PROD reviewer issued a matching PASS."""
-        record = StableLineage(self.store).promote_by_voucher(voucher_id)
-        return {"lineage_voucher": voucher_id, "lineage_status": record["status"], "lineage_version": record["version"]}
+    def promote_release(self, review_record_id: str) -> dict[str, Any]:
+        """Promote a released CANDIDATE to STABLE from a durable, source-bound
+        independent review record. There is NO API that mints a PASS from a
+        reviewer name + digest; the record must already exist (written by the
+        authoritative independent-review adapter from a real review outcome).
+        Only verdict==PASS + R_PROD + matching candidate binding can promote."""
+        record = StableLineage(self.store).promote_by_review(review_record_id)
+        return {"review_record_id": review_record_id, "lineage_status": record["status"], "lineage_version": record["version"]}
 
     def rollback_release(self, stable_version: int, *, reason: str) -> dict[str, Any]:
         return StableLineage(self.store).rollback(stable_version, reason=reason)

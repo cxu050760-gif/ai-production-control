@@ -66,6 +66,19 @@ CREATE TABLE IF NOT EXISTS review_vouchers (
 '''
 
 
+REVIEW_SCHEMA = '''CREATE TABLE IF NOT EXISTS review_records (
+  review_record_id TEXT PRIMARY KEY,
+  candidate_record_id TEXT NOT NULL,
+  reviewer_identity TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  review_source TEXT NOT NULL,
+  controller_commit TEXT NOT NULL,
+  tree_digest TEXT NOT NULL,
+  delivered_digest TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);'''
+
+
 class LineageError(RuntimeError):
     pass
 
@@ -75,7 +88,7 @@ class PromotionRequiresReview(LineageError):
 
 
 def _ensure_schema(store: ControlStore) -> None:
-    store.connection.executescript(LINEAGE_SCHEMA + "\n" + VOUCHER_SCHEMA)
+    store.connection.executescript(LINEAGE_SCHEMA + "\n" + VOUCHER_SCHEMA + "\n" + REVIEW_SCHEMA)
     store.durable_barrier()
 
 
@@ -216,6 +229,60 @@ class StableLineage:
             raise PromotionRequiresReview("no valid independent-review voucher for promotion")
         return self.promote(v["candidate_record_id"], independent_review={
             "verdict": "PASS", "reviewer": v["reviewer_identity"], "reviewer_role": v["reviewer_role"],
+        })
+
+
+    def record_review(self, *, candidate_record_id: str, reviewer_identity: str,
+                     review_source: str, verdict: str) -> dict[str, Any]:
+        """Authoritative independent-review record. Only the independent-review
+        ADAPTER should call this (it is the 'source' of the review). Binds the
+        record to an ACTIVE Candidate (commit/tree/digest are taken from the
+        candidate, not the caller), requires an R_PROD reviewer, and stores the
+        ACTUAL verdict (PASS/REWORK/BLOCKED). This is the thing that turns a
+        real external review outcome into a promotion-eligible fact."""
+        cand = self.get_candidate(candidate_record_id)
+        if not cand or cand["status"] != STATUS_CANDIDATE:
+            raise LineageError("cannot record review for a non-active Candidate")
+        if not review_source or not isinstance(review_source, str):
+            raise LineageError("review_source is required (authoritative transport identity)")
+        if str(verdict or "").upper() not in ("PASS", "REWORK", "BLOCKED"):
+            raise LineageError(f"invalid review verdict: {verdict!r}")
+        rid = f"review-{uuid.uuid4()}"
+        with self.store.transaction() as conn:
+            conn.execute(
+                "INSERT INTO review_records(review_record_id,candidate_record_id,reviewer_identity,verdict,review_source,controller_commit,tree_digest,delivered_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (rid, cand["record_id"], reviewer_identity, str(verdict).upper(),
+                 review_source, cand["controller_commit"], cand["tree_digest"],
+                 self._parsed_delivered(cand) or "", utc_now()),
+            )
+        self.store.durable_barrier()
+        return dict(self.store.connection.execute(
+            "SELECT * FROM review_records WHERE review_record_id=?", (rid,)
+        ).fetchone())
+
+    def review_record(self, record_id: str) -> dict[str, Any] | None:
+        row = self.store.connection.execute(
+            "SELECT * FROM review_records WHERE review_record_id=?", (record_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def promote_by_review(self, review_record_id: str) -> dict[str, Any]:
+        """Promote to STABLE from a durable, source-bound review record. Never from
+        a caller-supplied verdict dict or reviewer name+digest: the record must
+        exist, be R_PROD, verdict PASS, and match the ACTIVE Candidate binding."""
+        rec = self.review_record(review_record_id)
+        if not rec:
+            raise PromotionRequiresReview("no authoritative independent-review record for promotion")
+        if rec["verdict"] != "PASS":
+            raise PromotionRequiresReview("independent review record is not PASS (REWORK/BLOCKED cannot promote)")
+        cand = self.get_candidate(rec["candidate_record_id"])
+        if not cand or cand["status"] != STATUS_CANDIDATE:
+            raise LineageError("bound Candidate is not active")
+        # binding: candidate digest must equal the record's digest
+        if rec["delivered_digest"] and (self._parsed_delivered(cand) or "") != rec["delivered_digest"]:
+            raise LineageError("review record digest does not match the Candidate")
+        return self.promote(rec["candidate_record_id"], independent_review={
+            "verdict": "PASS", "reviewer": rec["reviewer_identity"], "review_source": rec["review_source"],
         })
 
     def lineage(self) -> list[dict[str, Any]]:
