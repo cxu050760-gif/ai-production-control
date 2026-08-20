@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -11,6 +12,7 @@ from typing import Any, Callable
 
 from .runtimes import RuntimeFailure, RuntimeManager
 from .pipeline import GoalPipeline
+from .lineage import StableLineage
 from .security import browser_profile_identity, egress_allowed, seal_tcb, verify_tcb
 from .store import (
     AuthorityStateUncertain,
@@ -588,7 +590,68 @@ class Controller:
             required_reviewer_id=required_reviewer_id,
         )
         result = pipeline.run()
-        return {"task_id": task_id, **result}
+        out = {"task_id": task_id, **result}
+        if result.get("status") == "COMPLETE" and result.get("delivered"):
+            out["lineage_release"] = self._record_release(
+                task_id=task_id,
+                objective=objective or goal,
+                delivered_digest=self.store.meta(f"pipeline:{task_id}:delivered_digest"),
+            )
+        return out
+
+    def _lineage_identity(self) -> tuple[str, str]:
+        try:
+            proc = subprocess.run(
+                ["git", "-C", str(self.code_root), "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+            )
+            commit = proc.stdout.strip()
+        except Exception:  # noqa
+            commit = "unknown"
+        _, tree_digest, _ = tree_manifest(self.code_root)
+        return commit or "unknown", tree_digest
+
+    def _record_release(self, *, task_id: str, objective: str, delivered_digest: str | None) -> dict[str, Any]:
+        """Record an authoritative release Candidate in the Stable/Candidate
+        lineage whenever the goal pipeline actually delivers an artifact.
+
+        Honest boundary: this is a CANDIDATE, never a self-promotion to STABLE.
+        Promotion to STABLE requires an independent PASS via promote_release().
+        """
+        commit, tree_digest = self._lineage_identity()
+        cand = StableLineage(self.store).create_candidate(
+            controller_commit=commit,
+            tree_digest=tree_digest,
+            known_limitations=[
+                f"task={task_id}",
+                f"objective={objective}",
+                f"delivered_sha256={delivered_digest or 'n/a'}",
+            ],
+        )
+        return {
+            "lineage_record_id": cand["record_id"],
+            "lineage_version": cand["version"],
+            "lineage_status": cand["status"],
+            "lineage_controller_commit": commit,
+            "lineage_tree_digest": tree_digest,
+        }
+
+    def promote_release(self, lineage_record_id: str, *, independent_review: dict[str, Any]) -> dict[str, Any]:
+        """Promote a released CANDIDATE to STABLE via the authoritative lineage
+        gate. StableLineage.promote fails closed unless the review verdict is
+        PASS - an injected/stand-in reviewer must never promote."""
+        record = StableLineage(self.store).promote(lineage_record_id, independent_review=independent_review)
+        return {
+            "lineage_record_id": lineage_record_id,
+            "lineage_status": record["status"],
+            "lineage_version": record["version"],
+        }
+
+    def rollback_release(self, stable_version: int, *, reason: str) -> dict[str, Any]:
+        return StableLineage(self.store).rollback(stable_version, reason=reason)
+
+    def release_lineage(self) -> list[dict[str, Any]]:
+        return StableLineage(self.store).lineage()
 
     def doctor(self, *, live_browser: bool = False) -> dict[str, Any]:
         checks: dict[str, Any] = {}
