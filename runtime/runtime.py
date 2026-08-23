@@ -17,6 +17,16 @@ Commands (all state-changing/R-touching commands require explicit --run-id):
   metrics   --run-id ID                             print runtime metrics
   health    [--force]                               cached bridge health check
 
+Router V0.1 (Slice A) — minimal B/R role routing on the frozen transport:
+  router-start --goal-file G --b-url B --r-url R [--worker-id ID] [--max-rounds N]
+                create a router RUN holding BOTH role conversations
+                (builder -> B, reviewer -> R); no transport yet
+  router-step  --run-id ID [--timeout N]
+                advance exactly one router phase (one transport exchange)
+  router-run   --goal-file G --b-url B --r-url R [--worker-id ID] [--max-rounds N]
+                create + auto-drive B -> R -> REWORK -> SAME B until terminal
+                (user launches once; zero manual message copying)
+
 Durable state: STATE_ROOT/runs/<RUN_ID>/state.json is the ONLY recovery
 authority; journal.jsonl is append-only audit. All control directives are
 committed durably BEFORE any transition is applied.
@@ -321,6 +331,97 @@ def hard_block(state: dict, reason: str) -> None:
 # ---------------------------------------------------------------------------
 # Bridge health (cached fast path)
 # ---------------------------------------------------------------------------
+def _seam_script_path(p: str) -> str:
+    """Convert a /c/... posix path emitted by the Runtime back to a Windows
+    path the seam (pure Python, no bash) can open."""
+    m = re.match(r"^/([a-zA-Z])/(.*)$", p or "")
+    return (m.group(1).upper() + ":/" + m.group(2)) if m else (p or "")
+
+
+def _seam_script_log(log_path: str, entry: dict) -> None:
+    if not log_path:
+        return
+    try:
+        append_jsonl(Path(log_path), entry)
+    except OSError:
+        pass
+
+
+def _seam_script_run(script: str) -> subprocess.CompletedProcess:
+    """Deterministic scripted-transport seam (Slice A router acceptance).
+    Test seam only (same status as the 1/OK/UPLOAD seams above): production
+    never sets APC_RUNTIME_INJECT_BRIDGE_FAIL=SCRIPT.
+
+    Script file (APC_RUNTIME_INJECT_SCRIPT_FILE) JSON shape:
+      {"conversations": {<url>: {"sid": str, "replies": [..], "failures": [..]}},
+       "log": <jsonl path>}
+    Per send: consumes one failure token first; else pops the next reply for
+    the target conversation (durable cursor across processes), writes it to
+    the script's reply file and returns the standard RUNTIME_* markers. Every
+    exchange is journaled to the log so tests can assert role->URL routing."""
+    cfg_path = os.environ.get("APC_RUNTIME_INJECT_SCRIPT_FILE", "")
+    try:
+        cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return subprocess.CompletedProcess([BASH], 1, "", "RUNTIME_SEAM_SCRIPT_MISSING")
+    if "CLEANUP_OK" in script:
+        return subprocess.CompletedProcess([BASH], 0, "CLEANUP_OK\n", "")
+    if "SESS_HEALTH" in script:
+        return subprocess.CompletedProcess([BASH], 0, "SESS_HEALTH=GEN=IDLE\n", "")
+    m_url = re.search(r"RURL='([^']+)'", script)
+    if not m_url:
+        return subprocess.CompletedProcess([BASH], 0, "RUNTIME_SEAM_NO_URL\n", "")
+    url = m_url.group(1)
+    conv = dict((cfg.get("conversations") or {}).get(url) or {})
+    sid = str(conv.get("sid") or "seamsid")
+    sent = ""
+    m_msg = re.search(r'MSG=\$\(cat "([^"]+)"\)', script)
+    if m_msg:
+        try:
+            sent = Path(_seam_script_path(m_msg.group(1))).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            sent = ""
+    m_stored = re.search(r"^SID='([^']*)'", script, re.M)
+    reattach = "ACQ_MODE=reattach" in script
+    entry = {"url": url, "sid": sid, "stored_sid": (m_stored.group(1) if m_stored else None),
+             "reattach": reattach, "message": sent}
+    failures = list(conv.get("failures") or [])
+    if failures:
+        tok = str(failures.pop(0))
+        conv["failures"] = failures
+        cfg.setdefault("conversations", {})[url] = conv
+        try:
+            atomic_write_text(Path(cfg_path), json.dumps(cfg, ensure_ascii=False))
+        except OSError:
+            pass
+        _seam_script_log(cfg.get("log"), {**entry, "result": tok})
+        return subprocess.CompletedProcess([BASH], 0, "RUNTIME_SID=%s\nRUNTIME_SEND=%s\n" % (sid, tok), "")
+    cur_path = Path(cfg_path + ".cursor.json")
+    try:
+        cursors = json.loads(cur_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cursors = {}
+    idx = int(cursors.get(url, 0))
+    replies = list(conv.get("replies") or [])
+    reply = replies[idx] if idx < len(replies) else ""
+    cursors[url] = idx + 1
+    try:
+        atomic_write_text(cur_path, json.dumps(cursors, ensure_ascii=False))
+    except OSError:
+        pass
+    m_reply = re.search(r'yz_recv_last "\$SID" "([^"]+)"', script)
+    if m_reply:
+        try:
+            Path(_seam_script_path(m_reply.group(1))).write_text(reply, encoding="utf-8")
+        except OSError:
+            pass
+    _seam_script_log(cfg.get("log"), {**entry, "result": "DONE", "reply": reply})
+    return subprocess.CompletedProcess(
+        [BASH], 0,
+        "RUNTIME_SID=%s\nRUNTIME_ACQ_MODE=%s\nRUNTIME_SEND=DONE\nRUNTIME_RECV_SID=%s\n"
+        % (sid, "reattach" if reattach else "acquire", sid), "")
+
+
 def bash_run(script: str, timeout: float) -> subprocess.CompletedProcess:
     seam = os.environ.get("APC_RUNTIME_INJECT_BRIDGE_FAIL", "")
     if seam == "1":
@@ -347,6 +448,10 @@ def bash_run(script: str, timeout: float) -> subprocess.CompletedProcess:
         return subprocess.CompletedProcess(
             [BASH], 0,
             "RUNTIME_SID=seam\nRUNTIME_UPLOAD_FAIL=probe.txt stage=upload raw=injected\n", "")
+    if seam == "SCRIPT":
+        # Deterministic scripted-transport seam (Slice A): per-conversation
+        # replies from APC_RUNTIME_INJECT_SCRIPT_FILE. Real bridge untouched.
+        return _seam_script_run(script)
     return subprocess.run(
         [BASH, "-c", script],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -1415,6 +1520,397 @@ def cmd_report(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Router V0.1 (Slice A) — minimal B/R role routing on the frozen transport.
+#
+# Frozen behaviour contract (V0.1 Slice A acceptance, AC-1..AC-11):
+#   builder  -> state.role_urls["builder"]  (B conversation only)
+#   reviewer -> state.role_urls["reviewer"] (R conversation only)
+#   reviewer REWORK -> Runtime auto-builds the rework message and routes it
+#   back to the SAME builder conversation; user copy-paste = 0.
+# Reuses the frozen bridge scripts (send_script / session machinery), durable
+# state, verdict protocol and HARD_BLOCKED terminal semantics. Legacy
+# single-R_URL commands are not modified. Phase machine (state["router"]):
+#   SEND_GOAL_TO_BUILDER -> SEND_TO_REVIEWER
+#     -> PASS: ROUTED_PASS (status DONE, the only PASS path)
+#     -> REWORK (round < max): SEND_REWORK_TO_BUILDER -> SEND_TO_REVIEWER ...
+#     -> REWORK (round >= max) / BLOCKED / NO_VERDICT / transport budget:
+#        HARD_BLOCKED (never PASS)
+# ---------------------------------------------------------------------------
+ROUTER_MODE = "router-v0.1"
+ROUTER_MAX_ROUNDS_DEFAULT = 3
+ROUTER_BUILDER_OUTPUT_CAP = 20000
+ROUTER_PHASES_PENDING = ("SEND_GOAL_TO_BUILDER", "SEND_TO_REVIEWER", "SEND_REWORK_TO_BUILDER")
+
+
+def _router_conv_id(url: str) -> str:
+    m = CONV_ID_RE.search(url or "")
+    return m.group(1) if m else ""
+
+
+def _router_create(goal: str, b_url: str, r_url: str, worker_id: str, max_rounds: int) -> dict:
+    """Create a router RUN durably holding BOTH role conversations. Role URLs
+    are taken explicitly per RUN — never inherited from any other RUN."""
+    state = _new_run(goal, r_url, worker_id)
+    state["mode"] = ROUTER_MODE
+    state["role_urls"] = {"builder": b_url, "reviewer": r_url}
+    state["role_sessions"] = {"builder": {"sid": None, "epoch": 1},
+                              "reviewer": {"sid": None, "epoch": 1}}
+    state["router"] = {"phase": "SEND_GOAL_TO_BUILDER", "round": 0,
+                       "max_rounds": int(max_rounds),
+                       "last_builder_reply_path": None,
+                       "last_builder_reply_bytes": 0,
+                       "last_review_reply_path": None,
+                       "pending_rework": ""}
+    state["current_step"] = "router: created, awaiting goal dispatch to builder"
+    state["next_action"] = "router-step / router-run: dispatch GOAL to the builder conversation"
+    save_state(state)
+    journal(state["run_id"], "ROUTER_RUN_CREATED", b_url=b_url, r_url=r_url,
+            max_rounds=int(max_rounds), worker=state["worker_identity"])
+    return state
+
+
+def _router_review_envelope(state: dict, builder_reply: str, round_no: int) -> str:
+    body = builder_reply[:ROUTER_BUILDER_OUTPUT_CAP]
+    note = ("\n[... builder output truncated by router ...]"
+            if len(builder_reply) > ROUTER_BUILDER_OUTPUT_CAP else "")
+    return ("[Router V0.1 review request | round %d]\n"
+            "RUN: %s\nGOAL: %s\n\nBUILDER OUTPUT:\n%s%s\n\n"
+            "[Review request] Reply ONLY with the final verdict line: "
+            "===REVIEW_VERDICT=== PASS or REWORK or BLOCKED "
+            "(plus ===NEXT_ACTION=== instructions when REWORK)."
+            % (round_no, state["run_id"], state["goal"], body, note))
+
+
+def _router_rework_message(next_action: str, round_no: int) -> str:
+    return ("[Router V0.1 | REWORK round %d]\n"
+            "Reviewer verdict: REWORK\n"
+            "Reviewer required changes (NEXT_ACTION):\n%s\n\n"
+            "Rework ONLY what the reviewer asked above, then reply with the "
+            "updated complete result."
+            % (round_no, (next_action or "").strip() or "(no NEXT_ACTION provided)"))
+
+
+def _router_send_to_role(state: dict, role: str, message: str, timeout: int) -> tuple[str, Path]:
+    """One durable send to a role's OWN conversation (never the other role's).
+    Returns (reply_text, reply_path). Updates the role session slot, metrics
+    and journal. Raises RuntimeError when transport fails beyond budget; the
+    caller converts that into durable HARD_BLOCKED (never PASS)."""
+    r_url = state["role_urls"][role]
+    rd = run_dir(state["run_id"])
+    epoch = state["role_sessions"][role].get("epoch", 1)
+    stored_sid = state["role_sessions"][role].get("sid") or ""
+    msg_file = rd / f"router_{role}_msg_{int(time.time())}_{uuid.uuid4().hex[:6]}.txt"
+    atomic_write_text(msg_file, message)
+    reply_file = rd / (f"router_{role}_reply_round{state['router']['round']}_"
+                       f"{int(time.time())}_{uuid.uuid4().hex[:6]}.txt")
+    while True:
+        script = send_script(r_url, to_posix(str(msg_file)), [],
+                             to_posix(str(reply_file)), timeout, stored_sid=stored_sid)
+        t0 = time.time()
+        try:
+            proc = bash_run(script, timeout=timeout + 240)
+            markers = parse_markers(proc.stdout)
+            result = markers.get("RUNTIME_SEND", "NO_RESULT")
+        except subprocess.TimeoutExpired:
+            result, markers = "RUNTIME_TIMEOUT", {}
+        except OSError as exc:
+            result, markers = f"RUNTIME_ERROR:{exc}", {}
+        state["metrics"]["r_wait_time_sec"] = round(
+            float(state["metrics"].get("r_wait_time_sec", 0)) + (time.time() - t0), 1)
+        if result in ("DONE", "DONE_NO_MARKER"):
+            break
+        sid = markers.get("RUNTIME_SID") or stored_sid
+        if result in ("ACQUIRE_FAILED", "SEND_FAILED"):
+            state["metrics"]["session_recoveries"] = int(state["metrics"].get("session_recoveries", 0)) + 1
+            if state["metrics"]["session_recoveries"] > MAX_SESSION_RECOVERIES:
+                raise RuntimeError(f"router transport to {role} failed beyond budget ({result})")
+            journal(state["run_id"], "ROUTER_SESSION_REPLACED", role=role, reason=result, old_sid=sid)
+            try:
+                bash_run(session_cleanup_script(sid, r_url), timeout=60)
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+            state["role_sessions"][role] = {"sid": None, "epoch": epoch}
+            stored_sid = ""
+        else:
+            state["metrics"]["bridge_retries"] = int(state["metrics"].get("bridge_retries", 0)) + 1
+            if state["metrics"]["bridge_retries"] > MAX_BRIDGE_RETRIES:
+                raise RuntimeError(f"router transport to {role} failed beyond budget ({result})")
+        save_state(state)
+        time.sleep(2)
+    final_sid = markers.get("RUNTIME_RECV_SID") or markers.get("RUNTIME_SID") or stored_sid
+    if final_sid:
+        state["role_sessions"][role] = {"sid": final_sid, "epoch": epoch}
+    state["metrics"]["r_roundtrips"] = int(state["metrics"].get("r_roundtrips", 0)) + 1
+    reply_text = reply_file.read_text(encoding="utf-8", errors="replace") if reply_file.exists() else ""
+    journal(state["run_id"], "ROUTER_SEND", role=role, phase=state["router"]["phase"],
+            round=state["router"]["round"], result=result, sid=final_sid,
+            reply_path=str(reply_file),
+            reply_bytes=len(reply_text.encode("utf-8", errors="replace")))
+    return reply_text, reply_file
+
+
+def _router_finalize_pass(state: dict, reply_file: Path, reply_text: str) -> None:
+    state["last_r_verdict"] = "PASS"
+    state["last_reply_path"] = str(reply_file)
+    state["last_reply_bytes"] = len(reply_text.encode("utf-8", errors="replace"))
+    state["router"]["phase"] = "ROUTED_PASS"
+    state["status"] = "DONE"
+    state["metrics"]["finished_at"] = utc_now()
+    state["current_step"] = "router: reviewer PASS, RUN finalized"
+    state["next_action"] = "Router RUN complete (reviewer PASS). No further actions."
+    journal(state["run_id"], "ROUTER_DONE", rounds=state["router"]["round"])
+    save_state(state)
+
+
+def _router_step(state: dict, timeout: int) -> dict:
+    """Advance exactly one pending router phase (one transport exchange).
+    Caller holds RunLock. Terminal outcomes: DONE via PASS only, otherwise
+    durable HARD_BLOCKED — timeout / UNKNOWN can never become PASS."""
+    if state.get("mode") != ROUTER_MODE:
+        raise PermissionError("not a router RUN")
+    phase = state["router"]["phase"]
+    if phase not in ROUTER_PHASES_PENDING:
+        return {"stepped": False, "phase": phase, "run_status": state["status"]}
+    # health gate: a transiently unhealthy bridge keeps the phase (retryable);
+    # only an exhausted budget hard-blocks (same semantics as legacy send).
+    health = bridge_health(force=False)
+    if not health.get("ready"):
+        state["metrics"]["bridge_retries"] = int(state["metrics"].get("bridge_retries", 0)) + 1
+        if state["metrics"]["bridge_retries"] > MAX_BRIDGE_RETRIES:
+            hard_block(state, "router bridge health failed beyond retry budget: "
+                       + str(health.get("detail", "")))
+            return {"stepped": False, "status": "HARD_BLOCKED", "run_status": state["status"]}
+        save_state(state)
+        return {"stepped": False, "status": "BRIDGE_UNHEALTHY",
+                "detail": health.get("detail", ""), "run_status": state["status"]}
+    if phase in ("SEND_GOAL_TO_BUILDER", "SEND_REWORK_TO_BUILDER"):
+        message = (state["goal"] if phase == "SEND_GOAL_TO_BUILDER"
+                   else _router_rework_message(state["router"].get("pending_rework", ""),
+                                               state["router"]["round"]))
+        reply, reply_file = _router_send_to_role(state, "builder", message, timeout)
+        state["router"]["last_builder_reply_path"] = str(reply_file)
+        state["router"]["last_builder_reply_bytes"] = len(reply.encode("utf-8", errors="replace"))
+        state["router"]["phase"] = "SEND_TO_REVIEWER"
+        state["current_step"] = "router: builder replied (round %d); review pending" % state["router"]["round"]
+        state["next_action"] = "router-step: route builder output to the reviewer conversation"
+        save_state(state)
+        return {"stepped": True, "role": "builder", "phase": "SEND_TO_REVIEWER",
+                "reply_path": str(reply_file), "run_status": state["status"]}
+    # phase == SEND_TO_REVIEWER
+    builder_path = state["router"].get("last_builder_reply_path") or ""
+    builder_reply = ""
+    if builder_path and Path(builder_path).exists():
+        builder_reply = Path(builder_path).read_text(encoding="utf-8", errors="replace")
+    envelope = _router_review_envelope(state, builder_reply, state["router"]["round"])
+    reply, reply_file = _router_send_to_role(state, "reviewer", envelope, timeout)
+    verdict, next_action = parse_verdict(reply)
+    requeries = 0
+    while verdict is None and requeries < MAX_VERDICT_REQUERIES:
+        requeries += 1
+        state["metrics"]["verdict_requeries_used"] = int(state["metrics"].get("verdict_requeries_used", 0)) + 1
+        save_state(state)
+        rq, rq_file = _router_send_to_role(state, "reviewer", REQUERY_TEXT, 180)
+        reply, reply_file = rq, rq_file
+        verdict, next_action = parse_verdict(reply)
+    state["last_r_verdict"] = verdict or "NO_VERDICT"
+    state["last_reply_path"] = str(reply_file)
+    state["last_reply_bytes"] = len(reply.encode("utf-8", errors="replace"))
+    if next_action and verdict in ("PASS", "REWORK"):
+        state["last_r_next_action"] = next_action
+    state["router"]["last_review_reply_path"] = str(reply_file)
+    step = {"stepped": True, "role": "reviewer", "verdict": state["last_r_verdict"]}
+    if verdict == "PASS":
+        _router_finalize_pass(state, reply_file, reply)
+        step.update(phase="ROUTED_PASS", run_status="DONE")
+    elif verdict == "REWORK":
+        if state["router"]["round"] >= int(state["router"]["max_rounds"]):
+            hard_block(state, "ROUTER_MAX_ROUNDS_EXCEEDED: reviewer still REWORK after %d rework round(s)"
+                       % state["router"]["round"])
+            step.update(phase="MAX_ROUNDS_EXCEEDED", run_status="HARD_BLOCKED")
+        else:
+            state["router"]["round"] = int(state["router"]["round"]) + 1
+            state["metrics"]["rework_count"] = int(state["metrics"].get("rework_count", 0)) + 1
+            state["router"]["pending_rework"] = next_action
+            state["router"]["phase"] = "SEND_REWORK_TO_BUILDER"
+            state["current_step"] = ("router: reviewer REWORK (round %d); returning to SAME builder"
+                                     % state["router"]["round"])
+            state["next_action"] = "router-step: auto-send the rework message to the same builder conversation"
+            journal(state["run_id"], "ROUTER_REWORK", round=state["router"]["round"],
+                    next_action=sanitize(next_action))
+            save_state(state)
+            step.update(phase="SEND_REWORK_TO_BUILDER", run_status="RUNNING")
+    elif verdict == "BLOCKED":
+        hard_block(state, "R verdict BLOCKED: " + next_action[:500])
+        step.update(phase="REVIEWER_BLOCKED", run_status="HARD_BLOCKED")
+    else:
+        hard_block(state, "ROUTER_NO_VERDICT: reviewer reply unparseable after bounded requeries")
+        step.update(phase="NO_VERDICT", run_status="HARD_BLOCKED")
+    return step
+
+
+def _router_validate_urls(b_url: str | None, r_url: str | None) -> tuple[dict | None, int]:
+    """Shared B/R URL validation. Returns (error_doc, exit_code) or (None, 0)."""
+    if not b_url:
+        return ({"status": "MISSING_B_URL",
+                 "instruction": "Stop. router commands require --b-url explicitly provided (the frozen "
+                                "builder conversation). Do not inherit, guess, or create one."},
+                EXIT_MISSING_R_URL)
+    if not R_URL_RE.match(b_url):
+        return ({"status": "INVALID_B_URL", "b_url": b_url,
+                 "instruction": "B_URL must look like https://chatgpt.com/c/<id>. Stop and ask the user."},
+                EXIT_MISSING_R_URL)
+    if not r_url:
+        return ({"status": "MISSING_R_URL",
+                 "instruction": "Stop. router commands require --r-url explicitly provided (the frozen "
+                                "reviewer conversation). Do not inherit, guess, or create one."},
+                EXIT_MISSING_R_URL)
+    if not R_URL_RE.match(r_url):
+        return ({"status": "INVALID_R_URL", "r_url": r_url,
+                 "instruction": "R_URL must look like https://chatgpt.com/c/<id>. Stop and ask the user."},
+                EXIT_MISSING_R_URL)
+    cb, cr = _router_conv_id(b_url), _router_conv_id(r_url)
+    if cb and cb == cr:
+        return ({"status": "ROUTER_SAME_CONVERSATION", "conversation": cb,
+                 "instruction": "B_URL and R_URL must be two different conversations; builder and "
+                                "reviewer roles can never share one conversation."},
+                EXIT_USAGE)
+    return None, 0
+
+
+def _router_load_goal(args) -> tuple[str | None, dict | None, int]:
+    gf = Path(args.goal_file or "")
+    if not gf.exists():
+        return None, ({"status": "FILE_NOT_FOUND", "file": args.goal_file,
+                       "instruction": "router commands require --goal-file <UTF-8 text file with the GOAL>."}), EXIT_USAGE
+    goal = gf.read_text(encoding="utf-8", errors="replace").strip()
+    if not goal:
+        return None, ({"status": "MISSING_GOAL",
+                       "instruction": "goal file is empty; the router needs a real GOAL."}), EXIT_USAGE
+    return goal, None, 0
+
+
+def cmd_router_start(args) -> int:
+    err, code = _router_validate_urls(args.b_url, args.r_url)
+    if err:
+        emit(err)
+        return code
+    goal, err, code = _router_load_goal(args)
+    if err:
+        emit(err)
+        return code
+    if args.max_rounds < 0:
+        emit({"status": "INVALID_MAX_ROUNDS", "instruction": "--max-rounds must be >= 0."})
+        return EXIT_USAGE
+    state = _router_create(goal, args.b_url, args.r_url,
+                           args.worker_id or "router-v0.1", args.max_rounds)
+    emit({"status": "OK", "run_id": state["run_id"], "mode": ROUTER_MODE,
+          "phase": state["router"]["phase"], "role_urls": state["role_urls"],
+          "next_command": f'& "{_run_cmd_path()}" router-step --run-id {state["run_id"]}'})
+    return EXIT_OK
+
+
+def cmd_router_step(args) -> int:
+    state, code = _load_or_fail(args.run_id)
+    if state is None:
+        return code
+    if state.get("mode") != ROUTER_MODE:
+        emit({"status": "DENIED",
+              "reason": "router-step requires a router RUN (mode=%s)" % state.get("mode")})
+        return EXIT_DENIED
+    if state["status"] != "RUNNING":
+        emit({"status": state["status"], "stepped": False, "run_id": args.run_id,
+              "phase": state["router"]["phase"],
+              "note": "router RUN is terminal; nothing to step"})
+        return EXIT_OK if state["status"] == "DONE" else EXIT_HARD_BLOCKED if state["status"] == "HARD_BLOCKED" else EXIT_ERR
+    with RunLock(args.run_id):
+        state = load_state(args.run_id)
+        if state["status"] != "RUNNING":
+            emit({"status": state["status"], "stepped": False, "run_id": args.run_id,
+                  "phase": state["router"]["phase"]})
+            return EXIT_OK if state["status"] == "DONE" else EXIT_ERR
+        try:
+            step = _router_step(state, args.timeout)
+        except RuntimeError as exc:
+            hard_block(state, "router transport failure: %s" % exc)
+            emit({"status": "HARD_BLOCKED", "run_id": args.run_id,
+                  "reason": state.get("blocked_reason", "")})
+            return EXIT_HARD_BLOCKED
+    step["run_id"] = args.run_id
+    if step.get("status") == "BRIDGE_UNHEALTHY":
+        emit(step)
+        return EXIT_ERR
+    if step.get("run_status") == "HARD_BLOCKED":
+        step["status"] = "HARD_BLOCKED"
+        emit(step)
+        return EXIT_HARD_BLOCKED
+    step["status"] = "OK"
+    emit(step)
+    return EXIT_OK
+
+
+def cmd_router_run(args) -> int:
+    err, code = _router_validate_urls(args.b_url, args.r_url)
+    if err:
+        emit(err)
+        return code
+    goal, err, code = _router_load_goal(args)
+    if err:
+        emit(err)
+        return code
+    if args.max_rounds < 0:
+        emit({"status": "INVALID_MAX_ROUNDS", "instruction": "--max-rounds must be >= 0."})
+        return EXIT_USAGE
+    # Runtime-owned prerequisite chain (same as production `work` entry).
+    health = ensure_bridge_ready(force=True)
+    if not health.get("ready"):
+        detail = str(health.get("detail", ""))
+        status = ("RUNTIME_ENV_BLOCKED" if detail.startswith("RUNTIME_ENV_BLOCKED")
+                  else "RUNTIME_BROWSER_BLOCKED" if detail.startswith("RUNTIME_BROWSER_BLOCKED")
+                  else "BRIDGE_UNHEALTHY")
+        emit({"status": status, "detail": detail,
+              "instruction": "Runtime could not bring the bridge up. Report this output to the user; "
+                             "do not research the bridge, browser, or daemon."})
+        return EXIT_ERR
+    state = _router_create(goal, args.b_url, args.r_url,
+                           args.worker_id or "router-v0.1", args.max_rounds)
+    rid = state["run_id"]
+    steps: list[dict] = []
+    cap = 2 * (int(args.max_rounds) + 2) + 4
+    for _ in range(cap):
+        with RunLock(rid):
+            st = load_state(rid)
+            if st["status"] != "RUNNING" or st["router"]["phase"] not in ROUTER_PHASES_PENDING:
+                break
+            try:
+                step = _router_step(st, args.timeout)
+            except RuntimeError as exc:
+                hard_block(st, "router transport failure: %s" % exc)
+                steps.append({"status": "HARD_BLOCKED"})
+                break
+        steps.append(step)
+        if not step.get("stepped"):
+            break
+    final = load_state(rid)
+    if final["status"] == "DONE":
+        status = "ROUTED_PASS"
+    elif final["status"] == "HARD_BLOCKED":
+        status = "HARD_BLOCKED"
+    else:
+        status = "IN_PROGRESS"
+    emit({"status": status, "run_id": rid, "run_status": final["status"],
+          "mode": ROUTER_MODE, "phase": final["router"]["phase"],
+          "rounds": final["router"]["round"], "last_r_verdict": final.get("last_r_verdict"),
+          "role_urls": final["role_urls"],
+          "builder_session": final["role_sessions"]["builder"].get("sid"),
+          "reviewer_session": final["role_sessions"]["reviewer"].get("sid"),
+          "steps_executed": len(steps),
+          "state_path": str(run_dir(rid) / "state.json"),
+          "instruction": ("ROUTED_PASS=delivered; HARD_BLOCKED=read blocked_reason and report; "
+                          "IN_PROGRESS=re-run router-step to continue from the durable phase.")})
+    return EXIT_OK if status == "ROUTED_PASS" else (EXIT_HARD_BLOCKED if status == "HARD_BLOCKED" else EXIT_ERR)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
@@ -1462,6 +1958,25 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--message-file", dest="message_file", required=True)
     s.add_argument("--file", action="append")
     s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
+
+    s = sub.add_parser("router-start")
+    s.add_argument("--goal-file", dest="goal_file", required=True)
+    s.add_argument("--b-url", dest="b_url", default=None)
+    s.add_argument("--r-url", dest="r_url", default=None)
+    s.add_argument("--worker-id", dest="worker_id", default=None)
+    s.add_argument("--max-rounds", dest="max_rounds", type=int, default=ROUTER_MAX_ROUNDS_DEFAULT)
+
+    s = sub.add_parser("router-step")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
+
+    s = sub.add_parser("router-run")
+    s.add_argument("--goal-file", dest="goal_file", required=True)
+    s.add_argument("--b-url", dest="b_url", default=None)
+    s.add_argument("--r-url", dest="r_url", default=None)
+    s.add_argument("--worker-id", dest="worker_id", default=None)
+    s.add_argument("--max-rounds", dest="max_rounds", type=int, default=ROUTER_MAX_ROUNDS_DEFAULT)
+    s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
     return p
 
 
@@ -1478,6 +1993,7 @@ def main() -> int:
         "start": cmd_start, "status": cmd_status, "step": cmd_step, "directive": cmd_directive,
         "send": cmd_send, "recv": cmd_recv, "done": cmd_done, "metrics": cmd_metrics, "health": cmd_health,
         "work": cmd_work, "report": cmd_report,
+        "router-start": cmd_router_start, "router-step": cmd_router_step, "router-run": cmd_router_run,
     }[args.command]
     run_id = getattr(args, "run_id", None)
     try:
