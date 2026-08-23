@@ -10,7 +10,26 @@ if not exist "%APC_PY%" (
 rem V0.1 unattended Harness is a Runtime-owned subcommand that reuses the
 rem existing WorkBuddy Parallel launcher through harness_verify.py.
 if /I "%~1"=="harness-verify" goto harness_verify
+rem Slice C Goal Contract Lite is an internal integration module, not a second
+rem production entry. Contract-sensitive commands still enter only through
+rem this run.cmd and then delegate to the frozen runtime.py implementation.
+if /I "%~1"=="start" goto goal_contract
+if /I "%~1"=="work" goto goal_contract
+if /I "%~1"=="step" goto goal_contract
+if /I "%~1"=="directive" goto goal_contract
+if /I "%~1"=="send" goto goal_contract
+if /I "%~1"=="recv" goto goal_contract
+if /I "%~1"=="report" goto goal_contract
+if /I "%~1"=="done" goto goal_contract
+if /I "%~1"=="router-start" goto goal_contract
+if /I "%~1"=="router-step" goto goal_contract
+if /I "%~1"=="router-run" goto goal_contract
+if /I "%~1"=="contract-revise" goto goal_contract
 "%APC_PY%" "E:\WB\tools\ai-production-control\runtime\runtime.py" %*
+exit /b %errorlevel%
+
+:goal_contract
+"%APC_PY%" "%~dp0goal_contract_lite.py" %*
 exit /b %errorlevel%
 
 :harness_verify
