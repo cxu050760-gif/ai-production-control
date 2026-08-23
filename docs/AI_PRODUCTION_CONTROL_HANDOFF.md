@@ -1,4 +1,12 @@
-# AI Production Control Handoff
+# DEPRECATED / HISTORICAL — AI Production Control Handoff
 
-Start with `NEW_WORKER_START_HERE.md` for a Worker, or `README.md` for an operator. The Controller source is under `src/aicontrol`; state and evidence are outside the code tree. `config/production.json` is the production routing/configuration source. `doctor`, `selftest`, and the A01-A65 acceptance manifest are the current evidence boundaries. Do not treat historical BrowserSkill/Bridge reports as current runtime acceptance without re-running their live checks.
+This handoff predates V0.1 Official Runtime Entry canonicalization and must not be used to choose or start the current Runtime.
 
+Current Worker handoff:
+
+1. Read `runtime/WEAK_WORKER_START_HERE.md`.
+2. Use `E:\WB\tools\ai-production-control\runtime\run.cmd` as the only OFFICIAL Runtime Entry.
+3. Treat `ai-control.cmd` / `scripts/ai_control.py` as COMPATIBILITY / LEGACY Controller surfaces only.
+4. Do not require a normal Worker to operate Bridge, daemon, session, marker, click, or browser-runtime internals directly.
+
+The former Controller-oriented handoff is historical context only and is intentionally superseded for current entry selection.

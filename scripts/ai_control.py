@@ -1,3 +1,5 @@
+# COMPATIBILITY / LEGACY Controller CLI implementation.
+# Not the V0.1 OFFICIAL Runtime Entry; use E:\WB\tools\ai-production-control\runtime\run.cmd.
 from __future__ import annotations
 
 import argparse

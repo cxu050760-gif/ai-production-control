@@ -1,4 +1,6 @@
 @echo off
+rem COMPATIBILITY / LEGACY Controller CLI wrapper.
+rem NOT the V0.1 OFFICIAL Runtime Entry. Use E:\WB\tools\ai-production-control\runtime\run.cmd.
 setlocal
 chcp 65001 >nul
 set "PYTHONUTF8=1"
