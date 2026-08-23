@@ -1,0 +1,19 @@
+{
+  "registry_version": 1,
+  "updated_at": "2026-08-18",
+  "note": "Canonical Resource Registry. Fixed paths only. No R_URL/E_URL lives here: every RUN gets its URLs explicitly from the user.",
+  "project_root": "E:\\WB\\tools\\ai-production-control",
+  "runtime_entry": "E:\\WB\\tools\\ai-production-control\\runtime\\run.cmd",
+  "weak_worker_contract": "E:\\WB\\tools\\ai-production-control\\runtime\\WEAK_WORKER_START_HERE.md",
+  "state_root": "E:\\WB\\state\\ai-production-control\\runtime-v1",
+  "runs_root": "E:\\WB\\state\\ai-production-control\\runtime-v1\\runs",
+  "baseline_docs": {
+    "bridge_handover": "E:\\WB\\tools\\ai-production-control\\docs\\handover\\Bridge_final_handover_20260818.md",
+    "runtime_v1_build_spec": "E:\\WB\\tools\\ai-production-control\\docs\\handover\\RUNTIME_V1_BUILD_SPEC_20260818.md"
+  },
+  "rules": [
+    "Weak Workers read ONLY this file + WEAK_WORKER_START_HERE.md to bootstrap.",
+    "R_URL must be provided per RUN by the user; never inherited, guessed, or created.",
+    "Bridge internals (daemon/port/session/marker) are owned by the Runtime; Workers never touch them."
+  ]
+}
