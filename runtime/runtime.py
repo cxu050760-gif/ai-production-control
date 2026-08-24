@@ -1535,6 +1535,17 @@ def cmd_report(args) -> int:
 #     -> REWORK (round < max): SEND_REWORK_TO_BUILDER -> SEND_TO_REVIEWER ...
 #     -> REWORK (round >= max) / BLOCKED / NO_VERDICT / transport budget:
 #        HARD_BLOCKED (never PASS)
+#
+# Continuation (Transport/Continuation Recovery Lite, AC-T5 / AC-T6):
+#   router-run   creates a NEW router RUN then drives it in-process.
+#   router-step  advances EXACTLY ONE pending phase then exits (frozen).
+#   router-continue attaches to an EXISTING router RUN by --run-id and drives
+#     the SAME RUN / SAME durable state / SAME role binding forward through its
+#     pending phases to a terminal/bounded outcome. It is the deterministic
+#     mechanism that guarantees a phase-completed RUN is never left zombie
+#     (RUNNING + pending phase + no live driver). Terminal RUNs are reported,
+#     never resurrected; transport failure hard-blocks and can never PASS.
+#     router-step / router-run behaviour is unchanged (additive command only).
 # ---------------------------------------------------------------------------
 ROUTER_MODE = "router-v0.1"
 ROUTER_MAX_ROUNDS_DEFAULT = 3
@@ -1848,6 +1859,35 @@ def cmd_router_step(args) -> int:
     return EXIT_OK
 
 
+def _router_drive(rid: str, timeout: int, max_rounds: int) -> list[dict]:
+    """Drive one EXISTING router RUN forward through its pending phases.
+
+    Shared continuation core for router-run (immediately after it creates the
+    RUN) and router-continue (attaching to an already-created RUN). Same RUN
+    id, same durable state, same role binding; bounded step budget; fail-closed
+    on transport failure (never PASS). This is the deterministic mechanism that
+    prevents a router RUN from being left RUNNING with a pending phase and no
+    live driver (AC-T5 / AC-T6).
+    """
+    steps: list[dict] = []
+    cap = 2 * (int(max_rounds) + 2) + 4
+    for _ in range(cap):
+        with RunLock(rid):
+            st = load_state(rid)
+            if st["status"] != "RUNNING" or st["router"]["phase"] not in ROUTER_PHASES_PENDING:
+                break
+            try:
+                step = _router_step(st, timeout)
+            except RuntimeError as exc:
+                hard_block(st, "router transport failure: %s" % exc)
+                steps.append({"status": "HARD_BLOCKED"})
+                break
+        steps.append(step)
+        if not step.get("stepped"):
+            break
+    return steps
+
+
 def cmd_router_run(args) -> int:
     err, code = _router_validate_urls(args.b_url, args.r_url)
     if err:
@@ -1874,22 +1914,7 @@ def cmd_router_run(args) -> int:
     state = _router_create(goal, args.b_url, args.r_url,
                            args.worker_id or "router-v0.1", args.max_rounds)
     rid = state["run_id"]
-    steps: list[dict] = []
-    cap = 2 * (int(args.max_rounds) + 2) + 4
-    for _ in range(cap):
-        with RunLock(rid):
-            st = load_state(rid)
-            if st["status"] != "RUNNING" or st["router"]["phase"] not in ROUTER_PHASES_PENDING:
-                break
-            try:
-                step = _router_step(st, args.timeout)
-            except RuntimeError as exc:
-                hard_block(st, "router transport failure: %s" % exc)
-                steps.append({"status": "HARD_BLOCKED"})
-                break
-        steps.append(step)
-        if not step.get("stepped"):
-            break
+    steps = _router_drive(rid, args.timeout, args.max_rounds)
     final = load_state(rid)
     if final["status"] == "DONE":
         status = "ROUTED_PASS"
@@ -1907,6 +1932,65 @@ def cmd_router_run(args) -> int:
           "state_path": str(run_dir(rid) / "state.json"),
           "instruction": ("ROUTED_PASS=delivered; HARD_BLOCKED=read blocked_reason and report; "
                           "IN_PROGRESS=re-run router-step to continue from the durable phase.")})
+    return EXIT_OK if status == "ROUTED_PASS" else (EXIT_HARD_BLOCKED if status == "HARD_BLOCKED" else EXIT_ERR)
+
+
+def cmd_router_continue(args) -> int:
+    """Deterministic same-RUN continuation (AC-T5 / AC-T6).
+
+    Attaches to an EXISTING router RUN (no new RUN, no new role binding) and
+    drives it forward through its pending phases to a terminal or bounded
+    outcome. Resolves the zombie state 'RUNNING + pending phase + no live
+    driver': after a phase completed and the previous driver process exited,
+    router-continue resumes the SAME RUN / SAME state / SAME role binding at
+    the NEXT PHASE. Idempotent and fail-closed: a terminal RUN is reported and
+    never resurrected; transport failure hard-blocks and can never PASS.
+    """
+    state, code = _load_or_fail(args.run_id)
+    if state is None:
+        return code
+    if state.get("mode") != ROUTER_MODE:
+        emit({"status": "DENIED",
+              "reason": "router-continue requires a router RUN (mode=%s)" % state.get("mode")})
+        return EXIT_DENIED
+    rid = args.run_id
+    if state["status"] != "RUNNING":
+        emit({"status": state["status"], "continued": False, "run_id": rid,
+              "run_status": state["status"], "mode": ROUTER_MODE,
+              "phase": state["router"]["phase"],
+              "note": "router RUN is terminal; nothing to continue (not resurrected)"})
+        return EXIT_OK if state["status"] == "DONE" else EXIT_HARD_BLOCKED
+    # Runtime-owned prerequisite chain (same as router-run / production `work`).
+    health = ensure_bridge_ready(force=True)
+    if not health.get("ready"):
+        detail = str(health.get("detail", ""))
+        status = ("RUNTIME_ENV_BLOCKED" if detail.startswith("RUNTIME_ENV_BLOCKED")
+                  else "RUNTIME_BROWSER_BLOCKED" if detail.startswith("RUNTIME_BROWSER_BLOCKED")
+                  else "BRIDGE_UNHEALTHY")
+        emit({"status": status, "detail": detail, "continued": False, "run_id": rid,
+              "instruction": "Runtime could not bring the bridge up. Report this output to the user; "
+                             "do not research the bridge, browser, or daemon."})
+        return EXIT_ERR
+    journal(rid, "ROUTER_CONTINUE", phase=state["router"]["phase"])
+    max_rounds = int(state["router"].get("max_rounds", ROUTER_MAX_ROUNDS_DEFAULT))
+    steps = _router_drive(rid, args.timeout, max_rounds)
+    final = load_state(rid)
+    if final["status"] == "DONE":
+        status = "ROUTED_PASS"
+    elif final["status"] == "HARD_BLOCKED":
+        status = "HARD_BLOCKED"
+    else:
+        status = "IN_PROGRESS"
+    emit({"status": status, "continued": True, "run_id": rid, "run_status": final["status"],
+          "mode": ROUTER_MODE, "phase": final["router"]["phase"],
+          "rounds": final["router"]["round"], "last_r_verdict": final.get("last_r_verdict"),
+          "role_urls": final["role_urls"],
+          "builder_session": final["role_sessions"]["builder"].get("sid"),
+          "reviewer_session": final["role_sessions"]["reviewer"].get("sid"),
+          "steps_executed": len(steps),
+          "state_path": str(run_dir(rid) / "state.json"),
+          "instruction": ("ROUTED_PASS=delivered; HARD_BLOCKED=read blocked_reason and report; "
+                          "IN_PROGRESS=re-run router-continue to keep driving the same durable RUN.")})
     return EXIT_OK if status == "ROUTED_PASS" else (EXIT_HARD_BLOCKED if status == "HARD_BLOCKED" else EXIT_ERR)
 
 
@@ -1977,6 +2061,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--worker-id", dest="worker_id", default=None)
     s.add_argument("--max-rounds", dest="max_rounds", type=int, default=ROUTER_MAX_ROUNDS_DEFAULT)
     s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
+
+    s = sub.add_parser("router-continue")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
     return p
 
 
@@ -1994,6 +2082,7 @@ def main() -> int:
         "send": cmd_send, "recv": cmd_recv, "done": cmd_done, "metrics": cmd_metrics, "health": cmd_health,
         "work": cmd_work, "report": cmd_report,
         "router-start": cmd_router_start, "router-step": cmd_router_step, "router-run": cmd_router_run,
+        "router-continue": cmd_router_continue,
     }[args.command]
     run_id = getattr(args, "run_id", None)
     try:

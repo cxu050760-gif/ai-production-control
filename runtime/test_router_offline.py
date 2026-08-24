@@ -16,6 +16,9 @@ by the independent harness):
   S6  max-rounds bound terminates without PASS (AC-11)
   S7  durable resume across fresh processes (restart simulation)
   S8  legacy single-R_URL compatibility + mode guards (AC-8)
+  S9  router-continue same-RUN continuation (AC-T5/AC-T6): fresh-process
+      resume of a RUNNING+pending-phase RUN, same role binding, terminal
+      idempotency, fail-closed bounds, legacy/unknown-RUN guards
 """
 import json
 import os
@@ -341,6 +344,83 @@ def main() -> int:
     code, out, _ = run_cli(s2, ["router-step", "--run-id", rid2, "--timeout", "30"], router_env(wrap, cfg2))
     check("S8d_terminal_step_no_transport", code == 0 and out.get("stepped") is False
           and len(read_log(log2)) == n_before, str(out)[:160])
+
+    # ---- S9: router-continue — same-RUN continuation (AC-T5 / AC-T6) ----
+    s9 = work / "s9"
+    s9.mkdir()
+    g9 = s9 / "goal.txt"
+    g9.write_text("Build a page whose header is spelled correctly.", encoding="utf-8")
+    convs9 = {B1: {"sid": "bsid-0001",
+                   "replies": ["candidate v1 (bad header)", "candidate v2 (fixed)"]},
+              R1: {"sid": "rsid-0001",
+                   "replies": ["===REVIEW_VERDICT=== REWORK\n===NEXT_ACTION=== Fix the header spelling.",
+                               "===REVIEW_VERDICT=== PASS"]}}
+    cfg9, log9 = write_script(s9, convs9)
+    env9 = router_env(wrap, cfg9)
+    code, out, _ = run_cli(s9, ["router-start", "--goal-file", str(g9), "--b-url", B1, "--r-url", R1,
+                                "--max-rounds", "2", "--worker-id", "continue-probe"], env9)
+    rid9 = out.get("run_id", "")
+    check("S9a_start_creates_run", code == 0 and rid9.startswith("RUN-"), str(out)[:200])
+    # One bounded step: builder phase completes, driver process then exits
+    # (simulated crash) leaving RUNNING + pending phase (the observed zombie case).
+    code, o1, _ = run_cli(s9, ["router-step", "--run-id", rid9, "--timeout", "30"], env9)
+    check("S9b_step_builder_then_driver_exit", code == 0 and o1.get("role") == "builder"
+          and o1.get("phase") == "SEND_TO_REVIEWER", str(o1)[:200])
+    st_stuck = state_of(s9, rid9)
+    check("S9c_zombie_running_pending_phase", st_stuck["status"] == "RUNNING"
+          and st_stuck["router"]["phase"] == "SEND_TO_REVIEWER", str(st_stuck["router"])[:160])
+    # A FRESH process continues the SAME RUN deterministically (AC-T5).
+    code, oc, raw = run_cli(s9, ["router-continue", "--run-id", rid9, "--timeout", "30"], env9)
+    check("S9d_continue_to_routed_pass", code == 0 and oc.get("status") == "ROUTED_PASS"
+          and oc.get("continued") is True and oc.get("run_id") == rid9
+          and oc.get("run_status") == "DONE" and oc.get("last_r_verdict") == "PASS", raw[-400:])
+    check("S9e_same_run_same_role_binding", oc.get("role_urls") == {"builder": B1, "reviewer": R1}
+          and oc.get("builder_session") == "bsid-0001"
+          and oc.get("reviewer_session") == "rsid-0001", str(oc.get("role_urls"))[:200])
+    e9 = read_log(log9)
+    check("S9f_continued_route_sequence_B_R_B_R", [e["url"] for e in e9] == [B1, R1, B1, R1],
+          str([e["url"] for e in e9]))
+    check("S9g_continued_same_builder_reattach", len(e9) == 4 and e9[2]["reattach"] is True
+          and e9[2]["stored_sid"] == "bsid-0001", str(e9[2:3])[:240])
+    ev9 = [e["event"] for e in journal_of(s9, rid9)]
+    check("S9h_journal_continuation_chain", "ROUTER_CONTINUE" in ev9 and "ROUTER_DONE" in ev9
+          and ev9.count("ROUTER_SEND") == 4, str(ev9))
+    # Terminal idempotency: continuing a DONE RUN adds no transport (AC-T6 clarity).
+    n_before9 = len(read_log(log9))
+    code, oc2, _ = run_cli(s9, ["router-continue", "--run-id", rid9, "--timeout", "30"], env9)
+    check("S9i_terminal_continue_no_transport", code == 0 and oc2.get("continued") is False
+          and oc2.get("status") == "DONE" and len(read_log(log9)) == n_before9, str(oc2)[:200])
+
+    # ---- S9j-l: continuation of an endless REWORK loop stays fail-closed ----
+    s9m = work / "s9m"
+    s9m.mkdir()
+    g9m = s9m / "goal.txt"
+    g9m.write_text("Task that never satisfies the reviewer.", encoding="utf-8")
+    convs9m = {B1: {"sid": "bsid-0001", "replies": ["try 1", "try 2", "try 3"]},
+               R1: {"sid": "rsid-0001",
+                    "replies": ["===REVIEW_VERDICT=== REWORK\n===NEXT_ACTION=== again",
+                                "===REVIEW_VERDICT=== REWORK\n===NEXT_ACTION=== again",
+                                "===REVIEW_VERDICT=== REWORK\n===NEXT_ACTION=== again"]}}
+    cfg9m, log9m = write_script(s9m, convs9m)
+    env9m = router_env(wrap, cfg9m)
+    code, out, _ = run_cli(s9m, ["router-start", "--goal-file", str(g9m), "--b-url", B1, "--r-url", R1,
+                                 "--max-rounds", "1", "--worker-id", "continue-guard"], env9m)
+    rid9m = out.get("run_id", "")
+    code, o1, _ = run_cli(s9m, ["router-step", "--run-id", rid9m, "--timeout", "30"], env9m)
+    check("S9j_pre_continue_builder_step", code == 0 and o1.get("role") == "builder", str(o1)[:160])
+    code, oc, raw = run_cli(s9m, ["router-continue", "--run-id", rid9m, "--timeout", "30"], env9m)
+    check("S9k_continue_max_rounds_hard_blocked", code == 6 and oc.get("status") == "HARD_BLOCKED"
+          and oc.get("last_r_verdict") == "REWORK", raw[-300:])
+    st9m = state_of(s9m, rid9m)
+    check("S9l_durable_blocked_not_zombie", st9m["status"] == "HARD_BLOCKED"
+          and "ROUTER_MAX_ROUNDS_EXCEEDED" in str(st9m.get("blocked_reason")),
+          str(st9m.get("blocked_reason"))[:160])
+
+    # ---- S9m-n: continuation guards ----
+    code, out, _ = run_cli(s8, ["router-continue", "--run-id", legacy_rid])
+    check("S9m_continue_denied_on_legacy", code == 5 and out.get("status") == "DENIED", str(out)[:160])
+    code, out, _ = run_cli(s9, ["router-continue", "--run-id", "RUN-19700101-000000-0000"])
+    check("S9n_continue_unknown_run", code == 4 and out.get("status") == "RUN_NOT_FOUND", str(out)[:160])
 
     print("\n".join(RESULTS))
     print(f"\nTOTAL={PASS_COUNT + FAIL_COUNT} PASS={PASS_COUNT} FAIL={FAIL_COUNT}")
