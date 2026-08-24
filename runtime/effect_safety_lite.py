@@ -97,12 +97,26 @@ def revoke_authorization(rt, state: dict, authorization_id: str) -> None:
                    authorization_id=authorization_id)
 
 
+def _is_live(rec: dict[str, Any]) -> bool:
+    return rec.get("status") == "GRANTED" and not (
+        rec.get("expires_at") and rec["expires_at"] < _now_iso())
+
+
+def ensure_valid_authorization(rt, state: dict, *, holder: str = "runtime-v1",
+                               scope: dict | None = None) -> dict[str, Any]:
+    auths = state.get("effect_authorizations") or {}
+    live = next((a for a in auths.values() if _is_live(a)), None)
+    if live:
+        return live
+    return grant_authorization(rt, state, holder=holder, scope=scope)
+
+
 def _valid_authorization(state: dict, authorization_id: str | None) -> dict[str, Any]:
     auths = state.get("effect_authorizations") or {}
     if authorization_id:
         rec = auths.get(authorization_id)
     else:
-        rec = next((a for a in auths.values() if a.get("status") == "GRANTED"), None)
+        rec = next((a for a in auths.values() if _is_live(a)), None)
     if not rec:
         raise EffectDenied("no authorization bound to effect reservation")
     if rec.get("status") != "GRANTED":
@@ -162,9 +176,8 @@ def install(rt, options: dict) -> None:
         payload = (args.message or "") + json.dumps(sorted(getattr(args, "file", None) or []))
         payload_hash = sha256_text(payload)
         try:
-            if not (state.get("effect_authorizations") or {}):
-                grant_authorization(rt, state, holder="runtime-v1",
-                                    scope={"r_url": str(state.get("r_url") or "")})
+            ensure_valid_authorization(rt, state, holder="runtime-v1",
+                                       scope={"r_url": str(state.get("r_url") or "")})
             record_effect(rt, state, operation="send",
                           destination=str(state.get("r_url") or ""),
                           payload_hash=payload_hash,
@@ -186,8 +199,7 @@ def install(rt, options: dict) -> None:
     if original_router_send is not None:
         def gated_router_send(state, role, message, timeout):
             payload_hash = sha256_text(message)
-            if not (state.get("effect_authorizations") or {}):
-                grant_authorization(rt, state, holder="runtime-v1", scope={"role": role})
+            ensure_valid_authorization(rt, state, holder="runtime-v1", scope={"role": role})
             record_effect(rt, state, operation="router-send",
                           destination=str(state.get("r_url") or ""),
                           payload_hash=payload_hash,

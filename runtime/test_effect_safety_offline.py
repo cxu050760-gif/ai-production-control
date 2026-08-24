@@ -108,6 +108,18 @@ class EffectSafetyLiteTests(unittest.TestCase):
             es.record_effect(self.rt, st2, operation="send", destination="d", payload_hash=H,
                              slot="send:1", purpose="x", authorization_id=auth2["authorization_id"])
 
+    def test_i5_expired_default_authorization_auto_rotates(self):
+        st = base_state()
+        es.grant_authorization(self.rt, st, ttl_seconds=-1)  # expired default
+        # default selection skips expired; ensure_valid_authorization re-grants live one
+        es.ensure_valid_authorization(self.rt, st)
+        rec = es.record_effect(self.rt, st, operation="send", destination="d", payload_hash=H,
+                               slot="send:1", purpose="x")
+        self.assertEqual(rec["authorization_status"], "GRANTED")
+        live = [a for a in st["effect_authorizations"].values() if a["status"] == "GRANTED"
+                and a["expires_at"] >= es._now_iso()]
+        self.assertTrue(live)
+
     def test_i4_send_wrapper_grants_and_binds(self):
         rt = self.rt
         sent = {"called": False}
