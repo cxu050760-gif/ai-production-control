@@ -28,6 +28,10 @@ if /I "%~1"=="router-continue" goto send_guard
 if /I "%~1"=="contract-revise" goto goal_contract
 if /I "%~1"=="effect-gate" goto effect_safety
 if /I "%~1"=="weak-ai-acceptance" goto weak_ai_acceptance
+rem V0.6 EC-lite: execution correction is a rules-only Runtime adapter module,
+rem entered through the single official entry like every other subcommand.
+if /I "%~1"=="ec-record" goto ec_lite
+if /I "%~1"=="ec-check" goto ec_lite
 "%APC_PY%" "E:\WB\tools\ai-production-control\runtime\runtime.py" %*
 exit /b %errorlevel%
 
@@ -45,6 +49,10 @@ exit /b %errorlevel%
 
 :weak_ai_acceptance
 "%APC_PY%" "%~dp0weak_ai_acceptance.py" %*
+exit /b %errorlevel%
+
+:ec_lite
+"%APC_PY%" "%~dp0ec_lite.py" %*
 exit /b %errorlevel%
 
 :harness_verify
