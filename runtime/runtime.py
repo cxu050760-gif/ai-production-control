@@ -98,6 +98,7 @@ LOCK_STALE_SEC = 180
 R_URL_RE = re.compile(r"^https://chatgpt\.com/c/[A-Za-z0-9-]{8,}$")
 RUN_ID_RE = re.compile(r"^RUN-[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$")
 CONV_ID_RE = re.compile(r"/c/([A-Za-z0-9-]+)")
+CANDIDATE_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 INTERNAL_STRINGS = [
     YZ_LIB,
@@ -724,6 +725,7 @@ def recv_script(sid: str, r_url: str, reply_out_posix: str) -> str:
     return f"""set -u
 {PATH_PROLOGUE}
 source {YZ_LIB} >/dev/null 2>&1
+RURL='{r_url}'
 SID='{sid}'
 if [ -z "$SID" ]; then
   SID=$(yz_acquire_conv '{r_url}')
@@ -836,6 +838,27 @@ def apply_verdict(state: dict, verdict: str | None, next_action: str, reply_path
     state["last_r_verdict"] = verdict or "NO_VERDICT"
     state["last_reply_path"] = str(reply_path)
     state["last_reply_bytes"] = reply_bytes
+    # Review Result Return (V0.1-FIX-REVIEW-RESULT-RETURN): persist a structured,
+    # reload-safe binding of this R verdict to the RUN and — when they were
+    # supplied at review time — to the Candidate / Evidence under review. This
+    # block is written for EVERY verdict branch (including the BLOCKED early
+    # return below) so the result never fails to reach durable Runtime state.
+    if not state.get("review_id"):
+        state["review_id"] = "REV-%s-%s" % (datetime.now().strftime("%Y%m%d-%H%M%S"), uuid.uuid4().hex[:4])
+    state["review_result"] = {
+        "run_id": state["run_id"],
+        "review_id": state["review_id"],
+        "candidate_commit": state.get("candidate_commit"),
+        "evidence_id": state.get("evidence_id"),
+        "verdict": state["last_r_verdict"],
+        "next_action": (next_action or "")[:4000],
+        "reply_path": str(reply_path),
+        "reply_bytes": reply_bytes,
+        "returned_at": utc_now(),
+    }
+    journal(state["run_id"], "REVIEW_RESULT_RETURN", review_id=state["review_id"],
+            verdict=state["last_r_verdict"], candidate_commit=state.get("candidate_commit"),
+            evidence_id=state.get("evidence_id"), reply_bytes=reply_bytes)
     if verdict == "PASS":
         state["next_action"] = "R verdict PASS. Finalize: run `done --run-id %s` after final acceptance items are complete." % state["run_id"]
     elif verdict == "REWORK":
@@ -849,6 +872,31 @@ def apply_verdict(state: dict, verdict: str | None, next_action: str, reply_path
                                 "Next: send a fresh small evidence delta and explicitly request the final verdict token.")
     if next_action and verdict in ("PASS", "REWORK"):
         state["last_r_next_action"] = next_action
+
+
+def _apply_review_bindings(state: dict, candidate_commit: str | None, evidence_id: str | None,
+                           review_id: str | None) -> dict | None:
+    """Review Result Return (V0.1-FIX-REVIEW-RESULT-RETURN): validate + persist the
+    Candidate / Evidence / Review identity bound to this RUN (RUN_ID is implicit).
+    Returns an error doc (caller emits it + EXIT_USAGE, nothing persisted) or None
+    when accepted. Empty/None inputs leave any existing durable binding untouched;
+    when a candidate is bound and no explicit review id is given, REVIEW_ID reuses
+    the existing RUN identity (run_id + review_epoch)."""
+    cand = (candidate_commit or "").strip().lower()
+    if cand and not CANDIDATE_SHA_RE.fullmatch(cand):
+        return {"status": "INVALID_CANDIDATE_COMMIT", "candidate_commit": candidate_commit,
+                "instruction": "--candidate-commit must be a full 40-hex commit SHA when provided."}
+    ev = clean_text(evidence_id or "")[:256].strip()
+    rv = clean_text(review_id or "")[:256].strip()
+    if cand:
+        state["candidate_commit"] = cand
+    if ev:
+        state["evidence_id"] = ev
+    if rv:
+        state["review_id"] = rv
+    elif cand and not state.get("review_id"):
+        state["review_id"] = "%s#epoch%s" % (state["run_id"], state.get("review_epoch", 1))
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -878,6 +926,10 @@ def _new_run(goal: str, r_url: str, worker_id: str) -> dict:
         "last_r_next_action": "",
         "last_reply_path": None,
         "last_reply_bytes": 0,
+        "candidate_commit": None,
+        "evidence_id": None,
+        "review_id": None,
+        "review_result": None,
         "paused": False,
         "last_user_directive": None,
         "user_override": None,
@@ -1108,6 +1160,18 @@ def cmd_send(args) -> int:
                   "reason": f"send requires RUNNING; run is {state['status']}",
                   "blocked_reason": state.get("blocked_reason")})
             return EXIT_DENIED if state["status"] != "HARD_BLOCKED" else EXIT_HARD_BLOCKED
+        # Review Result Return: bind Candidate/Evidence/Review identity to this RUN
+        # durably BEFORE transport, so the binding survives even if the send fails
+        # and is present in state when R's structured verdict returns.
+        bind_err = _apply_review_bindings(state, getattr(args, "candidate_commit", None),
+                                          getattr(args, "evidence_id", None),
+                                          getattr(args, "review_id", None))
+        if bind_err:
+            emit(bind_err)
+            return EXIT_USAGE
+        if getattr(args, "candidate_commit", None) or getattr(args, "evidence_id", None) \
+                or getattr(args, "review_id", None):
+            save_state(state)
         if _check_duplicate(state, fingerprint):
             journal(args.run_id, "DUPLICATE_ACTION_BLOCKED")
             save_state(state)
@@ -1316,6 +1380,7 @@ def cmd_send(args) -> int:
           "attachment_mode": "attachment-required" if files else "text-only",
           "last_r_verdict": state["last_r_verdict"],
           "next_action": state["next_action"],
+          "review_result": state.get("review_result"),
           "files_uploaded": [Path(f).name for f, _ in delta_files],
           "files_skipped_unchanged": skipped,
           "reply_path": str(reply_file), "reply_bytes": reply_bytes})
@@ -1333,6 +1398,17 @@ def cmd_recv(args) -> int:
         except PermissionError as exc:
             emit({"status": "DENIED", "reason": f"recv requires RUNNING, run is {exc}"})
             return EXIT_DENIED
+        # Review Result Return: allow (late) binding of Candidate/Evidence/Review
+        # identity on the recv path as well; durable before any verdict is applied.
+        bind_err = _apply_review_bindings(state, getattr(args, "candidate_commit", None),
+                                          getattr(args, "evidence_id", None),
+                                          getattr(args, "review_id", None))
+        if bind_err:
+            emit(bind_err)
+            return EXIT_USAGE
+        if getattr(args, "candidate_commit", None) or getattr(args, "evidence_id", None) \
+                or getattr(args, "review_id", None):
+            save_state(state)
         sid = (state.get("session") or {}).get("sid") or ""
         rd = run_dir(args.run_id)
         reply_file = rd / f"recv_{int(time.time())}_{uuid.uuid4().hex[:6]}.txt"
@@ -2026,8 +2102,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--file", action="append")
     s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
     s.add_argument("--force-health", dest="force_health", action="store_true")
+    s.add_argument("--candidate-commit", dest="candidate_commit", default=None)
+    s.add_argument("--evidence-id", dest="evidence_id", default=None)
+    s.add_argument("--review-id", dest="review_id", default=None)
 
-    s = sub.add_parser("recv"); s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("recv")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--candidate-commit", dest="candidate_commit", default=None)
+    s.add_argument("--evidence-id", dest="evidence_id", default=None)
+    s.add_argument("--review-id", dest="review_id", default=None)
     s = sub.add_parser("done"); s.add_argument("--run-id", dest="run_id", required=True)
     s = sub.add_parser("metrics"); s.add_argument("--run-id", dest="run_id", required=True)
     s = sub.add_parser("health"); s.add_argument("--force", action="store_true")
