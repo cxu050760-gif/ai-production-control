@@ -27,6 +27,7 @@ if /I "%~1"=="router-run" goto send_guard
 if /I "%~1"=="router-continue" goto send_guard
 if /I "%~1"=="contract-revise" goto goal_contract
 if /I "%~1"=="effect-gate" goto effect_safety
+if /I "%~1"=="weak-ai-acceptance" goto weak_ai_acceptance
 "%APC_PY%" "E:\WB\tools\ai-production-control\runtime\runtime.py" %*
 exit /b %errorlevel%
 
@@ -40,6 +41,10 @@ exit /b %errorlevel%
 
 :effect_safety
 "%APC_PY%" "%~dp0effect_safety_lite.py" %*
+exit /b %errorlevel%
+
+:weak_ai_acceptance
+"%APC_PY%" "%~dp0weak_ai_acceptance.py" %*
 exit /b %errorlevel%
 
 :harness_verify
