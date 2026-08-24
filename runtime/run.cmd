@@ -17,7 +17,7 @@ if /I "%~1"=="start" goto goal_contract
 if /I "%~1"=="work" goto goal_contract
 if /I "%~1"=="step" goto goal_contract
 if /I "%~1"=="directive" goto goal_contract
-if /I "%~1"=="send" goto goal_contract
+if /I "%~1"=="send" goto send_guard
 if /I "%~1"=="recv" goto goal_contract
 if /I "%~1"=="report" goto goal_contract
 if /I "%~1"=="done" goto goal_contract
@@ -31,6 +31,10 @@ exit /b %errorlevel%
 
 :goal_contract
 "%APC_PY%" "%~dp0goal_contract_lite.py" %*
+exit /b %errorlevel%
+
+:send_guard
+"%APC_PY%" "%~dp0send_guard_lite.py" %*
 exit /b %errorlevel%
 
 :effect_safety
