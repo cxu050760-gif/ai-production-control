@@ -246,6 +246,7 @@ def install(rt, contract_options: dict[str, Any]) -> None:
     original_cmd_done = rt.cmd_done
     original_cmd_step = rt.cmd_step
     original_cmd_directive = rt.cmd_directive
+    original_router_continue = getattr(rt, "cmd_router_continue", None)
 
     def contract_new_run(goal: str, r_url: str, worker_id: str) -> dict[str, Any]:
         state = original_new_run(goal, r_url, worker_id)
@@ -383,6 +384,14 @@ def install(rt, contract_options: dict[str, Any]) -> None:
             return rt.EXIT_DENIED
         return original_cmd_directive(args)
 
+    def contract_cmd_router_continue(args):
+        try:
+            _require_run(args)
+        except GoalContractError:
+            rt.emit({"status": "HARD_BLOCKED", "reason": "Goal Contract missing or invalid"})
+            return rt.EXIT_HARD_BLOCKED
+        return original_router_continue(args)
+
     rt._new_run = contract_new_run
     rt._router_review_envelope = contract_router_review
     rt._router_send_to_role = contract_router_send
@@ -391,6 +400,8 @@ def install(rt, contract_options: dict[str, Any]) -> None:
     rt.cmd_done = contract_cmd_done
     rt.cmd_step = contract_cmd_step
     rt.cmd_directive = contract_cmd_directive
+    if original_router_continue is not None:
+        rt.cmd_router_continue = contract_cmd_router_continue
 
 
 def _read_goal_file(path: str | None, current: str) -> str:

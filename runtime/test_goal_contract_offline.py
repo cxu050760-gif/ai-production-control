@@ -334,6 +334,42 @@ class GoalContractRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual(after["goal_contract_hash"], before["goal_contract_hash"])
         self.assertEqual(after["goal_contract_revision"], 1)
 
+    def test_c7_router_continue_guard_blocks_missing_contract(self):
+        goal = self.root / "goal.txt"; goal.write_text("Build X", encoding="utf-8")
+        env, _ = _script_env(self.root, {B1: {"sid": "b", "replies": ["x"]}, R1: {"sid": "r", "replies": ["y"]}})
+        code, out, raw = _run_json(ADAPTER, [
+            "router-start", "--goal-file", str(goal), "--b-url", B1, "--r-url", R1, "--acceptance", "A",
+        ], env)
+        self.assertEqual(code, 0, raw)
+        rid = out["run_id"]
+        state_path = Path(env["APC_RUNTIME_STATE_ROOT"]) / "runs" / rid / "state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.pop("goal_contract", None)  # corrupt: contract missing from RUN state
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        code, out, raw = _run_json(ADAPTER, ["router-continue", "--run-id", rid], env)
+        self.assertEqual(code, 6, raw[-500:])
+        self.assertEqual(out.get("status"), "HARD_BLOCKED")
+
+    def test_c7_router_continue_drives_same_contract_identity(self):
+        goal = self.root / "goal.txt"; goal.write_text("Build a header.", encoding="utf-8")
+        h = gc.build_contract(goal.read_text(), ["Header is correct"])["contract_hash"]
+        convs = {
+            B1: {"sid": "bsid-rc", "replies": [f"candidate v1\nGOAL_CONTRACT_HASH={h}"]},
+            R1: {"sid": "rsid-rc", "replies": ["===REVIEW_VERDICT=== PASS"]},
+        }
+        env, log = _script_env(self.root, convs)
+        code, out, raw = _run_json(ADAPTER, [
+            "router-start", "--goal-file", str(goal), "--b-url", B1, "--r-url", R1, "--acceptance", "Header is correct",
+        ], env)
+        self.assertEqual(code, 0, raw)
+        rid = out["run_id"]
+        code, out, raw = _run_json(ADAPTER, ["router-continue", "--run-id", rid, "--timeout", "30"], env)
+        self.assertEqual(code, 0, raw[-1000:])
+        self.assertEqual(out.get("status"), "ROUTED_PASS", raw[-1000:])
+        state = json.loads(Path(out["state_path"]).read_text(encoding="utf-8"))
+        self.assertEqual(state["goal_contract_hash"], h)
+        self.assertEqual(state["status"], "DONE")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
