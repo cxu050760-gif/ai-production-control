@@ -95,6 +95,31 @@ class SendGuardComposeTests(unittest.TestCase):
         self.assertIn("router-send", ops)
         self.assertEqual(state["effect_safety"]["authorization_status"], "GRANTED")
 
+    def test_j4_router_continue_preserves_contract_and_effect_across_processes(self):
+        import goal_contract_lite as gc
+        goal = self.root / "goal.txt"; goal.write_text("Build a header.", encoding="utf-8")
+        h = gc.build_contract(goal.read_text(), ["A"])["contract_hash"]
+        convs = {
+            "https://chatgpt.com/c/b0b0aaaa-1111-2222-3333-000000000001": {
+                "sid": "bsid", "replies": [f"candidate v1\nGOAL_CONTRACT_HASH={h}"]},
+            R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]},
+        }
+        env = _script_env(self.root, convs)
+        code, out, raw = _run_json(ADAPTER, [
+            "router-start", "--goal-file", str(goal),
+            "--b-url", "https://chatgpt.com/c/b0b0aaaa-1111-2222-3333-000000000001",
+            "--r-url", R1, "--acceptance", "A"], env)
+        self.assertEqual(code, 0, raw)
+        rid = out["run_id"]
+        # separate process: continue
+        code, out, raw = _run_json(ADAPTER, ["router-continue", "--run-id", rid, "--timeout", "30"], env)
+        self.assertEqual(code, 0, raw[-800:])
+        state = json.loads((Path(env["APC_RUNTIME_STATE_ROOT"]) / "runs" / rid / "state.json").read_text())
+        self.assertEqual(state["goal_contract_hash"], h)
+        self.assertEqual(state["status"], "DONE")
+        self.assertTrue(state.get("effect_authorizations"))
+        self.assertIn("router-send", [r.get("operation") for r in state.get("effect_safety_log", [])])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
