@@ -917,6 +917,7 @@ def apply_verdict(state: dict, verdict: str | None, next_action: str, reply_path
         "review_id": state["review_id"],
         "candidate_commit": state.get("candidate_commit"),
         "evidence_id": state.get("evidence_id"),
+        "state_revision": state.get("revision"),
         "verdict": state["last_r_verdict"],
         "next_action": (next_action or "")[:4000],
         "reply_path": str(reply_path),
@@ -1129,6 +1130,29 @@ def cmd_task_update(args) -> int:
 def cmd_task_list(args) -> int:
     g = _load_taskgraph()
     emit({"status": "OK", "tasks": g.get("tasks", {}), "ready": _ready_tasks(g)})
+    return EXIT_OK
+
+
+def cmd_review_valid(args) -> int:
+    state, code = _load_or_fail(args.run_id)
+    if state is None:
+        return code
+    rr = state.get("review_result") or {}
+    if rr.get("verdict") != "PASS":
+        emit({"status": "OK", "valid": False, "reason": "no stored PASS to validate",
+              "review_id": rr.get("review_id")})
+        return EXIT_OK
+    mismatches = []
+    if args.candidate_commit and args.candidate_commit != rr.get("candidate_commit"):
+        mismatches.append("candidate_commit")
+    if args.evidence_id and args.evidence_id != rr.get("evidence_id"):
+        mismatches.append("evidence_id")
+    if mismatches:
+        emit({"status": "OK", "valid": False, "reason": "material change invalidates old PASS",
+              "changed": mismatches, "review_id": rr.get("review_id")})
+    else:
+        emit({"status": "OK", "valid": True, "reason": "PASS binding matches current artifact",
+              "review_id": rr.get("review_id")})
     return EXIT_OK
 
 
@@ -2249,6 +2273,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--owner", default=None)
     s.add_argument("--artifact", default=None)
     s = sub.add_parser("task-list")
+    s = sub.add_parser("review-valid")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--candidate-commit", dest="candidate_commit", default=None)
+    s.add_argument("--evidence-id", dest="evidence_id", default=None)
     s = sub.add_parser("step")
     s.add_argument("--run-id", dest="run_id", required=True)
     s.add_argument("--current", required=True)
@@ -2330,6 +2358,7 @@ def main() -> int:
         "start": cmd_start, "status": cmd_status, "step": cmd_step, "directive": cmd_directive,
         "state-verify": cmd_state_verify, "state-recover": cmd_state_recover,
         "task-add": cmd_task_add, "task-update": cmd_task_update, "task-list": cmd_task_list,
+        "review-valid": cmd_review_valid,
         "send": cmd_send, "recv": cmd_recv, "done": cmd_done, "metrics": cmd_metrics, "health": cmd_health,
         "work": cmd_work, "report": cmd_report,
         "router-start": cmd_router_start, "router-step": cmd_router_step, "router-run": cmd_router_run,
