@@ -21,9 +21,10 @@ if /I "%~1"=="send" goto send_guard
 if /I "%~1"=="recv" goto goal_contract
 if /I "%~1"=="report" goto goal_contract
 if /I "%~1"=="done" goto goal_contract
-if /I "%~1"=="router-start" goto goal_contract
-if /I "%~1"=="router-step" goto goal_contract
-if /I "%~1"=="router-run" goto goal_contract
+if /I "%~1"=="router-start" goto send_guard
+if /I "%~1"=="router-step" goto send_guard
+if /I "%~1"=="router-run" goto send_guard
+if /I "%~1"=="router-continue" goto send_guard
 if /I "%~1"=="contract-revise" goto goal_contract
 if /I "%~1"=="effect-gate" goto effect_safety
 "%APC_PY%" "E:\WB\tools\ai-production-control\runtime\runtime.py" %*

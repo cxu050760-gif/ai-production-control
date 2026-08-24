@@ -182,6 +182,20 @@ def install(rt, options: dict) -> None:
 
     rt.cmd_send = gated_cmd_send
 
+    original_router_send = getattr(rt, "_router_send_to_role", None)
+    if original_router_send is not None:
+        def gated_router_send(state, role, message, timeout):
+            payload_hash = sha256_text(message)
+            if not (state.get("effect_authorizations") or {}):
+                grant_authorization(rt, state, holder="runtime-v1", scope={"role": role})
+            record_effect(rt, state, operation="router-send",
+                          destination=str(state.get("r_url") or ""),
+                          payload_hash=payload_hash,
+                          slot=f"router:{role}:{state.get('router', {}).get('round', 0)}",
+                          purpose="router transport")
+            return original_router_send(state, role, message, timeout)
+        rt._router_send_to_role = gated_router_send
+
 
 def main(argv: list | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)

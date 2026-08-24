@@ -74,6 +74,27 @@ class SendGuardComposeTests(unittest.TestCase):
         self.assertEqual(state["effect_safety"]["authorization_status"], "GRANTED")
         self.assertTrue(state["effect_safety"]["authorization_id"])
 
+    def test_j3_router_run_records_contract_and_router_send_effects(self):
+        import goal_contract_lite as gc
+        goal = self.root / "goal.txt"; goal.write_text("Build a header.", encoding="utf-8")
+        h = gc.build_contract(goal.read_text(), ["A"])["contract_hash"]
+        convs = {
+            "https://chatgpt.com/c/b0b0aaaa-1111-2222-3333-000000000001": {
+                "sid": "bsid", "replies": [f"candidate v1\nGOAL_CONTRACT_HASH={h}"]},
+            R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]},
+        }
+        env = _script_env(self.root, convs)
+        code, out, raw = _run_json(ADAPTER, [
+            "router-run", "--goal-file", str(goal),
+            "--b-url", "https://chatgpt.com/c/b0b0aaaa-1111-2222-3333-000000000001",
+            "--r-url", R1, "--acceptance", "A", "--max-rounds", "1", "--timeout", "30"], env)
+        self.assertEqual(code, 0, raw[-800:])
+        state = json.loads((Path(env["APC_RUNTIME_STATE_ROOT"]) / "runs" / out["run_id"] / "state.json").read_text())
+        self.assertTrue(state.get("goal_contract_hash"))
+        ops = [r.get("operation") for r in state.get("effect_safety_log", [])]
+        self.assertIn("router-send", ops)
+        self.assertEqual(state["effect_safety"]["authorization_status"], "GRANTED")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
