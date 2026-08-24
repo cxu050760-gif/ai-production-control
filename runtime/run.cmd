@@ -25,11 +25,16 @@ if /I "%~1"=="router-start" goto goal_contract
 if /I "%~1"=="router-step" goto goal_contract
 if /I "%~1"=="router-run" goto goal_contract
 if /I "%~1"=="contract-revise" goto goal_contract
+if /I "%~1"=="effect-gate" goto effect_safety
 "%APC_PY%" "E:\WB\tools\ai-production-control\runtime\runtime.py" %*
 exit /b %errorlevel%
 
 :goal_contract
 "%APC_PY%" "%~dp0goal_contract_lite.py" %*
+exit /b %errorlevel%
+
+:effect_safety
+"%APC_PY%" "%~dp0effect_safety_lite.py" %*
 exit /b %errorlevel%
 
 :harness_verify
