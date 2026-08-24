@@ -1059,6 +1059,79 @@ def _load_or_fail(run_id: str) -> tuple[dict | None, int]:
         return None, EXIT_USAGE
 
 
+def _taskgraph_path() -> Path:
+    return STATE_ROOT / "tasks.json"
+
+
+def _load_taskgraph() -> dict:
+    p = _taskgraph_path()
+    if not p.exists():
+        return {"schema_version": 1, "tasks": {}}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"schema_version": 1, "tasks": {}}
+
+
+def _save_taskgraph(g: dict) -> None:
+    atomic_write_text(_taskgraph_path(), json.dumps(g, ensure_ascii=False, indent=2))
+
+
+def _ready_tasks(g: dict) -> list[str]:
+    tasks = g.get("tasks", {})
+    out = []
+    for tid, t in tasks.items():
+        if t.get("state") in ("DONE", "BLOCKED"):
+            continue
+        deps = t.get("deps", [])
+        if all(tasks.get(d, {}).get("state") == "DONE" for d in deps):
+            out.append(tid)
+    return sorted(out)
+
+
+def cmd_task_add(args) -> int:
+    g = _load_taskgraph()
+    tasks = g.setdefault("tasks", {})
+    if args.task_id in tasks:
+        emit({"status": "DENIED", "reason": f"task {args.task_id} already exists"})
+        return EXIT_DENIED
+    tasks[args.task_id] = {
+        "task_id": args.task_id,
+        "deps": [d for d in (args.dep or [])],
+        "state": args.state or "READY",
+        "owner": args.owner or "",
+        "artifact": args.artifact or "",
+        "updated_at": utc_now(),
+    }
+    _save_taskgraph(g)
+    emit({"status": "OK", "task_id": args.task_id, "ready": _ready_tasks(g)})
+    return EXIT_OK
+
+
+def cmd_task_update(args) -> int:
+    g = _load_taskgraph()
+    t = g.get("tasks", {}).get(args.task_id)
+    if t is None:
+        emit({"status": "RUN_NOT_FOUND", "reason": f"task {args.task_id} missing"})
+        return EXIT_RUN_NOT_FOUND
+    if args.state:
+        t["state"] = args.state
+    if args.owner is not None:
+        t["owner"] = args.owner
+    if args.artifact is not None:
+        t["artifact"] = args.artifact
+    t["updated_at"] = utc_now()
+    _save_taskgraph(g)
+    emit({"status": "OK", "task_id": args.task_id, "state": t["state"], "ready": _ready_tasks(g)})
+    return EXIT_OK
+
+
+def cmd_task_list(args) -> int:
+    g = _load_taskgraph()
+    emit({"status": "OK", "tasks": g.get("tasks", {}), "ready": _ready_tasks(g)})
+    return EXIT_OK
+
+
 def cmd_status(args) -> int:
     state, code = _load_or_fail(args.run_id)
     if state is None:
@@ -2164,6 +2237,18 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("status"); s.add_argument("--run-id", dest="run_id", required=True)
     s = sub.add_parser("state-verify"); s.add_argument("--run-id", dest="run_id", required=True)
     s = sub.add_parser("state-recover"); s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("task-add")
+    s.add_argument("--task-id", dest="task_id", required=True)
+    s.add_argument("--dep", action="append", default=[])
+    s.add_argument("--state", default="READY")
+    s.add_argument("--owner", default="")
+    s.add_argument("--artifact", default="")
+    s = sub.add_parser("task-update")
+    s.add_argument("--task-id", dest="task_id", required=True)
+    s.add_argument("--state", default=None)
+    s.add_argument("--owner", default=None)
+    s.add_argument("--artifact", default=None)
+    s = sub.add_parser("task-list")
     s = sub.add_parser("step")
     s.add_argument("--run-id", dest="run_id", required=True)
     s.add_argument("--current", required=True)
@@ -2244,6 +2329,7 @@ def main() -> int:
     handler = {
         "start": cmd_start, "status": cmd_status, "step": cmd_step, "directive": cmd_directive,
         "state-verify": cmd_state_verify, "state-recover": cmd_state_recover,
+        "task-add": cmd_task_add, "task-update": cmd_task_update, "task-list": cmd_task_list,
         "send": cmd_send, "recv": cmd_recv, "done": cmd_done, "metrics": cmd_metrics, "health": cmd_health,
         "work": cmd_work, "report": cmd_report,
         "router-start": cmd_router_start, "router-step": cmd_router_step, "router-run": cmd_router_run,
