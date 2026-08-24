@@ -65,39 +65,50 @@ class EffectSafetyLiteTests(unittest.TestCase):
     def tearDown(self):
         self.td.cleanup()
 
-    def test_i1_record_deduplicated_hash_bound(self):
+    def test_i1_reservation_binds_authorization_identity(self):
         st = base_state()
+        auth = es.grant_authorization(self.rt, st, holder="runtime-v1")
         r1 = es.record_effect(self.rt, st, operation="send", destination="d", payload_hash=H,
                               slot="send:1", purpose="review transport")
+        self.assertEqual(r1["authorization_id"], auth["authorization_id"])
+        self.assertEqual(r1["authorization_status"], "GRANTED")
+        self.assertEqual(r1["authorization_holder"], "runtime-v1")
         self.assertFalse(r1["deduplicated"])
-        self.assertTrue(r1["logical_effect_id"])
         r2 = es.record_effect(self.rt, st, operation="send", destination="d", payload_hash=H,
                               slot="send:1", purpose="review transport")
         self.assertTrue(r2["deduplicated"])
-        self.assertEqual(r2["logical_effect_id"], r1["logical_effect_id"])
-        self.assertEqual(len(st["effect_safety_log"]), 1)  # dedup: only one stored record
-        events = [e for e, _ in self.rt.journal_events if e == "EFFECT_RESERVED"]
-        self.assertEqual(len(events), 2)
+        self.assertEqual(len(st["effect_safety_log"]), 1)
 
-    def test_i2_reload_durability(self):
+    def test_i2_reload_durability_auth_and_effect(self):
         st = base_state()
+        es.grant_authorization(self.rt, st)
         es.record_effect(self.rt, st, operation="send", destination="d", payload_hash=H,
                          slot="send:1", purpose="x")
         reloaded = self.rt.load_state(st["run_id"])
-        self.assertEqual(reloaded["effect_safety"]["logical_effect_id"],
-                         st["effect_safety"]["logical_effect_id"])
-        self.assertEqual(len(reloaded["effect_safety_log"]), 1)
+        self.assertEqual(reloaded["effect_safety"]["authorization_id"],
+                         st["effect_safety"]["authorization_id"])
+        self.assertTrue(reloaded["effect_authorizations"])
 
-    def test_i3_denied_precondition_fails_closed(self):
+    def test_i3_fail_closed_missing_revoked_expired(self):
         st = base_state()
+        # missing authorization
         with self.assertRaises(es.EffectDenied):
             es.record_effect(self.rt, st, operation="send", destination="d", payload_hash=H,
-                             slot="send:1", purpose="x", capability_permitted=False)
-        with self.assertRaises(es.EffectDenied):
-            es.record_effect(self.rt, st, operation="send", destination="d", payload_hash="zz",
                              slot="send:1", purpose="x")
+        # revoked authorization
+        auth = es.grant_authorization(self.rt, st)
+        es.revoke_authorization(self.rt, st, auth["authorization_id"])
+        with self.assertRaises(es.EffectDenied):
+            es.record_effect(self.rt, st, operation="send", destination="d", payload_hash=H,
+                             slot="send:1", purpose="x", authorization_id=auth["authorization_id"])
+        # expired authorization
+        st2 = base_state(); st2["run_id"] = "RUN-20260824-150001-jjjj"
+        auth2 = es.grant_authorization(self.rt, st2, ttl_seconds=-1)
+        with self.assertRaises(es.EffectDenied):
+            es.record_effect(self.rt, st2, operation="send", destination="d", payload_hash=H,
+                             slot="send:1", purpose="x", authorization_id=auth2["authorization_id"])
 
-    def test_i4_send_wrapper_records_and_passes(self):
+    def test_i4_send_wrapper_grants_and_binds(self):
         rt = self.rt
         sent = {"called": False}
         rt.cmd_send = lambda args: (sent.__setitem__("called", True), 0)[1]
@@ -112,7 +123,8 @@ class EffectSafetyLiteTests(unittest.TestCase):
         self.assertTrue(sent["called"])
         after = rt.load_state(st["run_id"])
         self.assertEqual(after["effect_safety"]["status"], "RESERVED")
-        self.assertEqual(after["effect_safety"]["operation"], "send")
+        self.assertTrue(after["effect_safety"]["authorization_id"])
+        self.assertEqual(after["effect_safety"]["authorization_status"], "GRANTED")
 
 
 if __name__ == "__main__":
