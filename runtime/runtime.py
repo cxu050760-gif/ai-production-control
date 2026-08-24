@@ -276,6 +276,58 @@ def run_dir(run_id: str) -> Path:
     return RUNS_ROOT / run_id
 
 
+def _state_paths(run_id: str) -> tuple[Path, Path, Path, Path]:
+    rd = run_dir(run_id)
+    return (rd / "state.json", rd / "state.integrity.json",
+            rd / "state.prev.json", rd / "state.prev.integrity.json")
+
+
+def _read_json(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _state_matches_integrity(state_path: Path, integrity_path: Path) -> bool:
+    state_text = None
+    try:
+        state_text = state_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    integ = _read_json(integrity_path)
+    if not integ:
+        return False
+    return (sha256_text(state_text) == integ.get("sha256")
+            and json.loads(state_text).get("schema_version") == integ.get("schema_version"))
+
+
+def verify_state(run_id: str) -> dict:
+    sp, ip, pp, pip = _state_paths(run_id)
+    if not sp.exists():
+        return {"ok": False, "reason": "state missing", "run_id": run_id}
+    if _state_matches_integrity(sp, ip):
+        cur = _read_json(sp) or {}
+        return {"ok": True, "reason": "integrity ok", "run_id": run_id,
+                "revision": cur.get("revision"), "schema_version": cur.get("schema_version")}
+    return {"ok": False, "reason": "integrity mismatch", "run_id": run_id}
+
+
+def recover_state(run_id: str) -> dict:
+    sp, ip, pp, pip = _state_paths(run_id)
+    if _state_matches_integrity(sp, ip):
+        return {"recovered": False, "reason": "current state already valid", "run_id": run_id}
+    if not _state_matches_integrity(pp, pip):
+        return {"recovered": False, "reason": "no valid known-good revision to recover", "run_id": run_id}
+    prev_text = pp.read_text(encoding="utf-8")
+    atomic_write_text(sp, prev_text)
+    atomic_write_text(ip, pip.read_text(encoding="utf-8"))
+    cur = _read_json(sp) or {}
+    journal(run_id, "STATE_RECOVERED", revision=cur.get("revision"))
+    return {"recovered": True, "reason": "restored previous known-good revision",
+            "run_id": run_id, "revision": cur.get("revision")}
+
+
 def load_state(run_id: str) -> dict:
     path = run_dir(run_id) / "state.json"
     if not path.exists():
@@ -286,8 +338,23 @@ def load_state(run_id: str) -> dict:
 def save_state(state: dict) -> None:
     state["revision"] = int(state.get("revision", 0)) + 1
     state["updated_at"] = utc_now()
-    atomic_write_text(run_dir(state["run_id"]) / "state.json",
-                      json.dumps(state, ensure_ascii=False, indent=2, default=str))
+    sp, ip, pp, pip = _state_paths(state["run_id"])
+    # Rotate the currently-validated state to known-good before overwriting, so a
+    # corrupted write always leaves a recoverable previous revision (V0.3).
+    if _state_matches_integrity(sp, ip):
+        try:
+            atomic_write_text(pp, sp.read_text(encoding="utf-8"))
+            atomic_write_text(pip, ip.read_text(encoding="utf-8"))
+        except OSError:
+            pass
+    text = json.dumps(state, ensure_ascii=False, indent=2, default=str)
+    atomic_write_text(sp, text)
+    atomic_write_text(ip, json.dumps({
+        "revision": state["revision"],
+        "schema_version": state.get("schema_version"),
+        "sha256": sha256_text(text),
+        "saved_at": utc_now(),
+    }, ensure_ascii=False, indent=2))
 
 
 def journal(run_id: str, event: str, **kw) -> None:
@@ -1000,6 +1067,18 @@ def cmd_status(args) -> int:
     out["allowed_actions"] = allowed_actions(state)
     emit(out)
     return EXIT_OK
+
+
+def cmd_state_verify(args) -> int:
+    result = verify_state(args.run_id)
+    emit(result)
+    return EXIT_OK if result.get("ok") else EXIT_ERR
+
+
+def cmd_state_recover(args) -> int:
+    result = recover_state(args.run_id)
+    emit(result)
+    return EXIT_OK if result.get("recovered") or result.get("reason") == "current state already valid" else EXIT_ERR
 
 
 def cmd_step(args) -> int:
@@ -2083,6 +2162,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--worker-id", dest="worker_id", default=None)
 
     s = sub.add_parser("status"); s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("state-verify"); s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("state-recover"); s.add_argument("--run-id", dest="run_id", required=True)
     s = sub.add_parser("step")
     s.add_argument("--run-id", dest="run_id", required=True)
     s.add_argument("--current", required=True)
@@ -2162,6 +2243,7 @@ def main() -> int:
         return EXIT_USAGE if exc.code else EXIT_OK
     handler = {
         "start": cmd_start, "status": cmd_status, "step": cmd_step, "directive": cmd_directive,
+        "state-verify": cmd_state_verify, "state-recover": cmd_state_recover,
         "send": cmd_send, "recv": cmd_recv, "done": cmd_done, "metrics": cmd_metrics, "health": cmd_health,
         "work": cmd_work, "report": cmd_report,
         "router-start": cmd_router_start, "router-step": cmd_router_step, "router-run": cmd_router_run,
