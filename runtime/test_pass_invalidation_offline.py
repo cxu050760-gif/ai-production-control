@@ -201,7 +201,7 @@ class GateTests(unittest.TestCase):
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
         self.assertEqual(out["status"], "DENIED")
-        self.assertIn("review_result missing", out["problems"])
+        self.assertIn("review_result missing or not a genuine object (no coercion)", out["problems"])
 
     def test_g6_done_denied_when_candidate_or_evidence_empty(self):
         # R NEXT_ACTION case: PASS stored but candidate/evidence bindings empty.
@@ -225,7 +225,7 @@ class GateTests(unittest.TestCase):
         _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
-        self.assertIn("review_result.run_id not a genuine string strictly bound to this RUN",
+        self.assertIn("review_result.run_id not a genuine string strictly bound to the requested RUN",
                       out["problems"])
 
     def test_g8_done_denied_when_review_id_empty(self):
@@ -370,6 +370,65 @@ class GateTests(unittest.TestCase):
         jl = self.root / "runs" / dir_rid / "journal.jsonl"
         if jl.exists():
             self.assertNotIn("RUN_DONE", jl.read_text(encoding="utf-8"))
+
+    def _state_bytes(self, rid):
+        return (self.root / "runs" / rid / "state.json").read_bytes()
+
+    def test_g20_done_denied_done_state_with_misbound_review_result(self):
+        # R REWORK4 repro: status=DONE, identity fields valid, but
+        # review_result.run_id binds another RUN -> must not exit 0.
+        rid = "RUN-20260825-100027-b027"
+        foreign = "RUN-20260825-100028-b028"
+        rr = _pass_rr(foreign)
+        st = _mk_state(rid, rr, cand=CAND, ev=EVID)
+        st["status"] = "DONE"
+        _write_state(self.root, rid, st)
+        before = self._state_bytes(rid)
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("review_result.run_id not a genuine string strictly bound to the requested RUN",
+                      out["problems"])
+        self.assertEqual(self._state_bytes(rid), before)  # byte-identical
+        self.assertFalse((self.root / "runs" / foreign).exists())  # no foreign RUN
+        jl = self.root / "runs" / rid / "journal.jsonl"
+        if jl.exists():
+            self.assertNotIn("RUN_DONE", jl.read_text(encoding="utf-8"))
+
+    def test_g21_done_denied_review_result_bool(self):
+        # R REWORK4 repro: review_result=true used to AttributeError (exit 1);
+        # must now be a clean fail-closed DENIED exit 5.
+        rid = "RUN-20260825-100029-b029"
+        st = _mk_state(rid, None, cand=CAND, ev=EVID)
+        st["review_result"] = True
+        _write_state(self.root, rid, st)
+        before = self._state_bytes(rid)
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertEqual(out["status"], "DENIED")
+        self.assertIn("review_result missing or not a genuine object (no coercion)",
+                      out["problems"])
+        self.assertEqual(self._state_bytes(rid), before)
+
+    def test_g22_done_denied_review_result_string(self):
+        # Other truthy non-dict containers must deny the same way.
+        rid = "RUN-20260825-100030-b030"
+        st = _mk_state(rid, None, cand=CAND, ev=EVID)
+        st["review_result"] = "PASS"
+        _write_state(self.root, rid, st)
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("review_result missing or not a genuine object (no coercion)",
+                      out["problems"])
+
+    def test_g23_done_ok_already_done_with_valid_binding(self):
+        # Regression guard: a genuinely complete RUN still short-circuits OK.
+        rid = "RUN-20260825-100031-b031"
+        st = _mk_state(rid, _pass_rr(rid), cand=CAND, ev=EVID)
+        st["status"] = "DONE"
+        _write_state(self.root, rid, st)
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 0, raw)
+        self.assertEqual(out["note"], "already DONE")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

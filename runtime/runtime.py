@@ -1671,6 +1671,16 @@ def cmd_done(args) -> int:
         if type(state.get("evidence_id")) is not str or not state.get("evidence_id"):
             identity_problems.append(
                 "state.evidence_id missing or not a non-empty string (no coercion)")
+        # R REWORK4: review_result container type and its run_id belong to the
+        # identity closure too - BEFORE the already-DONE short-circuit, so a
+        # DONE state with a misbound/non-dict review_result can never exit 0.
+        rr_raw = state.get("review_result")
+        if type(rr_raw) is not dict:
+            identity_problems.append(
+                "review_result missing or not a genuine object (no coercion)")
+        elif type(rr_raw.get("run_id")) is not str or rr_raw.get("run_id") != args.run_id:
+            identity_problems.append(
+                "review_result.run_id not a genuine string strictly bound to the requested RUN")
         if identity_problems:
             emit({"status": "DENIED",
                   "reason": "done fail-closed identity: " + "; ".join(identity_problems)
@@ -1688,17 +1698,13 @@ def cmd_done(args) -> int:
                   "reason": "done requires last_r_verdict=PASS (parsed by runtime from R reply, not self-reported)",
                   "last_r_verdict": state.get("last_r_verdict")})
             return EXIT_DENIED
-        rr = state.get("review_result") or {}
+        rr = state.get("review_result")  # dict with bound run_id: identity closure above
         problems = []
-        if not rr:
-            problems.append("review_result missing")
-        elif rr.get("invalidated"):
+        if rr.get("invalidated"):
             problems.append("stored PASS invalidated by material change")
         elif rr.get("verdict") != "PASS":
             problems.append("stored review_result verdict is not PASS")
         else:
-            if type(rr.get("run_id")) is not str or rr.get("run_id") != args.run_id:
-                problems.append("review_result.run_id not a genuine string strictly bound to this RUN")
             if type(rr.get("review_id")) is not str or not rr.get("review_id").strip():
                 problems.append("review_id empty or not a string")
             sr = rr.get("state_revision")
