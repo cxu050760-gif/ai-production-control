@@ -26,6 +26,12 @@ Verdicts (priority order):
 Subcommands (enter only via the single official entry run.cmd):
   ec-record --run-id X --event failure|artifact|action [--detail TEXT]
   ec-check  --run-id X
+  ec-gate   --run-id X --action send|step|router   (V0.6-B enforcement query)
+
+V0.6 Slice B additionally installs a fail-closed EC gate on the official send
+path (see install()): HALT freezes transport, STOP_RETRY blocks identical
+retry loops at the transport boundary, NO_PROGRESS keeps transport open so
+escalation can travel.
 """
 from __future__ import annotations
 
@@ -160,6 +166,71 @@ def cmd_ec_check(rt, args) -> int:
     return rt.EXIT_OK
 
 
+def ec_gate_policy(verdict: str, action: str) -> tuple[bool, str]:
+    """Frozen V0.6-B policy table (rules only): may the given action proceed
+    under the given EC verdict? Transport is the enforced degradation point:
+    HALT freezes everything (definitions #23/#41), STOP_RETRY stops identical
+    retry loops at the transport boundary, NO_PROGRESS still allows transport
+    because escalation itself travels through send (definition #19)."""
+    if verdict == "HALT":
+        return False, "lifecycle frozen: PAUSE/STOP freezes worker action"
+    if verdict == "STOP_RETRY" and action in ("send", "router"):
+        return False, "transport blocked after repeated failures; CHANGE_TOOL or REQUEUE first"
+    if verdict == "NO_PROGRESS":
+        return True, "escalation pending (ESCALATE_C); transport allowed so escalation can travel"
+    return True, ""
+
+
+def cmd_ec_gate(rt, args) -> int:
+    state, code = rt._load_or_fail(args.run_id)
+    if state is None:
+        return code
+    thresholds = _thresholds()
+    verdict, actions, reasons = evaluate(state, thresholds)
+    allowed, policy_reason = ec_gate_policy(verdict, args.action)
+    rt.journal(args.run_id, "EC_GATE", action=args.action, verdict=verdict,
+               allowed=allowed, policy_reason=policy_reason)
+    if not allowed:
+        rt.emit({"status": "DENIED", "verdict": verdict, "action": args.action,
+                 "reason": policy_reason, "ec_actions": actions, "ec_reasons": reasons})
+        return rt.EXIT_DENIED
+    rt.emit({"status": "OK", "allowed": True, "verdict": verdict, "action": args.action,
+             "note": policy_reason or None})
+    return rt.EXIT_OK
+
+
+def install(rt) -> None:
+    """Compose the EC gate onto the official send path (fail-closed). Mirrors the
+    effect-safety install pattern: wrap, never modify the underlying command."""
+    original_cmd_send = rt.cmd_send
+
+    def gated_cmd_send(args):
+        state = rt.load_state(args.run_id)
+        verdict, actions, reasons = evaluate(state, _thresholds())
+        allowed, policy_reason = ec_gate_policy(verdict, "send")
+        if not allowed:
+            rt.journal(args.run_id, "EC_GATE_DENIAL", action="send", verdict=verdict,
+                       policy_reason=policy_reason, ec_actions=actions)
+            rt.emit({"status": "DENIED", "reason": f"EC_GATE: {policy_reason}",
+                     "verdict": verdict, "ec_actions": actions, "ec_reasons": reasons})
+            return rt.EXIT_DENIED
+        return original_cmd_send(args)
+
+    rt.cmd_send = gated_cmd_send
+
+    original_router_send = getattr(rt, "_router_send_to_role", None)
+    if original_router_send is not None:
+        def gated_router_send(state, role, message, timeout):
+            verdict, actions, reasons = evaluate(state, _thresholds())
+            allowed, policy_reason = ec_gate_policy(verdict, "router")
+            if not allowed:
+                rt.journal(state["run_id"], "EC_GATE_DENIAL", action="router",
+                           verdict=verdict, policy_reason=policy_reason, ec_actions=actions)
+                raise RuntimeError(f"EC_GATE: {policy_reason}")
+            return original_router_send(state, role, message, timeout)
+        rt._router_send_to_role = gated_router_send
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ec_lite",
                                 description="EC-lite execution correction (rules only)")
@@ -170,6 +241,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--detail", default=None)
     s = sub.add_parser("ec-check")
     s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("ec-gate")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--action", required=True)
     return p
 
 
@@ -180,6 +254,8 @@ def main(argv: list | None = None) -> int:
         return cmd_ec_record(rt, args)
     if args.cmd == "ec-check":
         return cmd_ec_check(rt, args)
+    if args.cmd == "ec-gate":
+        return cmd_ec_gate(rt, args)
     return rt.EXIT_USAGE
 
 
