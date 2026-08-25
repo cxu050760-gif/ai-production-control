@@ -32,6 +32,7 @@ rem V0.6 EC-lite: execution correction is a rules-only Runtime adapter module,
 rem entered through the single official entry like every other subcommand.
 if /I "%~1"=="ec-record" goto ec_lite
 if /I "%~1"=="ec-check" goto ec_lite
+if /I "%~1"=="ec-gate" goto ec_lite
 "%APC_PY%" "E:\WB\tools\ai-production-control\runtime\runtime.py" %*
 exit /b %errorlevel%
 
