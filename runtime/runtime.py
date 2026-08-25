@@ -421,12 +421,19 @@ def _seam_script_run(script: str) -> subprocess.CompletedProcess:
     never sets APC_RUNTIME_INJECT_BRIDGE_FAIL=SCRIPT.
 
     Script file (APC_RUNTIME_INJECT_SCRIPT_FILE) JSON shape:
-      {"conversations": {<url>: {"sid": str, "replies": [..], "failures": [..]}},
+      {"conversations": {<url>: {"sid": str, "replies": [..], "failures": [..],
+                                 "fail_after": int, "fail_token": str}},
        "log": <jsonl path>}
-    Per send: consumes one failure token first; else pops the next reply for
-    the target conversation (durable cursor across processes), writes it to
-    the script's reply file and returns the standard RUNTIME_* markers. Every
-    exchange is journaled to the log so tests can assert role->URL routing."""
+    Per send: consumes one failure token first; else, when the deterministic
+    schedule (fail_after/fail_token) is active and the number of replies
+    already served to this URL is >= fail_after, returns fail_token instead of
+    the next reply; else pops the next reply for the target conversation
+    (durable cursor across processes), writes it to the script's reply file
+    and returns the standard RUNTIME_* markers. fail_after/fail_token exist
+    ONLY so tests can express "first N roundtrips succeed, the next one
+    fails" (e.g. a SEND_FAILED after a REWORK); production never sets them.
+    Every exchange is journaled to the log so tests can assert role->URL
+    routing."""
     cfg_path = os.environ.get("APC_RUNTIME_INJECT_SCRIPT_FILE", "")
     try:
         cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
@@ -453,6 +460,11 @@ def _seam_script_run(script: str) -> subprocess.CompletedProcess:
     reattach = "ACQ_MODE=reattach" in script
     entry = {"url": url, "sid": sid, "stored_sid": (m_stored.group(1) if m_stored else None),
              "reattach": reattach, "message": sent}
+    cur_path = Path(cfg_path + ".cursor.json")
+    try:
+        cursors = json.loads(cur_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cursors = {}
     failures = list(conv.get("failures") or [])
     if failures:
         tok = str(failures.pop(0))
@@ -464,11 +476,12 @@ def _seam_script_run(script: str) -> subprocess.CompletedProcess:
             pass
         _seam_script_log(cfg.get("log"), {**entry, "result": tok})
         return subprocess.CompletedProcess([BASH], 0, "RUNTIME_SID=%s\nRUNTIME_SEND=%s\n" % (sid, tok), "")
-    cur_path = Path(cfg_path + ".cursor.json")
-    try:
-        cursors = json.loads(cur_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        cursors = {}
+    fail_after = int(conv.get("fail_after") or 0)
+    fail_token = str(conv.get("fail_token") or "")
+    if fail_after > 0 and fail_token and int(cursors.get(url, 0)) >= fail_after:
+        _seam_script_log(cfg.get("log"), {**entry, "result": fail_token,
+                                          "scheduled": "fail_after", "after": fail_after})
+        return subprocess.CompletedProcess([BASH], 0, "RUNTIME_SID=%s\nRUNTIME_SEND=%s\n" % (sid, fail_token), "")
     idx = int(cursors.get(url, 0))
     replies = list(conv.get("replies") or [])
     reply = replies[idx] if idx < len(replies) else ""

@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -372,7 +373,21 @@ def install(rt) -> None:
             elif code != rt.EXIT_DENIED:
                 gate_blocked = False
                 try:
-                    gate_blocked = any("EC_GATE_DENIAL" in entry for entry in new_entries)
+                    # Recognize a current-command EC gate denial ONLY from the
+                    # parsed event field: the event must be exactly
+                    # "EC_GATE_DENIAL" and, where the journal contract supplies
+                    # it, action must be "router". "EC_GATE_DENIAL" appearing
+                    # inside next_action/reason/message or any other untrusted
+                    # text is ordinary data and must never mask a real failure.
+                    for entry in new_entries:
+                        try:
+                            parsed = json.loads(entry)
+                            if (parsed.get("event") == "EC_GATE_DENIAL"
+                                    and parsed.get("action") == "router"):
+                                gate_blocked = True
+                                break
+                        except (ValueError, TypeError):
+                            continue
                 except Exception:  # noqa: BLE001
                     gate_blocked = False
                 if not gate_blocked:

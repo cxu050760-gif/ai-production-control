@@ -238,6 +238,120 @@ class RouterTelemetryTests(unittest.TestCase):
                 pass
         self.assertEqual(auto_failure_count, 0, f"Unexpected auto failure count: {auto_failure_count}")
 
+    def test_r8_next_action_token_does_not_mask_send_failure(self):
+        # Adversarial regression (verdict_r22_v5): within ONE router command
+        # the reviewer first returns REWORK whose NEXT_ACTION merely CONTAINS
+        # the text EC_GATE_DENIAL as ordinary data; shortly after, the
+        # transport reports a genuine non-gate SEND_FAILED and the command
+        # hard-blocks. The token-as-data must NOT suppress the real failure:
+        # exactly one source=auto failure is recorded and consecutive_failures
+        # increases by exactly one. The old raw-substring scan read the
+        # journal line and was fooled by the NEXT_ACTION token into masking
+        # the SEND_FAILED.
+        next_action = ("Inspect the backtrace; remove the spurious "
+                       "EC_GATE_DENIAL token from the filter and re-test.")
+        rework_reply = ("===REVIEW_VERDICT=== REWORK\n"
+                        f"===NEXT_ACTION=== {next_action}")
+        convs = {B1: {"sid": "bsid",
+                      # Round 1: goal dispatch succeeds (candidate carries
+                      # the frozen contract hash). Round 2 rework delivery
+                      # fails deterministically AFTER the REWORK was received.
+                      "replies": [f"candidate v1\nGOAL_CONTRACT_HASH={self.h}"],
+                      "fail_after": 1, "fail_token": "SEND_FAILED"},
+                 R1: {"sid": "rsid", "replies": [rework_reply]}}
+        env = _script_env(self.root, convs)
+        code, out, raw = _run(ADAPTER, ["router-start", "--goal-file", str(self.goal),
+                                        "--b-url", B1, "--r-url", R1,
+                                        "--acceptance", "A"], env)
+        self.assertEqual(code, 0, raw[-800:])
+        rid = out["run_id"]
+        base_failures = self._state(env, rid).get("ec", {}).get("consecutive_failures", 0)
+        # One drive command: REWORK with the token-as-data arrives first, then
+        # the non-gate SEND_FAILED hard-blocks the command.
+        code2, out2, raw2 = _run(ADAPTER, ["router-continue", "--run-id", rid,
+                                           "--timeout", "30"], env)
+        self.assertNotEqual(code2, 0, raw2[-800:])
+        st2 = self._state(env, rid)
+        self.assertEqual(st2["status"], "HARD_BLOCKED", str(st2.get("blocked_reason", ""))[:300])
+        # The real non-gate failure is counted exactly once.
+        self.assertEqual(st2["ec"]["consecutive_failures"], base_failures + 1,
+                         f"expected {base_failures+1} consecutive failures, got "
+                         f"{st2['ec']['consecutive_failures']}")
+        entries = [json.loads(line) for line in self._journal(env, rid).strip().splitlines()
+                   if line.strip()]
+        auto_failures = [e for e in entries
+                         if e.get("event") == "EC_EVENT" and e.get("source") == "auto"
+                         and e.get("ec_event") == "failure"]
+        self.assertEqual(len(auto_failures), 1,
+                         f"expected exactly one source=auto failure, got {len(auto_failures)}")
+        # The transport genuinely reported a non-gate SEND_FAILED AFTER the
+        # REWORK was received (session replacement journaled with that reason).
+        send_failed = [e for e in entries
+                       if e.get("event") == "ROUTER_SESSION_REPLACED"
+                       and "SEND_FAILED" in str(e.get("reason", ""))]
+        self.assertTrue(send_failed, "no SEND_FAILED transport failure journaled")
+        rework_entry = next((e for e in entries if e.get("event") == "ROUTER_REWORK"), None)
+        self.assertIsNotNone(rework_entry, "no ROUTER_REWORK entry journaled")
+        self.assertLess(entries.index(rework_entry), entries.index(send_failed[0]),
+                        "SEND_FAILED must occur AFTER the REWORK was received")
+        # The token appears ONLY as data inside the NEXT_ACTION; the real gate
+        # never fired, so no EC_GATE_DENIAL event may exist.
+        self.assertIn("EC_GATE_DENIAL", str(rework_entry.get("next_action", "")),
+                      "NEXT_ACTION token missing from ROUTER_REWORK entry")
+        self.assertEqual([e for e in entries if e.get("event") == "EC_GATE_DENIAL"], [],
+                         "an EC_GATE_DENIAL event was journaled although the gate never fired")
+        self.assertIn("EC_GATE_DENIAL", self._journal(env, rid))
+
+    def test_r9_real_gate_denial_still_no_count(self):
+        # Verify that a REAL EC_GATE_DENIAL (event=EC_GATE_DENIAL, action=router)
+        # still preserves the no-count guard. This ensures the new JSON field
+        # matching correctly identifies real gate denials while ignoring
+        # spurious text matches.
+        convs = {B1: {"sid": "bsid", "replies": [f"candidate v1\nGOAL_CONTRACT_HASH={self.h}"]},
+                 R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]}}
+        env = _script_env(self.root, convs)
+        code, out, raw = _run(ADAPTER, ["router-start", "--goal-file", str(self.goal),
+                                        "--b-url", B1, "--r-url", R1,
+                                        "--acceptance", "A"], env)
+        self.assertEqual(code, 0, raw[-800:])
+        rid = out["run_id"]
+        # Inject 3 manual failures to trigger EC gate on next command
+        for _ in range(3):
+            _run(EC, ["ec-record", "--run-id", rid, "--event", "failure"], env)
+        st1 = self._state(env, rid)
+        self.assertEqual(st1["ec"]["consecutive_failures"], 3)
+        # Also inject a spurious NOTE with "EC_GATE_DENIAL" text to verify
+        # it doesn't interfere with the real gate detection
+        jp = Path(env["APC_RUNTIME_STATE_ROOT"]) / "runs" / rid / "journal.jsonl"
+        with open(jp, "a", encoding="utf-8") as f:
+            f.write('{"ts":"2026-08-25T09:00:00+00:00","event":"NOTE","action":"router","message":"Check EC_GATE_DENIAL status"}\n')
+        # Run router-continue with a fresh PASS - this should hit a REAL
+        # EC_GATE_DENIAL because consecutive_failures >= 3
+        convs2 = {B1: {"sid": "bsid", "replies": [f"candidate v2\nGOAL_CONTRACT_HASH={self.h}"]},
+                  R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]}}
+        env2 = _script_env(self.root, convs2)
+        code2, out2, raw2 = _run(ADAPTER, ["router-continue", "--run-id", rid,
+                                           "--timeout", "30"], env2)
+        self.assertNotEqual(code2, 0, raw2[-800:])
+        st2 = self._state(env2, rid)
+        # consecutive_failures must still be 3 (real gate denial not counted)
+        self.assertEqual(st2["ec"]["consecutive_failures"], 3)
+        # No new source=auto failure (the real gate denial was not counted)
+        import json as _json
+        auto_failure_count = 0
+        for line in self._journal(env2, rid).strip().splitlines():
+            try:
+                entry = _json.loads(line)
+                if entry.get("event") == "EC_EVENT" and entry.get("source") == "auto":
+                    auto_failure_count += 1
+            except _json.JSONDecodeError:
+                pass
+        self.assertEqual(auto_failure_count, 0,
+                         f"Real EC_GATE_DENIAL should not be counted but found {auto_failure_count} auto EC_EVENT entries")
+        # The real EC_GATE_DENIAL entry should exist in journal
+        jl2 = self._journal(env2, rid)
+        self.assertIn('"EC_GATE_DENIAL"', jl2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
