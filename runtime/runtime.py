@@ -956,6 +956,8 @@ def _apply_review_bindings(state: dict, candidate_commit: str | None, evidence_i
                 "instruction": "--candidate-commit must be a full 40-hex commit SHA when provided."}
     ev = clean_text(evidence_id or "")[:256].strip()
     rv = clean_text(review_id or "")[:256].strip()
+    prev_binding = {"candidate_commit": state.get("candidate_commit"),
+                    "evidence_id": state.get("evidence_id")}
     if cand:
         state["candidate_commit"] = cand
     if ev:
@@ -964,7 +966,44 @@ def _apply_review_bindings(state: dict, candidate_commit: str | None, evidence_i
         state["review_id"] = rv
     elif cand and not state.get("review_id"):
         state["review_id"] = "%s#epoch%s" % (state["run_id"], state.get("review_epoch", 1))
+    _invalidate_stale_pass(state, cand, ev, prev_binding)
     return None
+
+
+def review_binding_mismatches(review_result: dict | None, candidate_commit: str | None,
+                              evidence_id: str | None) -> list[str]:
+    """V0.5: pure comparison between supplied non-empty bindings and the bindings a
+    stored review result was taken against. Empty/None inputs are not checked
+    (only supplied bindings are validated). Reused by review-valid, the done
+    gate and the PASS-invalidation hook; dependency-free for offline tests."""
+    rr = review_result or {}
+    changed = []
+    if candidate_commit and candidate_commit != rr.get("candidate_commit"):
+        changed.append("candidate_commit")
+    if evidence_id and evidence_id != rr.get("evidence_id"):
+        changed.append("evidence_id")
+    return changed
+
+
+def _invalidate_stale_pass(state: dict, cand: str, ev: str, prev_binding: dict) -> None:
+    """V0.5 Slice B (Material Change -> PASS Invalidation, definitions #30/#43):
+    binding a NEW candidate/evidence that differs from the artifact a stored PASS
+    was taken against invalidates that PASS mechanically. Idempotent; the PASS
+    binding stays recorded inside review_result for audit. Caller persists."""
+    rr = state.get("review_result") or {}
+    if rr.get("verdict") != "PASS" or rr.get("invalidated"):
+        return
+    changed = review_binding_mismatches(rr, cand or None, ev or None)
+    if not changed:
+        return
+    rr["invalidated"] = True
+    rr["invalidated_at"] = utc_now()
+    rr["invalidation_reason"] = "material change: " + ",".join(changed)
+    rr["superseded_binding"] = prev_binding
+    state["review_result"] = rr
+    journal(state["run_id"], "PASS_INVALIDATED", changed=changed,
+            review_id=rr.get("review_id"),
+            invalidation_reason=rr["invalidation_reason"])
 
 
 # ---------------------------------------------------------------------------
@@ -1142,11 +1181,14 @@ def cmd_review_valid(args) -> int:
         emit({"status": "OK", "valid": False, "reason": "no stored PASS to validate",
               "review_id": rr.get("review_id")})
         return EXIT_OK
-    mismatches = []
-    if args.candidate_commit and args.candidate_commit != rr.get("candidate_commit"):
-        mismatches.append("candidate_commit")
-    if args.evidence_id and args.evidence_id != rr.get("evidence_id"):
-        mismatches.append("evidence_id")
+    if rr.get("invalidated"):
+        emit({"status": "OK", "valid": False,
+              "reason": "stored PASS was invalidated by material change",
+              "invalidation_reason": rr.get("invalidation_reason"),
+              "invalidated_at": rr.get("invalidated_at"),
+              "review_id": rr.get("review_id")})
+        return EXIT_OK
+    mismatches = review_binding_mismatches(rr, args.candidate_commit, args.evidence_id)
     if mismatches:
         emit({"status": "OK", "valid": False, "reason": "material change invalidates old PASS",
               "changed": mismatches, "review_id": rr.get("review_id")})
@@ -1626,6 +1668,19 @@ def cmd_done(args) -> int:
             emit({"status": "DENIED",
                   "reason": "done requires last_r_verdict=PASS (parsed by runtime from R reply, not self-reported)",
                   "last_r_verdict": state.get("last_r_verdict")})
+            return EXIT_DENIED
+        rr = state.get("review_result") or {}
+        if rr.get("invalidated"):
+            emit({"status": "DENIED",
+                  "reason": "stored PASS was invalidated by material change; re-review required",
+                  "invalidation_reason": rr.get("invalidation_reason")})
+            return EXIT_DENIED
+        if rr.get("verdict") == "PASS" and review_binding_mismatches(
+                rr, state.get("candidate_commit"), state.get("evidence_id")):
+            emit({"status": "DENIED",
+                  "reason": "stored PASS no longer binds the current candidate/evidence; re-review required",
+                  "changed": review_binding_mismatches(rr, state.get("candidate_commit"),
+                                                       state.get("evidence_id"))})
             return EXIT_DENIED
         state["status"] = "DONE"
         state["metrics"]["finished_at"] = utc_now()
