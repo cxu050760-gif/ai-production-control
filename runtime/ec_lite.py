@@ -145,15 +145,30 @@ def apply_ec_event(state: dict, event: str) -> dict:
 def record_auto(rt, run_id: str, event: str) -> None:
     """V0.6-C auto-telemetry: record one EC event from an observed runtime
     outcome. Best-effort by design — telemetry must never break or block the
-    operation that produced the signal; on any error it stays silent."""
+    operation that produced the signal, and must never write canonical state
+    without holding the RUN lock.
+
+    R21 REWORK (verdict_r21_v2): lock semantics are safe and non-blocking.
+    We attempt a single non-blocking acquire. If the lock is busy we return
+    immediately — no 30-second wait, and no read/write of state or journal.
+    Only after we actually hold the lock do we apply/save/journal, and we
+    release only the lock we acquired."""
     try:
-        with rt.RunLock(run_id):
+        lock = rt.RunLock(run_id)
+        if not lock._try_acquire():
+            # Lock busy: skip this best-effort event without blocking and
+            # without touching canonical state or journal.
+            return
+        try:
             state = rt.load_state(run_id)
             ec = apply_ec_event(state, event)
             rt.save_state(state)
             rt.journal(run_id, "EC_EVENT", ec_event=event, source="auto",
                        consecutive_failures=ec["consecutive_failures"],
                        actions_since_artifact=ec["actions_since_artifact"])
+        finally:
+            # Release only the lock we acquired (_try_acquire True path).
+            lock.__exit__(None, None, None)
     except Exception:  # noqa: BLE001 - best-effort telemetry, never block caller
         pass
 

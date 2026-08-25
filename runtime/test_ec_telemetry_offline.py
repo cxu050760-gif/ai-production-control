@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -227,6 +228,69 @@ class RecvTelemetryWrapperTests(unittest.TestCase):
         st = rt.load_state(self.rid)
         self.assertNotIn("ec", st)  # nothing recorded for non-OK outcomes
 
+
+class RecordAutoLockSafetyTests(unittest.TestCase):
+    """Deterministic concurrency per verdict_r21_v2: record_auto must never
+    block and must never read or write canonical state unless it holds the
+    RUN lock; it releases only the lock it acquired."""
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.root = Path(self.td.name)
+        self._backup = rt.RUNS_ROOT
+        rt.RUNS_ROOT = self.root / "runs"
+        self.rid = "RUN-20260825-120002-d003"
+        (self.root / "runs" / self.rid).mkdir(parents=True, exist_ok=True)
+        state = {"run_id": self.rid, "schema_version": 1, "revision": 1,
+                 "status": "RUNNING", "goal": "g",
+                 "r_url": "https://chatgpt.com/c/telem0003",
+                 "metrics": {"rework_count": 0}}
+        (self.root / "runs" / self.rid / "state.json").write_text(
+            json.dumps(state), encoding="utf-8")
+
+    def tearDown(self):
+        rt.RUNS_ROOT = self._backup
+        self.td.cleanup()
+
+    def _state_bytes(self):
+        return (self.root / "runs" / self.rid / "state.json").read_bytes()
+
+    def _lock_path(self):
+        return self.root / "runs" / self.rid / ".lock"
+
+    def test_l1_busy_lock_returns_fast_without_writes(self):
+        # Adversarial: hold the RUN lock, then call record_auto. It must
+        # return promptly (no 30s wait), leave state bytes untouched, keep the
+        # original holder's lock intact, and journal nothing.
+        before = self._state_bytes()
+        holder = rt.RunLock(self.rid)
+        holder.__enter__()
+        try:
+            t0 = time.monotonic()
+            ecl.record_auto(rt, self.rid, "failure")
+            elapsed = time.monotonic() - t0
+            self.assertLess(elapsed, 2.0, "record_auto blocked while the lock was busy")
+            self.assertEqual(self._state_bytes(), before,
+                             "canonical state changed without holding the lock")
+            self.assertTrue(self._lock_path().exists(),
+                            "original holder lost its lock")
+        finally:
+            holder.__exit__(None, None, None)
+        jp = self.root / "runs" / self.rid / "journal.jsonl"
+        if jp.exists():
+            self.assertNotIn("EC_EVENT", jp.read_text(encoding="utf-8"))
+
+    def test_l2_free_lock_persists_and_releases(self):
+        # No contention: the event is persisted exactly once and the lock that
+        # record_auto acquired is released afterwards.
+        ecl.record_auto(rt, self.rid, "failure")
+        st = rt.load_state(self.rid)
+        self.assertEqual(st["ec"]["consecutive_failures"], 1)
+        jl = (self.root / "runs" / self.rid / "journal.jsonl").read_text(encoding="utf-8")
+        self.assertIn('"ec_event": "failure"', jl)
+        self.assertIn('"source": "auto"', jl)
+        self.assertFalse(self._lock_path().exists(),
+                         "record_auto left its own lock behind")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
