@@ -1670,17 +1670,34 @@ def cmd_done(args) -> int:
                   "last_r_verdict": state.get("last_r_verdict")})
             return EXIT_DENIED
         rr = state.get("review_result") or {}
-        if rr.get("invalidated"):
+        problems = []
+        if not rr:
+            problems.append("review_result missing")
+        elif rr.get("invalidated"):
+            problems.append("stored PASS invalidated by material change")
+        elif rr.get("verdict") != "PASS":
+            problems.append("stored review_result verdict is not PASS")
+        else:
+            if not rr.get("run_id") or rr.get("run_id") != state["run_id"]:
+                problems.append("review_result.run_id empty or not this RUN")
+            if not str(rr.get("review_id") or "").strip():
+                problems.append("review_id empty")
+            if not isinstance(rr.get("state_revision"), int):
+                problems.append("state_revision missing or not an integer")
+            rr_cand = str(rr.get("candidate_commit") or "").strip().lower()
+            if not rr_cand or not CANDIDATE_SHA_RE.fullmatch(rr_cand):
+                problems.append("candidate_commit empty or not a full 40-hex SHA")
+            elif rr_cand != str(state.get("candidate_commit") or "").strip().lower():
+                problems.append("candidate_commit does not bind the current RUN artifact")
+            rr_ev = str(rr.get("evidence_id") or "").strip()
+            if not rr_ev:
+                problems.append("evidence_id empty")
+            elif rr_ev != str(state.get("evidence_id") or "").strip():
+                problems.append("evidence_id does not bind the current RUN artifact")
+        if problems:
             emit({"status": "DENIED",
-                  "reason": "stored PASS was invalidated by material change; re-review required",
-                  "invalidation_reason": rr.get("invalidation_reason")})
-            return EXIT_DENIED
-        if rr.get("verdict") == "PASS" and review_binding_mismatches(
-                rr, state.get("candidate_commit"), state.get("evidence_id")):
-            emit({"status": "DENIED",
-                  "reason": "stored PASS no longer binds the current candidate/evidence; re-review required",
-                  "changed": review_binding_mismatches(rr, state.get("candidate_commit"),
-                                                       state.get("evidence_id"))})
+                  "reason": "done fail-closed: " + "; ".join(problems) + "; re-review required",
+                  "problems": problems})
             return EXIT_DENIED
         state["status"] = "DONE"
         state["metrics"]["finished_at"] = utc_now()

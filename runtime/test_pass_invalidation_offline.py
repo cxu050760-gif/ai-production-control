@@ -184,15 +184,71 @@ class GateTests(unittest.TestCase):
         self.assertEqual(code, 0, raw)
         self.assertEqual(out["run_status"], "DONE")
 
-    def test_g4_done_denied_on_legacy_binding_mismatch(self):
-        # No invalidated flag (pre-V0.5-B state shape) but the durable binding
-        # no longer matches the stored PASS: the defensive gate must still deny.
+    def test_g4_done_denied_on_binding_mismatch(self):
+        # The durable binding no longer matches the stored PASS: fail-closed.
         rid = "RUN-20260825-100010-b010"
         _write_state(self.root, rid, _mk_state(rid, _pass_rr(rid), cand=CAND2, ev=EVID))
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
         self.assertEqual(out["status"], "DENIED")
-        self.assertEqual(out["changed"], ["candidate_commit"])
+        self.assertIn("candidate_commit does not bind the current RUN artifact",
+                      out["problems"])
+
+    def test_g5_done_denied_when_review_result_missing(self):
+        # R NEXT_ACTION case: last_r_verdict=PASS alone is not sufficient.
+        rid = "RUN-20260825-100011-b011"
+        _write_state(self.root, rid, _mk_state(rid, None, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertEqual(out["status"], "DENIED")
+        self.assertIn("review_result missing", out["problems"])
+
+    def test_g6_done_denied_when_candidate_or_evidence_empty(self):
+        # R NEXT_ACTION case: PASS stored but candidate/evidence bindings empty.
+        rid = "RUN-20260825-100012-b012"
+        rr = _pass_rr(rid)
+        rr["candidate_commit"] = ""
+        rr["evidence_id"] = ""
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=None, ev=None))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("candidate_commit empty or not a full 40-hex SHA", out["problems"])
+        self.assertIn("evidence_id empty", out["problems"])
+
+    def test_g7_done_denied_when_run_id_mismatch(self):
+        rid = "RUN-20260825-100013-b013"
+        rr = _pass_rr("RUN-20260825-100099-b099")  # bound to a different RUN
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("review_result.run_id empty or not this RUN", out["problems"])
+
+    def test_g8_done_denied_when_review_id_empty(self):
+        rid = "RUN-20260825-100014-b014"
+        rr = _pass_rr(rid)
+        rr["review_id"] = ""
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("review_id empty", out["problems"])
+
+    def test_g9_done_denied_when_state_revision_missing(self):
+        rid = "RUN-20260825-100015-b015"
+        rr = _pass_rr(rid)
+        del rr["state_revision"]
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("state_revision missing or not an integer", out["problems"])
+
+    def test_g10_done_denied_when_candidate_not_full_sha(self):
+        rid = "RUN-20260825-100016-b016"
+        rr = _pass_rr(rid)
+        rr["candidate_commit"] = "deadbeef"  # not a 40-hex SHA
+        _write_state(self.root, rid, _mk_state(rid, rr, cand="deadbeef", ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("candidate_commit empty or not a full 40-hex SHA", out["problems"])
 
 
 if __name__ == "__main__":
