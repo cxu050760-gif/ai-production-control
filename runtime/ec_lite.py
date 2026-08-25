@@ -32,6 +32,15 @@ V0.6 Slice B additionally installs a fail-closed EC gate on the official send
 path (see install()): HALT freezes transport, STOP_RETRY blocks identical
 retry loops at the transport boundary, NO_PROGRESS keeps transport open so
 escalation can travel.
+
+V0.6 Slice C closes the signal loop with auto-telemetry (see record_auto,
+install, install_telemetry): real runtime outcomes feed the same durable
+counters without anyone calling ec-record by hand — step OK -> action;
+send OK -> action, send failing for any reason other than a precondition
+DENIED -> failure; recv OK -> artifact when R returned PASS, failure when R
+returned REWORK. Telemetry is best-effort: it must never break or block the
+operation that produced the signal. Router-internal roundtrips are not
+telemetered in this slice.
 """
 from __future__ import annotations
 
@@ -100,21 +109,10 @@ def cmd_ec_record(rt, args) -> int:
         return rt.EXIT_DENIED
     with rt.RunLock(args.run_id):
         state = rt.load_state(args.run_id)
-        ec = _ec_block(state)
-        ec["last_event"] = args.event
-        ec["last_event_at"] = _now_iso()
-        if args.event == "failure":
-            ec["consecutive_failures"] = int(ec.get("consecutive_failures", 0)) + 1
-            ec["actions_since_artifact"] = int(ec.get("actions_since_artifact", 0)) + 1
-        elif args.event == "action":
-            ec["actions_since_artifact"] = int(ec.get("actions_since_artifact", 0)) + 1
-            ec["total_actions"] = int(ec.get("total_actions", 0)) + 1
-        else:  # artifact
-            ec["consecutive_failures"] = 0
-            ec["actions_since_artifact"] = 0
-            ec["artifact_count"] = int(ec.get("artifact_count", 0)) + 1
+        ec = apply_ec_event(state, args.event)
         rt.save_state(state)
-        rt.journal(args.run_id, "EC_EVENT", ec_event=args.event, detail=(args.detail or "")[:500],
+        rt.journal(args.run_id, "EC_EVENT", ec_event=args.event, source="cli",
+                   detail=(args.detail or "")[:500],
                    consecutive_failures=ec["consecutive_failures"],
                    actions_since_artifact=ec["actions_since_artifact"])
     rt.emit({"status": "OK", "event": args.event,
@@ -122,6 +120,42 @@ def cmd_ec_record(rt, args) -> int:
              "actions_since_artifact": ec["actions_since_artifact"],
              "artifact_count": ec["artifact_count"]})
     return rt.EXIT_OK
+
+
+def apply_ec_event(state: dict, event: str) -> dict:
+    """Pure counter mutation for one EC event (failure|artifact|action); returns
+    the ec block. Caller persists. Single source of counter semantics — used by
+    the manual CLI and by V0.6-C auto-telemetry alike."""
+    ec = _ec_block(state)
+    ec["last_event"] = event
+    ec["last_event_at"] = _now_iso()
+    if event == "failure":
+        ec["consecutive_failures"] = int(ec.get("consecutive_failures", 0)) + 1
+        ec["actions_since_artifact"] = int(ec.get("actions_since_artifact", 0)) + 1
+    elif event == "action":
+        ec["actions_since_artifact"] = int(ec.get("actions_since_artifact", 0)) + 1
+        ec["total_actions"] = int(ec.get("total_actions", 0)) + 1
+    else:  # artifact
+        ec["consecutive_failures"] = 0
+        ec["actions_since_artifact"] = 0
+        ec["artifact_count"] = int(ec.get("artifact_count", 0)) + 1
+    return ec
+
+
+def record_auto(rt, run_id: str, event: str) -> None:
+    """V0.6-C auto-telemetry: record one EC event from an observed runtime
+    outcome. Best-effort by design — telemetry must never break or block the
+    operation that produced the signal; on any error it stays silent."""
+    try:
+        with rt.RunLock(run_id):
+            state = rt.load_state(run_id)
+            ec = apply_ec_event(state, event)
+            rt.save_state(state)
+            rt.journal(run_id, "EC_EVENT", ec_event=event, source="auto",
+                       consecutive_failures=ec["consecutive_failures"],
+                       actions_since_artifact=ec["actions_since_artifact"])
+    except Exception:  # noqa: BLE001 - best-effort telemetry, never block caller
+        pass
 
 
 def evaluate(state: dict, thresholds: dict) -> tuple[str, list, list]:
@@ -216,9 +250,22 @@ def cmd_ec_gate(rt, args) -> int:
 
 
 def install(rt) -> None:
-    """Compose the EC gate onto the official send path (fail-closed). Mirrors the
-    effect-safety install pattern: wrap, never modify the underlying command."""
-    original_cmd_send = rt.cmd_send
+    """Compose the EC gate + send telemetry onto the official send path
+    (fail-closed). Mirrors the effect-safety install pattern: wrap, never modify
+    the underlying command. Layer order, outermost first:
+    EC gate -> send telemetry -> (effect safety / goal contract / core send)."""
+    inner_cmd_send = rt.cmd_send
+
+    def telemetry_cmd_send(args):
+        code = inner_cmd_send(args)
+        if code == rt.EXIT_OK:
+            record_auto(rt, args.run_id, "action")
+        elif code != rt.EXIT_DENIED:
+            # DENIED is a precondition refusal (gate/contract/effect), not an
+            # execution failure; everything else (transport failure, hard
+            # block...) counts as a failure signal for the EC counters.
+            record_auto(rt, args.run_id, "failure")
+        return code
 
     def gated_cmd_send(args):
         state = rt.load_state(args.run_id)
@@ -230,7 +277,7 @@ def install(rt) -> None:
             rt.emit({"status": "DENIED", "reason": f"EC_GATE: {policy_reason}",
                      "verdict": verdict, "ec_actions": actions, "ec_reasons": reasons})
             return rt.EXIT_DENIED
-        return original_cmd_send(args)
+        return telemetry_cmd_send(args)
 
     rt.cmd_send = gated_cmd_send
 
@@ -245,6 +292,39 @@ def install(rt) -> None:
                 raise RuntimeError(f"EC_GATE: {policy_reason}")
             return original_router_send(state, role, message, timeout)
         rt._router_send_to_role = gated_router_send
+
+
+def install_telemetry(rt) -> None:
+    """V0.6-C: auto-telemetry for the non-transport action path (step) and the
+    review reply path (recv). Install from the adapter that routes those
+    commands (goal_contract_lite). Best-effort; never alters exit codes.
+    Router-internal roundtrips are not telemetered in this slice."""
+    original_cmd_step = rt.cmd_step
+
+    def telemetry_cmd_step(args):
+        code = original_cmd_step(args)
+        if code == rt.EXIT_OK:
+            record_auto(rt, args.run_id, "action")
+        return code
+
+    rt.cmd_step = telemetry_cmd_step
+
+    original_cmd_recv = rt.cmd_recv
+
+    def telemetry_cmd_recv(args):
+        code = original_cmd_recv(args)
+        if code == rt.EXIT_OK:
+            try:
+                verdict_now = rt.load_state(args.run_id).get("last_r_verdict")
+            except Exception:  # noqa: BLE001
+                verdict_now = None
+            if verdict_now == "PASS":
+                record_auto(rt, args.run_id, "artifact")
+            elif verdict_now == "REWORK":
+                record_auto(rt, args.run_id, "failure")
+        return code
+
+    rt.cmd_recv = telemetry_cmd_recv
 
 
 def build_parser() -> argparse.ArgumentParser:
