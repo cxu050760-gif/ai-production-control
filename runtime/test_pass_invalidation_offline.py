@@ -213,7 +213,7 @@ class GateTests(unittest.TestCase):
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
         self.assertIn("candidate_commit empty or not a full 40-hex SHA", out["problems"])
-        self.assertIn("evidence_id empty", out["problems"])
+        self.assertIn("evidence_id empty or not a string", out["problems"])
 
     def test_g7_done_denied_when_run_id_mismatch(self):
         rid = "RUN-20260825-100013-b013"
@@ -230,7 +230,7 @@ class GateTests(unittest.TestCase):
         _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
-        self.assertIn("review_id empty", out["problems"])
+        self.assertIn("review_id empty or not a string", out["problems"])
 
     def test_g9_done_denied_when_state_revision_missing(self):
         rid = "RUN-20260825-100015-b015"
@@ -239,7 +239,7 @@ class GateTests(unittest.TestCase):
         _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
-        self.assertIn("state_revision missing or not an integer", out["problems"])
+        self.assertIn("state_revision missing or not a non-negative int (bool excluded)", out["problems"])
 
     def test_g10_done_denied_when_candidate_not_full_sha(self):
         rid = "RUN-20260825-100016-b016"
@@ -249,6 +249,69 @@ class GateTests(unittest.TestCase):
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
         self.assertIn("candidate_commit empty or not a full 40-hex SHA", out["problems"])
+
+    def test_g11_done_denied_when_state_revision_bool(self):
+        # R adversarial case: bool is an int subclass; True must not pass.
+        rid = "RUN-20260825-100017-b017"
+        rr = _pass_rr(rid)
+        rr["state_revision"] = True
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("state_revision missing or not a non-negative int (bool excluded)",
+                      out["problems"])
+
+    def test_g12_done_denied_when_state_revision_negative(self):
+        # R adversarial case: negative revisions must not pass.
+        rid = "RUN-20260825-100018-b018"
+        rr = _pass_rr(rid)
+        rr["state_revision"] = -1
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("state_revision missing or not a non-negative int (bool excluded)",
+                      out["problems"])
+
+    def test_g13_done_denied_when_state_revision_future(self):
+        # R adversarial case: verdict cannot bind a future revision.
+        rid = "RUN-20260825-100019-b019"
+        rr = _pass_rr(rid)
+        rr["state_revision"] = 99  # state.revision is 7 in _mk_state
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("state_revision is a future revision (greater than current state.revision)", out["problems"])
+
+    def test_g14_done_denied_when_current_revision_bool(self):
+        # Current state.revision must also be a genuine non-negative int.
+        rid = "RUN-20260825-100020-b020"
+        st = _mk_state(rid, _pass_rr(rid), cand=CAND, ev=EVID)
+        st["revision"] = True
+        _write_state(self.root, rid, st)
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("current state.revision missing or not a non-negative int (bool excluded)",
+                      out["problems"])
+
+    def test_g15_done_denied_when_review_id_bool(self):
+        # Disclosed extra hardening: non-string bindings are rejected by type.
+        rid = "RUN-20260825-100021-b021"
+        rr = _pass_rr(rid)
+        rr["review_id"] = True
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("review_id empty or not a string", out["problems"])
+
+    def test_g16_done_denied_when_evidence_id_bool(self):
+        # Disclosed extra hardening: non-string bindings are rejected by type.
+        rid = "RUN-20260825-100022-b022"
+        rr = _pass_rr(rid)
+        rr["evidence_id"] = True
+        _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("evidence_id empty or not a string", out["problems"])
 
 
 if __name__ == "__main__":

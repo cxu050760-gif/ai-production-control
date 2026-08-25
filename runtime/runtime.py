@@ -1680,19 +1680,27 @@ def cmd_done(args) -> int:
         else:
             if not rr.get("run_id") or rr.get("run_id") != state["run_id"]:
                 problems.append("review_result.run_id empty or not this RUN")
-            if not str(rr.get("review_id") or "").strip():
-                problems.append("review_id empty")
-            if not isinstance(rr.get("state_revision"), int):
-                problems.append("state_revision missing or not an integer")
-            rr_cand = str(rr.get("candidate_commit") or "").strip().lower()
-            if not rr_cand or not CANDIDATE_SHA_RE.fullmatch(rr_cand):
+            if type(rr.get("review_id")) is not str or not rr.get("review_id").strip():
+                problems.append("review_id empty or not a string")
+            sr = rr.get("state_revision")
+            cr = state.get("revision")
+            if type(sr) is not int or sr < 0:  # type(v) is int: bool explicitly excluded
+                problems.append("state_revision missing or not a non-negative int (bool excluded)")
+            elif type(cr) is not int or cr < 0:
+                problems.append("current state.revision missing or not a non-negative int (bool excluded)")
+            elif sr > cr:
+                problems.append("state_revision is a future revision (greater than current state.revision)")
+            if type(rr.get("candidate_commit")) is not str:
                 problems.append("candidate_commit empty or not a full 40-hex SHA")
-            elif rr_cand != str(state.get("candidate_commit") or "").strip().lower():
-                problems.append("candidate_commit does not bind the current RUN artifact")
-            rr_ev = str(rr.get("evidence_id") or "").strip()
-            if not rr_ev:
-                problems.append("evidence_id empty")
-            elif rr_ev != str(state.get("evidence_id") or "").strip():
+            else:
+                rr_cand = rr.get("candidate_commit").strip().lower()
+                if not rr_cand or not CANDIDATE_SHA_RE.fullmatch(rr_cand):
+                    problems.append("candidate_commit empty or not a full 40-hex SHA")
+                elif rr_cand != str(state.get("candidate_commit") or "").strip().lower():
+                    problems.append("candidate_commit does not bind the current RUN artifact")
+            if type(rr.get("evidence_id")) is not str or not rr.get("evidence_id").strip():
+                problems.append("evidence_id empty or not a string")
+            elif rr.get("evidence_id").strip() != str(state.get("evidence_id") or "").strip():
                 problems.append("evidence_id does not bind the current RUN artifact")
         if problems:
             emit({"status": "DENIED",
