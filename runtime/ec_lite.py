@@ -39,8 +39,14 @@ counters without anyone calling ec-record by hand — step OK -> action;
 send OK -> action, send failing for any reason other than a precondition
 DENIED -> failure; recv OK -> artifact when R returned PASS, failure when R
 returned REWORK. Telemetry is best-effort: it must never break or block the
-operation that produced the signal. Router-internal roundtrips are not
-telemetered in this slice.
+operation that produced the signal.
+
+V0.6 Slice D extends the same telemetry to the router path: after a router
+command completes, R PASS records artifact, R REWORK records failure, and any
+non-OK completion (transport failure, hard block...) records failure — except
+when the failure was the command's own EC gate denial (detected via the
+journal window; gate denials never count). Recording happens after the
+command returns, outside every runtime lock, so it can never be clobbered.
 """
 from __future__ import annotations
 
@@ -145,15 +151,21 @@ def apply_ec_event(state: dict, event: str) -> dict:
 def record_auto(rt, run_id: str, event: str) -> None:
     """V0.6-C auto-telemetry: record one EC event from an observed runtime
     outcome. Best-effort by design — telemetry must never break or block the
-    operation that produced the signal; on any error it stays silent."""
+    operation that produced the signal; on any error it stays silent. The lock
+    is acquired non-blocking: telemetry also fires from inside already-locked
+    runtime paths, and waiting on RunLock (30s) would stall real operations."""
     try:
-        with rt.RunLock(run_id):
+        lock = rt.RunLock(run_id)
+        lock._try_acquire()  # best-effort; proceed unlocked when busy
+        try:
             state = rt.load_state(run_id)
             ec = apply_ec_event(state, event)
             rt.save_state(state)
             rt.journal(run_id, "EC_EVENT", ec_event=event, source="auto",
                        consecutive_failures=ec["consecutive_failures"],
                        actions_since_artifact=ec["actions_since_artifact"])
+        finally:
+            lock.__exit__(None, None, None)
     except Exception:  # noqa: BLE001 - best-effort telemetry, never block caller
         pass
 
@@ -292,6 +304,54 @@ def install(rt) -> None:
                 raise RuntimeError(f"EC_GATE: {policy_reason}")
             return original_router_send(state, role, message, timeout)
         rt._router_send_to_role = gated_router_send
+
+    # V0.6-D: router command telemetry. All recording happens AFTER the command
+    # completes (outside every runtime lock / final save), so it cannot be
+    # clobbered: OK + R PASS -> artifact; OK + R REWORK -> failure; a non-OK
+    # completion (transport failure, hard block...) -> failure, EXCEPT when the
+    # failure was this command's own EC gate denial (gate denials never count).
+    # router-start/router-run have no --run-id (they create the RUN), so the
+    # RUN is discovered by diffing RUNS_ROOT before/after when needed.
+    def _wrap_router_cmd(cmd):
+        def wrapped(args):
+            known_before = set()
+            if rt.RUNS_ROOT.exists():
+                known_before = {p.name for p in rt.RUNS_ROOT.glob("RUN-*")}
+            code = cmd(args)
+            run_id = getattr(args, "run_id", None)
+            if not run_id and rt.RUNS_ROOT.exists():
+                new_runs = sorted({p.name for p in rt.RUNS_ROOT.glob("RUN-*")}
+                                  - known_before)
+                run_id = new_runs[-1] if new_runs else None
+            if not run_id:
+                return code
+            if code == rt.EXIT_OK:
+                try:
+                    verdict_now = rt.load_state(run_id).get("last_r_verdict")
+                except Exception:  # noqa: BLE001
+                    verdict_now = None
+                if verdict_now == "PASS":
+                    record_auto(rt, run_id, "artifact")
+                elif verdict_now == "REWORK":
+                    record_auto(rt, run_id, "failure")
+            elif code != rt.EXIT_DENIED:
+                gate_blocked = False
+                try:
+                    jl = (rt.run_dir(run_id) / "journal.jsonl").read_text(encoding="utf-8")
+                    gate_blocked = "EC_GATE_DENIAL" in jl.splitlines()[-1] or any(
+                        "EC_GATE_DENIAL" in line for line in jl.splitlines()[-3:])
+                except Exception:  # noqa: BLE001
+                    gate_blocked = False
+                if not gate_blocked:
+                    record_auto(rt, run_id, "failure")
+            return code
+        return wrapped
+
+    for _name in ("cmd_router_start", "cmd_router_step", "cmd_router_run",
+                  "cmd_router_continue"):
+        _fn = getattr(rt, _name, None)
+        if _fn is not None:
+            setattr(rt, _name, _wrap_router_cmd(_fn))
 
 
 def install_telemetry(rt) -> None:
