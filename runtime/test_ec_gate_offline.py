@@ -63,6 +63,33 @@ class PolicyTableTests(unittest.TestCase):
         for action in ("send", "step", "router"):
             self.assertTrue(ecl.ec_gate_policy("PROCEED", action)[0])
 
+    def test_p5_stop_retry_unknown_action_denied(self):
+        # R NEXT_ACTION case: unknown action under STOP_RETRY must not pass.
+        allowed, reason = ecl.ec_gate_policy("STOP_RETRY", "teleport")
+        self.assertFalse(allowed)
+        self.assertIn("fail-closed", reason)
+
+    def test_p6_unknown_verdict_send_denied(self):
+        # R NEXT_ACTION case: unknown verdict must not default-allow transport.
+        allowed, reason = ecl.ec_gate_policy("WEIRD_VERDICT", "send")
+        self.assertFalse(allowed)
+        self.assertIn("fail-closed", reason)
+
+    def test_p7_proceed_unknown_action_denied(self):
+        # Even under PROCEED an unknown action is denied (no default allow).
+        allowed, reason = ecl.ec_gate_policy("PROCEED", "explode")
+        self.assertFalse(allowed)
+        self.assertIn("fail-closed", reason)
+
+    def test_p8_known_matrix_complete_no_fail_closed(self):
+        # Every known verdict x known action combination has an explicit ruling;
+        # fail-closed must fire only for genuinely unknown combinations.
+        for verdict in ecl.KNOWN_EC_VERDICTS:
+            for action in ecl.KNOWN_EC_ACTIONS:
+                allowed, reason = ecl.ec_gate_policy(verdict, action)
+                self.assertNotIn("fail-closed", reason, (verdict, action))
+                self.assertIsInstance(allowed, bool)
+
 
 class GateCliTests(unittest.TestCase):
     def setUp(self):
@@ -152,6 +179,13 @@ class GateCliTests(unittest.TestCase):
                                    "--action", "send"], self.env)
         self.assertEqual(code, 4, raw)
         self.assertEqual(out["status"], "RUN_NOT_FOUND")
+
+    def test_c7_cli_unknown_action_rejected(self):
+        # R NEXT_ACTION case: CLI action outside send|step|router must not pass.
+        code, out, raw = self._gate("teleport")
+        self.assertEqual(code, 2, raw)
+        self.assertEqual(out["status"], "INVALID_ACTION")
+        self.assertNotIn("EC_GATE", self._journal())  # rejected before journaling
 
 
 def _ready_wrapper(root):

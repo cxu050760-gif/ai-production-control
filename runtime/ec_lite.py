@@ -166,22 +166,38 @@ def cmd_ec_check(rt, args) -> int:
     return rt.EXIT_OK
 
 
+KNOWN_EC_ACTIONS = ("send", "step", "router")
+KNOWN_EC_VERDICTS = ("PROCEED", "STOP_RETRY", "NO_PROGRESS", "HALT")
+
+
 def ec_gate_policy(verdict: str, action: str) -> tuple[bool, str]:
     """Frozen V0.6-B policy table (rules only): may the given action proceed
     under the given EC verdict? Transport is the enforced degradation point:
-    HALT freezes everything (definitions #23/#41), STOP_RETRY stops identical
-    retry loops at the transport boundary, NO_PROGRESS still allows transport
-    because escalation itself travels through send (definition #19)."""
-    if verdict == "HALT":
+    HALT freezes every gated action (definitions #23/#41), STOP_RETRY blocks
+    transport (send/router) to stop identical-retry loops while step recording
+    stays open, NO_PROGRESS keeps transport open so escalation can travel
+    (definition #19). Fail-closed (R REWORK r20): any unknown verdict/action
+    combination is DENIED with an auditable reason; nothing defaults to allow."""
+    if verdict == "HALT" and action in KNOWN_EC_ACTIONS:
         return False, "lifecycle frozen: PAUSE/STOP freezes worker action"
     if verdict == "STOP_RETRY" and action in ("send", "router"):
         return False, "transport blocked after repeated failures; CHANGE_TOOL or REQUEUE first"
-    if verdict == "NO_PROGRESS":
+    if verdict == "STOP_RETRY" and action == "step":
+        return True, "step recording stays open under STOP_RETRY; only transport is blocked"
+    if verdict == "NO_PROGRESS" and action in KNOWN_EC_ACTIONS:
         return True, "escalation pending (ESCALATE_C); transport allowed so escalation can travel"
-    return True, ""
+    if verdict == "PROCEED" and action in KNOWN_EC_ACTIONS:
+        return True, ""
+    return (False,
+            "fail-closed: unknown EC verdict/action combination (%r/%r); denied, re-evaluate"
+            % (verdict, action))
 
 
 def cmd_ec_gate(rt, args) -> int:
+    if args.action not in KNOWN_EC_ACTIONS:
+        rt.emit({"status": "INVALID_ACTION", "action": args.action,
+                 "instruction": "ec-gate --action must be one of send|step|router"})
+        return rt.EXIT_USAGE
     state, code = rt._load_or_fail(args.run_id)
     if state is None:
         return code
