@@ -1658,6 +1658,25 @@ def cmd_done(args) -> int:
         return code
     with RunLock(args.run_id):
         state = load_state(args.run_id)
+        # R REWORK3: identity closure BEFORE any comparison or state mutation.
+        # No str() or other coercion may participate in identity/evidence checks.
+        identity_problems = []
+        if type(state.get("run_id")) is not str or state.get("run_id") != args.run_id:
+            identity_problems.append(
+                "state.run_id missing or does not match the requested RUN (cross-RUN write blocked)")
+        if type(state.get("candidate_commit")) is not str \
+                or not CANDIDATE_SHA_RE.fullmatch(state.get("candidate_commit")):
+            identity_problems.append(
+                "state.candidate_commit missing or not a full 40-hex string (no coercion)")
+        if type(state.get("evidence_id")) is not str or not state.get("evidence_id"):
+            identity_problems.append(
+                "state.evidence_id missing or not a non-empty string (no coercion)")
+        if identity_problems:
+            emit({"status": "DENIED",
+                  "reason": "done fail-closed identity: " + "; ".join(identity_problems)
+                            + "; re-review required",
+                  "problems": identity_problems})
+            return EXIT_DENIED
         if state["status"] == "DONE":
             emit({"status": "OK", "note": "already DONE"})
             return EXIT_OK
@@ -1678,8 +1697,8 @@ def cmd_done(args) -> int:
         elif rr.get("verdict") != "PASS":
             problems.append("stored review_result verdict is not PASS")
         else:
-            if not rr.get("run_id") or rr.get("run_id") != state["run_id"]:
-                problems.append("review_result.run_id empty or not this RUN")
+            if type(rr.get("run_id")) is not str or rr.get("run_id") != args.run_id:
+                problems.append("review_result.run_id not a genuine string strictly bound to this RUN")
             if type(rr.get("review_id")) is not str or not rr.get("review_id").strip():
                 problems.append("review_id empty or not a string")
             sr = rr.get("state_revision")
@@ -1696,11 +1715,11 @@ def cmd_done(args) -> int:
                 rr_cand = rr.get("candidate_commit").strip().lower()
                 if not rr_cand or not CANDIDATE_SHA_RE.fullmatch(rr_cand):
                     problems.append("candidate_commit empty or not a full 40-hex SHA")
-                elif rr_cand != str(state.get("candidate_commit") or "").strip().lower():
+                elif rr_cand != state.get("candidate_commit").lower():
                     problems.append("candidate_commit does not bind the current RUN artifact")
             if type(rr.get("evidence_id")) is not str or not rr.get("evidence_id").strip():
                 problems.append("evidence_id empty or not a string")
-            elif rr.get("evidence_id").strip() != str(state.get("evidence_id") or "").strip():
+            elif rr.get("evidence_id").strip() != state.get("evidence_id"):
                 problems.append("evidence_id does not bind the current RUN artifact")
         if problems:
             emit({"status": "DENIED",

@@ -212,8 +212,12 @@ class GateTests(unittest.TestCase):
         _write_state(self.root, rid, _mk_state(rid, rr, cand=None, ev=None))
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
-        self.assertIn("candidate_commit empty or not a full 40-hex SHA", out["problems"])
-        self.assertIn("evidence_id empty or not a string", out["problems"])
+        # empty durable bindings are now caught by the identity closure,
+        # before the review_result-side checks
+        self.assertIn("state.candidate_commit missing or not a full 40-hex string (no coercion)",
+                      out["problems"])
+        self.assertIn("state.evidence_id missing or not a non-empty string (no coercion)",
+                      out["problems"])
 
     def test_g7_done_denied_when_run_id_mismatch(self):
         rid = "RUN-20260825-100013-b013"
@@ -221,7 +225,8 @@ class GateTests(unittest.TestCase):
         _write_state(self.root, rid, _mk_state(rid, rr, cand=CAND, ev=EVID))
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
-        self.assertIn("review_result.run_id empty or not this RUN", out["problems"])
+        self.assertIn("review_result.run_id not a genuine string strictly bound to this RUN",
+                      out["problems"])
 
     def test_g8_done_denied_when_review_id_empty(self):
         rid = "RUN-20260825-100014-b014"
@@ -248,7 +253,9 @@ class GateTests(unittest.TestCase):
         _write_state(self.root, rid, _mk_state(rid, rr, cand="deadbeef", ev=EVID))
         code, out, raw = _run(["done", "--run-id", rid], self.env)
         self.assertEqual(code, 5, raw)
-        self.assertIn("candidate_commit empty or not a full 40-hex SHA", out["problems"])
+        # non-SHA durable candidate is caught by the identity closure first
+        self.assertIn("state.candidate_commit missing or not a full 40-hex string (no coercion)",
+                      out["problems"])
 
     def test_g11_done_denied_when_state_revision_bool(self):
         # R adversarial case: bool is an int subclass; True must not pass.
@@ -313,6 +320,56 @@ class GateTests(unittest.TestCase):
         self.assertEqual(code, 5, raw)
         self.assertIn("evidence_id empty or not a string", out["problems"])
 
+
+    def test_g17_done_denied_when_state_evidence_id_bool(self):
+        # R REWORK3 repro: state.evidence_id=true with rr.evidence_id="True"
+        # used to slip through str() coercion; identity closure must deny.
+        rid = "RUN-20260825-100023-b023"
+        rr = _pass_rr(rid)
+        rr["evidence_id"] = "True"
+        st = _mk_state(rid, rr, cand=CAND, ev=True)
+        _write_state(self.root, rid, st)
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("state.evidence_id missing or not a non-empty string (no coercion)",
+                      out["problems"])
+        after = json.loads((self.root / "runs" / rid / "state.json").read_text(encoding="utf-8"))
+        self.assertNotEqual(after["status"], "DONE")  # no DONE side effect
+
+    def test_g18_done_denied_when_state_candidate_commit_int(self):
+        # R REWORK3 repro: an int coercing to the same 40-hex-looking string
+        # must not reach DONE.
+        rid = "RUN-20260825-100024-b024"
+        int_cand = 1234567890123456789012345678901234567890
+        rr = _pass_rr(rid)
+        rr["candidate_commit"] = "1234567890123456789012345678901234567890"
+        st = _mk_state(rid, rr, cand=int_cand, ev=EVID)
+        _write_state(self.root, rid, st)
+        code, out, raw = _run(["done", "--run-id", rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("state.candidate_commit missing or not a full 40-hex string (no coercion)",
+                      out["problems"])
+        after = json.loads((self.root / "runs" / rid / "state.json").read_text(encoding="utf-8"))
+        self.assertNotEqual(after["status"], "DONE")
+
+    def test_g19_done_denied_on_run_id_mismatch_no_cross_run_write(self):
+        # R REWORK3 repro: directory RUN-A holding state.run_id=RUN-B must not
+        # complete, and RUN-B must not be created or written.
+        dir_rid = "RUN-20260825-100025-b025"
+        other_rid = "RUN-20260825-100026-b026"
+        rr = _pass_rr(other_rid)
+        st = _mk_state(other_rid, rr, cand=CAND, ev=EVID)
+        _write_state(self.root, dir_rid, st)  # foreign state inside dir_rid's dir
+        code, out, raw = _run(["done", "--run-id", dir_rid], self.env)
+        self.assertEqual(code, 5, raw)
+        self.assertIn("state.run_id missing or does not match the requested RUN (cross-RUN write blocked)",
+                      out["problems"])
+        after = json.loads((self.root / "runs" / dir_rid / "state.json").read_text(encoding="utf-8"))
+        self.assertNotEqual(after["status"], "DONE")           # original untouched
+        self.assertFalse((self.root / "runs" / other_rid).exists())  # no cross-RUN creation
+        jl = self.root / "runs" / dir_rid / "journal.jsonl"
+        if jl.exists():
+            self.assertNotIn("RUN_DONE", jl.read_text(encoding="utf-8"))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
