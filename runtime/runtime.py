@@ -1219,19 +1219,55 @@ def cmd_evidence_register(args) -> int:
               "path": str(edir)})
         return EXIT_DENIED
     try:
-        doc = json.loads(doc_path.read_text(encoding="utf-8"))
+        text = doc_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        emit({"status": "DENIED", "reason": f"machine_evidence.json unreadable: {exc}",
+              "path": str(edir)})
+        return EXIT_DENIED
+    try:
+        doc = json.loads(text)
     except ValueError as exc:
         emit({"status": "DENIED", "reason": f"machine_evidence.json unparseable: {exc}",
               "path": str(edir)})
         return EXIT_DENIED
-    run_cand = (state.get("candidate_commit") or "").strip().lower()
-    doc_cand = str(doc.get("candidate_commit") or "").strip().lower()
-    if run_cand and doc_cand and run_cand != doc_cand:
+    if type(doc) is not dict:
+        emit({"status": "DENIED",
+              "reason": "machine_evidence.json top level is not a JSON object; fail-closed",
+              "path": str(edir)})
+        return EXIT_DENIED
+    # R REWORK (verdict_r19_v2): the document is read EXACTLY ONCE; parse,
+    # strict candidate validation and sha256 all use the SAME text snapshot,
+    # so a swap between reads can never split the registered candidate from
+    # the hashed bytes. candidate_commit (on either side) must be a genuine
+    # str and a full 40-hex SHA before any (lowercase) comparison; str()
+    # coercion of int/float/bool is forbidden - a numeric value whose
+    # decimal text happens to equal a hex string must still be DENIED.
+    # Missing fields follow the frozen rules (no cross-check, no recorded
+    # candidate) and every DENIED path has ZERO persistence side-effects.
+    digest = sha256_text(text)
+    run_cand_raw = state.get("candidate_commit")
+    doc_cand_raw = doc.get("candidate_commit")
+    run_cand = None
+    doc_cand = None
+    if run_cand_raw is not None:
+        if type(run_cand_raw) is not str or not CANDIDATE_SHA_RE.fullmatch(run_cand_raw):
+            emit({"status": "DENIED",
+                  "reason": "run candidate_commit not a genuine 40-hex string (no coercion); fail-closed",
+                  "run_candidate": run_cand_raw})
+            return EXIT_DENIED
+        run_cand = run_cand_raw
+    if doc_cand_raw is not None:
+        if type(doc_cand_raw) is not str or not CANDIDATE_SHA_RE.fullmatch(doc_cand_raw):
+            emit({"status": "DENIED",
+                  "reason": "evidence candidate_commit not a genuine 40-hex string (no coercion); fail-closed",
+                  "evidence_candidate": doc_cand_raw})
+            return EXIT_DENIED
+        doc_cand = doc_cand_raw
+    if run_cand and doc_cand and run_cand.lower() != doc_cand.lower():
         emit({"status": "DENIED",
               "reason": "evidence candidate_commit does not bind this RUN's candidate; fail-closed",
-              "run_candidate": run_cand, "evidence_candidate": doc_cand})
+              "run_candidate": run_cand.lower(), "evidence_candidate": doc_cand.lower()})
         return EXIT_DENIED
-    digest = sha256_text(doc_path.read_text(encoding="utf-8"))
     reg = state.get("evidence_registry") or {}
     reregistered = eid in reg
     reg[eid] = {"path": str(edir.resolve()),

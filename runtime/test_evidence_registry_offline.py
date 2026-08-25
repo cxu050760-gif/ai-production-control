@@ -7,6 +7,7 @@ machine_evidence.json, bound to the RUN's candidate when both sides carry one,
 fail-closed on any precondition failure, and re-verifiable for tamper/loss
 detection at any later time.
 """
+import argparse
 import json
 import os
 import shutil
@@ -185,6 +186,100 @@ class EvidenceRegistryTests(unittest.TestCase):
         self.assertEqual(out["status"], "EVIDENCE_NOT_REGISTERED")
         self.assertEqual(out["registered"], [eid])
 
+
+    def _state_bytes(self):
+        return (self.root / "runs" / self.rid / "state.json").read_bytes()
+
+    def test_v12_non_object_json_fail_closed_zero_side_effects(self):
+        # Parseable non-object JSON (true / [..] / ".." / null) must be
+        # fail-closed DENIED (exit 5) with NO registry, NO
+        # EVIDENCE_REGISTERED and byte-identical state (verdict_r19_v2).
+        for tag, raw in (("12a", "true"), ("12b", "[1, 2]"),
+                         ("12c", '"text"'), ("12d", "null")):
+            eid = "HE-" + ("a" * (16 - len(tag))) + tag
+            d = self._mk_evidence(eid, raw=raw)
+            before = self._state_bytes()
+            code, out, raw_out = self._register(eid, d)
+            self.assertEqual(code, 5, f"{tag}: {raw_out}")
+            self.assertEqual(out["status"], "DENIED", tag)
+            self.assertNotIn("EVIDENCE_REGISTERED", self._journal(), tag)
+            st = json.loads((self.root / "runs" / self.rid / "state.json")
+                             .read_text(encoding="utf-8"))
+            self.assertNotIn("evidence_registry", st, tag)
+            self.assertEqual(self._state_bytes(), before, f"{tag}: state bytes changed")
+
+    def test_v13_numeric_candidate_commit_denied_zero_side_effects(self):
+        # A JSON NUMBER whose decimal text equals the RUN's 40-hex must be
+        # DENIED: str() coercion is forbidden, so the old implementation's
+        # accept-by-coercion path is closed with zero side effects
+        # (verdict_r19_v2).
+        digit_hex = "1234567890" * 4  # 40 chars, all digits -> valid hex
+        self._set_run_candidate(digit_hex)
+        tag = "130"
+        eid = "HE-" + ("a" * (16 - len(tag))) + tag
+        d = self._mk_evidence(eid, {"candidate_commit": int(digit_hex)})
+        before = self._state_bytes()
+        code, out, raw = self._register(eid, d)
+        self.assertEqual(code, 5, raw)
+        self.assertEqual(out["status"], "DENIED")
+        self.assertNotIn("EVIDENCE_REGISTERED", self._journal())
+        st = json.loads((self.root / "runs" / self.rid / "state.json")
+                         .read_text(encoding="utf-8"))
+        self.assertNotIn("evidence_registry", st)
+        self.assertEqual(self._state_bytes(), before, "state bytes changed")
+
+    def test_v14_read_once_snapshot_no_identity_split(self):
+        # Race adversarial (verdict_r19_v2): registration must read
+        # machine_evidence.json EXACTLY ONCE and hash the SAME text it
+        # parsed and validated. The old double-read implementation let a
+        # swap between 'validation' and 'digest' register candidate A with
+        # the hash of candidate B and still verify all_valid=true. The
+        # single-snapshot fix makes that identity split structurally
+        # impossible: a hostile swap is either never seen (only one read)
+        # or, after registration, detected as hash drift.
+        self._set_run_candidate(CAND_A)
+        tag = "140"
+        eid = "HE-" + ("a" * (16 - len(tag))) + tag
+        d = self._mk_evidence(eid, {"candidate_commit": CAND_A, "v": 1})
+        doc_file = d / "machine_evidence.json"
+        first_text = doc_file.read_text(encoding="utf-8")
+        swapped_text = json.dumps({"candidate_commit": CAND_B, "v": 99})
+        reads = {"count": 0}
+        original_read_text = Path.read_text
+
+        def hostile_read(path_like, *args, **kwargs):
+            if str(path_like) == str(doc_file):
+                reads["count"] += 1
+                if reads["count"] >= 2:
+                    return swapped_text  # a swap a second read would see
+            return original_read_text(path_like, *args, **kwargs)
+
+        backup_root = rt.RUNS_ROOT
+        rt.RUNS_ROOT = self.root / "runs"
+        Path.read_text = hostile_read
+        entry_digest = None
+        entry_cand = None
+        try:
+            code = rt.cmd_evidence_register(
+                argparse.Namespace(run_id=self.rid, evidence_id=eid, path=str(d)))
+            self.assertEqual(code, rt.EXIT_OK)
+            self.assertEqual(reads["count"], 1, "document must be read exactly once")
+            st = rt.load_state(self.rid)
+            entry = st["evidence_registry"][eid]
+            entry_digest = entry["sha256_machine_evidence"]
+            entry_cand = entry["candidate_commit"]
+        finally:
+            Path.read_text = original_read_text
+            rt.RUNS_ROOT = backup_root
+        self.assertEqual(entry_digest, rt.sha256_text(first_text))
+        self.assertEqual(entry_cand, CAND_A)
+        # a real post-registration swap to B is caught as hash drift, never
+        # reported all_valid=true (no identity split)
+        doc_file.write_text(swapped_text, encoding="utf-8")
+        code, out, raw = self._verify(eid)
+        self.assertEqual(code, 0, raw)
+        self.assertFalse(out["all_valid"])
+        self.assertIn("hash drift", out["results"][eid]["reason"])
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
