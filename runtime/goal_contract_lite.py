@@ -26,6 +26,8 @@ if str(SRC) not in sys.path:
 # Reuse the Legacy Goal Contract canonical serialization/hash primitives.
 from aicontrol.util import canonical_json, sha256_text  # noqa: E402
 
+import ec_lite as ec  # noqa: E402  (V0.6-C auto-telemetry; rules-only, no cycle)
+
 CONTRACT_SCHEMA_VERSION = 1
 DEFAULT_ACCEPTANCE = ("Independent Reviewer must return PASS for the frozen GOAL under this Goal Contract identity.",)
 CONTRACT_HASH_RE = re.compile(r"(?im)^\s*GOAL_CONTRACT_HASH\s*=\s*([0-9a-f]{64})\s*$")
@@ -495,6 +497,7 @@ def main(argv: list[str] | None = None) -> int:
         rt.emit({"status": "HARD_BLOCKED", "reason": f"Goal Contract input invalid: {exc}"})
         return rt.EXIT_HARD_BLOCKED
     install(rt, options)
+    ec.install_telemetry(rt)  # V0.6-C: auto EC telemetry on step/recv paths
     sys.argv = [str(HERE / "runtime.py"), *cleaned]
     return rt.main()
 
