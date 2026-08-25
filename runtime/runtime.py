@@ -99,6 +99,7 @@ R_URL_RE = re.compile(r"^https://chatgpt\.com/c/[A-Za-z0-9-]{8,}$")
 RUN_ID_RE = re.compile(r"^RUN-[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$")
 CONV_ID_RE = re.compile(r"/c/([A-Za-z0-9-]+)")
 CANDIDATE_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+HE_ID_RE = re.compile(r"^HE-[0-9a-f]{16}$")
 
 INTERNAL_STRINGS = [
     YZ_LIB,
@@ -1195,6 +1196,97 @@ def cmd_review_valid(args) -> int:
     else:
         emit({"status": "OK", "valid": True, "reason": "PASS binding matches current artifact",
               "review_id": rr.get("review_id")})
+    return EXIT_OK
+
+
+def _evidence_doc_path(evidence_dir: Path) -> Path:
+    return evidence_dir / "machine_evidence.json"
+
+
+def cmd_evidence_register(args) -> int:
+    state, code = _load_or_fail(args.run_id)
+    if state is None:
+        return code
+    eid = (args.evidence_id or "").strip()
+    if not HE_ID_RE.fullmatch(eid):
+        emit({"status": "INVALID_EVIDENCE_ID", "evidence_id": args.evidence_id,
+              "instruction": "evidence id must match HE-<16 lowercase hex>"})
+        return EXIT_USAGE
+    edir = Path(args.path)
+    doc_path = _evidence_doc_path(edir)
+    if not doc_path.exists():
+        emit({"status": "DENIED", "reason": "machine_evidence.json missing; fail-closed",
+              "path": str(edir)})
+        return EXIT_DENIED
+    try:
+        doc = json.loads(doc_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        emit({"status": "DENIED", "reason": f"machine_evidence.json unparseable: {exc}",
+              "path": str(edir)})
+        return EXIT_DENIED
+    run_cand = (state.get("candidate_commit") or "").strip().lower()
+    doc_cand = str(doc.get("candidate_commit") or "").strip().lower()
+    if run_cand and doc_cand and run_cand != doc_cand:
+        emit({"status": "DENIED",
+              "reason": "evidence candidate_commit does not bind this RUN's candidate; fail-closed",
+              "run_candidate": run_cand, "evidence_candidate": doc_cand})
+        return EXIT_DENIED
+    digest = sha256_text(doc_path.read_text(encoding="utf-8"))
+    reg = state.get("evidence_registry") or {}
+    reregistered = eid in reg
+    reg[eid] = {"path": str(edir.resolve()),
+                "sha256_machine_evidence": digest,
+                "candidate_commit": doc_cand or None,
+                "registered_at": utc_now(),
+                "reregistered": bool(reregistered)}
+    state["evidence_registry"] = reg
+    journal(args.run_id, "EVIDENCE_REGISTERED", evidence_id=eid,
+            sha256_machine_evidence=digest, reregistered=bool(reregistered))
+    save_state(state)
+    emit({"status": "OK", "evidence_id": eid, "sha256_machine_evidence": digest,
+          "reregistered": bool(reregistered),
+          "registered_count": len(reg)})
+    return EXIT_OK
+
+
+def cmd_evidence_verify(args) -> int:
+    state, code = _load_or_fail(args.run_id)
+    if state is None:
+        return code
+    reg = state.get("evidence_registry") or {}
+    if args.evidence_id:
+        if args.evidence_id not in reg:
+            emit({"status": "EVIDENCE_NOT_REGISTERED", "evidence_id": args.evidence_id,
+                  "registered": sorted(reg.keys())})
+            return EXIT_OK
+        ids = [args.evidence_id]
+    else:
+        ids = sorted(reg.keys())
+    results = {}
+    all_valid = True
+    for eid in ids:
+        entry = reg[eid]
+        doc_path = _evidence_doc_path(Path(entry["path"]))
+        r = {"path": entry["path"], "valid": False, "reason": None}
+        if not Path(entry["path"]).exists():
+            r["reason"] = "evidence directory missing"
+        elif not doc_path.exists():
+            r["reason"] = "machine_evidence.json missing"
+        else:
+            try:
+                text = doc_path.read_text(encoding="utf-8")
+                json.loads(text)
+                if sha256_text(text) != entry.get("sha256_machine_evidence"):
+                    r["reason"] = "machine_evidence.json hash drift (tampered or edited)"
+                else:
+                    r["valid"] = True
+            except ValueError:
+                r["reason"] = "machine_evidence.json unparseable"
+        if not r["valid"]:
+            all_valid = False
+        results[eid] = r
+    emit({"status": "OK", "all_valid": bool(all_valid), "checked": len(results),
+          "results": results})
     return EXIT_OK
 
 
@@ -2332,6 +2424,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--run-id", dest="run_id", required=True)
     s.add_argument("--candidate-commit", dest="candidate_commit", default=None)
     s.add_argument("--evidence-id", dest="evidence_id", default=None)
+    s = sub.add_parser("evidence-register")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--evidence-id", dest="evidence_id", required=True)
+    s.add_argument("--path", required=True)
+    s = sub.add_parser("evidence-verify")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--evidence-id", dest="evidence_id", default=None)
     s = sub.add_parser("step")
     s.add_argument("--run-id", dest="run_id", required=True)
     s.add_argument("--current", required=True)
@@ -2414,6 +2513,7 @@ def main() -> int:
         "state-verify": cmd_state_verify, "state-recover": cmd_state_recover,
         "task-add": cmd_task_add, "task-update": cmd_task_update, "task-list": cmd_task_list,
         "review-valid": cmd_review_valid,
+        "evidence-register": cmd_evidence_register, "evidence-verify": cmd_evidence_verify,
         "send": cmd_send, "recv": cmd_recv, "done": cmd_done, "metrics": cmd_metrics, "health": cmd_health,
         "work": cmd_work, "report": cmd_report,
         "router-start": cmd_router_start, "router-step": cmd_router_step, "router-run": cmd_router_run,
