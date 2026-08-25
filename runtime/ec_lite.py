@@ -314,26 +314,47 @@ def install(rt) -> None:
             return original_router_send(state, role, message, timeout)
         rt._router_send_to_role = gated_router_send
 
-    # V0.6-D: router command telemetry. All recording happens AFTER the command
-    # completes (outside every runtime lock / final save), so it cannot be
-    # clobbered: OK + R PASS -> artifact; OK + R REWORK -> failure; a non-OK
-    # completion (transport failure, hard block...) -> failure, EXCEPT when the
-    # failure was this command's own EC gate denial (gate denials never count).
-    # router-start/router-run have no --run-id (they create the RUN), so the
-    # RUN is discovered by diffing RUNS_ROOT before/after when needed.
+    # V0.6-D (R22 REWORK4): router command telemetry with per-command
+    # journal cursor. Every command records a monotonic boundary (journal
+    # byte offset) BEFORE it runs on an existing RUN, then considers ONLY
+    # entries/results created AFTER that boundary. For newly created RUNs,
+    # the boundary is established after the RUN_ID is identified. Historical
+    # EC_GATE_DENIAL and stale last_r_verdict never affect current counting.
+    # Terminal/no-op/idempotent continuation (no new journal entries) and old
+    # verdicts are not counted again.
     def _wrap_router_cmd(cmd):
         def wrapped(args):
             known_before = set()
             if rt.RUNS_ROOT.exists():
                 known_before = {p.name for p in rt.RUNS_ROOT.glob("RUN-*")}
-            code = cmd(args)
+            # Phase 1: record pre-command cursor for EXISTING RUN
             run_id = getattr(args, "run_id", None)
+            journal_cursor_before = 0
+            if run_id:
+                jp = rt.run_dir(run_id) / "journal.jsonl"
+                if jp.exists():
+                    journal_cursor_before = jp.stat().st_size
+            code = cmd(args)
+            # Phase 2: identify RUN for NEWLY CREATED RUN
             if not run_id and rt.RUNS_ROOT.exists():
                 new_runs = sorted({p.name for p in rt.RUNS_ROOT.glob("RUN-*")}
                                   - known_before)
                 run_id = new_runs[-1] if new_runs else None
             if not run_id:
                 return code
+            # Phase 3: read only NEW journal entries after cursor
+            jp = rt.run_dir(run_id) / "journal.jsonl"
+            new_entries = []
+            if jp.exists():
+                full_text = jp.read_text(encoding="utf-8")
+                journal_size_after = jp.stat().st_size
+                if journal_size_after > journal_cursor_before:
+                    raw = full_text[journal_cursor_before:]
+                    new_entries = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+            # No new entries = terminal/no-op/idempotent continuation
+            if not new_entries and code == rt.EXIT_OK:
+                return code
+            # Phase 4: count only current-command results
             if code == rt.EXIT_OK:
                 try:
                     verdict_now = rt.load_state(run_id).get("last_r_verdict")
@@ -346,9 +367,7 @@ def install(rt) -> None:
             elif code != rt.EXIT_DENIED:
                 gate_blocked = False
                 try:
-                    jl = (rt.run_dir(run_id) / "journal.jsonl").read_text(encoding="utf-8")
-                    gate_blocked = "EC_GATE_DENIAL" in jl.splitlines()[-1] or any(
-                        "EC_GATE_DENIAL" in line for line in jl.splitlines()[-3:])
+                    gate_blocked = any("EC_GATE_DENIAL" in entry for entry in new_entries)
                 except Exception:  # noqa: BLE001
                     gate_blocked = False
                 if not gate_blocked:

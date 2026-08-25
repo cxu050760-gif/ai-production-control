@@ -128,6 +128,38 @@ class RouterTelemetryTests(unittest.TestCase):
         self.assertEqual(st["ec"]["consecutive_failures"], 3)  # gate denial not counted
         self.assertIn("EC_GATE_DENIAL", self._journal(env, rid))
 
+    def test_r4_old_gate_denial_masks_new_failure(self):
+        convs = {B1: {"sid": "bsid", "replies": ["bad output"]},
+                 R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== REWORK"]}}
+        env = _script_env(self.root, convs)
+        code, out, raw = _run(ADAPTER, ["router-start", "--goal-file", str(self.goal),
+                                        "--b-url", B1, "--r-url", R1,
+                                        "--acceptance", "A"], env)
+        self.assertEqual(code, 0, raw[-800:])
+        rid = out["run_id"]
+        # inject old EC_GATE_DENIAL into journal
+        jp = Path(env["APC_RUNTIME_STATE_ROOT"]) / "runs" / rid / "journal.jsonl"
+        with open(jp, "a", encoding="utf-8") as f:
+            f.write('{"ts":"old","event":"EC_GATE_DENIAL","action":"router"}\n')
+        code, out, raw = _run(ADAPTER, ["router-continue", "--run-id", rid,
+                                        "--timeout", "30"], env)
+        st = self._state(env, rid)
+        self.assertGreaterEqual(st["ec"]["consecutive_failures"], 1)
+
+    def test_r5_done_idempotent_no_double_count(self):
+        convs = {B1: {"sid": "bsid", "replies": [f"candidate v1\nGOAL_CONTRACT_HASH={self.h}"]},
+                 R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]}}
+        env = _script_env(self.root, convs)
+        code, out, raw = self._router_run(env)
+        self.assertEqual(code, 0, raw[-800:])
+        rid = out["run_id"]
+        st1 = self._state(env, rid)
+        art1 = st1["ec"]["artifact_count"]
+        code2, out2, raw2 = _run(ADAPTER, ["router-continue", "--run-id", rid,
+                                           "--timeout", "30"], env)
+        st2 = self._state(env, rid)
+        self.assertEqual(st2["ec"]["artifact_count"], art1)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
