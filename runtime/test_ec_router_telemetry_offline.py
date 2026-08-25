@@ -160,6 +160,84 @@ class RouterTelemetryTests(unittest.TestCase):
         st2 = self._state(env, rid)
         self.assertEqual(st2["ec"]["artifact_count"], art1)
 
+    def test_r6_unicode_cursor_boundary_preserves_counting(self):
+        # Verify binary cursor boundary works with multi-byte UTF-8 (Chinese)
+        # in journal. Chinese text injected into journal, then fresh PASS
+        # must create artifact_count=1.
+        convs = {B1: {"sid": "bsid", "replies": ["bad output"]},
+                 R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== REWORK"]}}
+        env = _script_env(self.root, convs)
+        code, out, raw = _run(ADAPTER, ["router-start", "--goal-file", str(self.goal),
+                                        "--b-url", B1, "--r-url", R1,
+                                        "--acceptance", "A"], env)
+        self.assertEqual(code, 0, raw[-800:])
+        rid = out["run_id"]
+        # Inject Chinese (multi-byte UTF-8) text directly into journal
+        jp = Path(env["APC_RUNTIME_STATE_ROOT"]) / "runs" / rid / "journal.jsonl"
+        with open(jp, "a", encoding="utf-8") as f:
+            f.write('{"ts":"2026-08-25T09:00:00+00:00","event":"NOTE","message":"修复中文路径和编码问题"}\n')
+        jl_pre = self._journal(env, rid)
+        self.assertIn("修复中文路径", jl_pre)
+        st1 = self._state(env, rid)
+        # After REWORK, ec counter may not exist yet
+        art1 = st1.get("ec", {}).get("artifact_count", 0)
+        # Now continue and get a fresh PASS - must correctly count artifact
+        convs2 = {B1: {"sid": "bsid", "replies": [f"candidate v2\nGOAL_CONTRACT_HASH={self.h}"]},
+                  R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]}}
+        env2 = _script_env(self.root, convs2)
+        code2, out2, raw2 = _run(ADAPTER, ["router-continue", "--run-id", rid,
+                                           "--timeout", "30"], env2)
+        self.assertEqual(code2, 0, raw2[-800:])
+        st2 = self._state(env2, rid)
+        # Artifact count must be 1 (first artifact from PASS)
+        self.assertEqual(st2["ec"]["artifact_count"], art1 + 1)
+        # Verify the journal still contains the Chinese text (cursor boundary
+        # should have correctly handled the multi-byte UTF-8)
+        jl_post = self._journal(env2, rid)
+        self.assertIn("修复中文路径", jl_post)
+
+    def test_r7_current_gate_denial_not_counted(self):
+        # Current-command EC_GATE_DENIAL must keep consecutive_failures=3
+        # and must not add source=auto failure.
+        convs = {B1: {"sid": "bsid", "replies": [f"candidate v1\nGOAL_CONTRACT_HASH={self.h}"]},
+                 R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]}}
+        env = _script_env(self.root, convs)
+        code, out, raw = _run(ADAPTER, ["router-start", "--goal-file", str(self.goal),
+                                        "--b-url", B1, "--r-url", R1,
+                                        "--acceptance", "A"], env)
+        self.assertEqual(code, 0, raw[-800:])
+        rid = out["run_id"]
+        # Inject 3 manual failures to set consecutive_failures=3
+        for _ in range(3):
+            _run(EC, ["ec-record", "--run-id", rid, "--event", "failure"], env)
+        st1 = self._state(env, rid)
+        self.assertEqual(st1["ec"]["consecutive_failures"], 3)
+        # Now run router-continue which should trigger EC_GATE_DENIAL
+        # (consecutive failures >= 3 blocks transport)
+        convs2 = {B1: {"sid": "bsid", "replies": [f"candidate v2\nGOAL_CONTRACT_HASH={self.h}"]},
+                  R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]}}
+        env2 = _script_env(self.root, convs2)
+        code2, out2, raw2 = _run(ADAPTER, ["router-continue", "--run-id", rid,
+                                           "--timeout", "30"], env2)
+        self.assertNotEqual(code2, 0, raw2[-800:])
+        st2 = self._state(env2, rid)
+        # consecutive_failures must still be 3 (gate denial not counted)
+        self.assertEqual(st2["ec"]["consecutive_failures"], 3)
+        # No new source=auto failure should be in journal
+        jl2 = self._journal(env2, rid)
+        self.assertIn("EC_GATE_DENIAL", jl2)
+        # Count auto-source failures - should not have a new one
+        import json as _json
+        auto_failure_count = 0
+        for line in jl2.strip().splitlines():
+            try:
+                entry = _json.loads(line)
+                if entry.get("event") == "failure" and entry.get("source") == "auto":
+                    auto_failure_count += 1
+            except _json.JSONDecodeError:
+                pass
+        self.assertEqual(auto_failure_count, 0, f"Unexpected auto failure count: {auto_failure_count}")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

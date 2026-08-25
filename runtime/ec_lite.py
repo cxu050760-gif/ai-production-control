@@ -342,14 +342,19 @@ def install(rt) -> None:
                 run_id = new_runs[-1] if new_runs else None
             if not run_id:
                 return code
-            # Phase 3: read only NEW journal entries after cursor
+            # Phase 3: read only NEW journal entries after cursor (binary-safe)
             jp = rt.run_dir(run_id) / "journal.jsonl"
             new_entries = []
             if jp.exists():
-                full_text = jp.read_text(encoding="utf-8")
                 journal_size_after = jp.stat().st_size
                 if journal_size_after > journal_cursor_before:
-                    raw = full_text[journal_cursor_before:]
+                    # Use binary seek/read to avoid byte/unit mismatch with
+                    # Unicode string slicing when journal contains multi-byte
+                    # UTF-8 characters (e.g., Chinese NEXT_ACTION).
+                    with open(jp, 'rb') as f:
+                        f.seek(journal_cursor_before)
+                        raw_bytes = f.read()
+                    raw = raw_bytes.decode('utf-8')
                     new_entries = [ln.strip() for ln in raw.splitlines() if ln.strip()]
             # No new entries = terminal/no-op/idempotent continuation
             if not new_entries and code == rt.EXIT_OK:
