@@ -1,11 +1,17 @@
 """Offline deterministic tests for the V0.7 C strategic-correction contract.
 
-Proves (per V07-C-CONTRACT-2 acceptance):
+Proves (per V07-C-CONTRACT-2 acceptance + REWORK NEXT_ACTION):
 - at least one passing no-correction case;
-- at least one passing premature-milestone correction case;
+- at least one passing premature-milestone correction case (route-fact derived);
 - at least one passing Builder-role-separation (self-review/verdict) correction case;
-- promotion-assumption and scope-drift correction cases;
+- promotion-assumption and scope-drift correction cases, including DIRECT
+  "promote"-only detection without a second trigger such as "crown";
+- fact-driven premature-milestone detection: an explicitly allowed milestone
+  (e.g. allowed V0.8/V0.9) must NOT be corrected as premature, while a
+  route-declared premature milestone outside the allowed set IS corrected;
 - advisory-only: no mutation occurs (pure dict return; no IO/state);
+- every result, INCLUDING every rejection envelope, carries advisory_only=true,
+  non_authority=true, and mutated_external_state=false;
 - deterministic, machine-parseable, fail-closed on invalid/bounded input.
 """
 import json
@@ -33,6 +39,10 @@ def kinds(out):
     return [cor["kind"] for cor in out["corrections"]]
 
 
+def with_plan(goal, detail):
+    return proposal(goal=goal, plan=[{"step": 1, "action": "plan_item", "detail": detail}])
+
+
 class TestNoCorrection(unittest.TestCase):
     def test_no_correction_case(self):
         out = c.evaluate(proposal())
@@ -48,20 +58,60 @@ class TestNoCorrection(unittest.TestCase):
         self.assertEqual(c.evaluate(proposal()), c.evaluate(proposal()))
 
 
-class TestCorrections(unittest.TestCase):
+class TestFactDrivenPremature(unittest.TestCase):
+    """REWORK NEXT_ACTION: detection derives from supplied frozen_route facts."""
+
+    def test_allowed_v09_not_premature(self):
+        route = {"current_milestone": "V0.9", "allowed_milestones": ["V0.9"],
+                 "premature_milestones": [], "controller_owned_actions": []}
+        out = c.evaluate({"proposal": {"goal": "finish V0.9 work",
+                                       "plan": [{"step": 1, "action": "plan_item", "detail": "d"}],
+                                       "context": {}},
+                          "frozen_route": route})
+        self.assertNotIn("premature_milestone", kinds(out))
+        self.assertIn("none", kinds(out))
+
+    def test_allowed_v08_not_corrected_despite_premature_list(self):
+        route = {"current_milestone": "V0.7", "allowed_milestones": ["V0.7", "V0.8"],
+                 "premature_milestones": ["V0.8", "V0.9"], "controller_owned_actions": []}
+        out = c.evaluate({"proposal": {"goal": "begin V0.8 approved work",
+                                       "plan": [{"step": 1, "action": "plan_item", "detail": "d"}],
+                                       "context": {}},
+                          "frozen_route": route})
+        self.assertNotIn("premature_milestone", kinds(out))
+
+    def test_unallowed_premature_still_corrected(self):
+        route = {"current_milestone": "V0.7", "allowed_milestones": ["V0.7"],
+                 "premature_milestones": ["V0.8"], "controller_owned_actions": []}
+        out = c.evaluate({"proposal": {"goal": "begin V0.8 work now",
+                                       "plan": [{"step": 1, "action": "plan_item", "detail": "d"}],
+                                       "context": {}},
+                          "frozen_route": route})
+        self.assertIn("premature_milestone", kinds(out))
+
     def test_premature_milestone_correction(self):
         out = c.evaluate(proposal(goal="begin V0.8 Brain work now"))
         self.assertIn("premature_milestone", kinds(out))
 
+
+class TestPromotionDetection(unittest.TestCase):
+    """REWORK NEXT_ACTION: direct promote detection without relying on crown."""
+
+    def test_promote_only_detected(self):
+        out = c.evaluate(proposal(goal="promote candidate now"))
+        self.assertIn("promotion_assumption", kinds(out))
+
+    def test_promotion_assumption_correction(self):
+        out = c.evaluate(with_plan("deliver the C contract slice",
+                                   "crown and promote V0.8 automatically"))
+        self.assertIn("promotion_assumption", kinds(out))
+        self.assertIn("premature_milestone", kinds(out))
+
+
+class TestRoleAndScope(unittest.TestCase):
     def test_builder_self_review_correction(self):
         out = c.evaluate(proposal(goal="review and assign my own verdict on this slice"))
         self.assertIn("builder_role_self_review", kinds(out))
-
-    def test_promotion_assumption_correction(self):
-        out = c.evaluate(proposal(plan=[{"step": 1, "action": "plan_item",
-                                         "detail": "crown and promote V0.8 automatically"}]))
-        self.assertIn("promotion_assumption", kinds(out))
-        self.assertIn("premature_milestone", kinds(out))
 
     def test_scope_drift_correction(self):
         out = c.evaluate(proposal(goal="add Strategic Reuse and C_URL integration"))
@@ -71,11 +121,14 @@ class TestCorrections(unittest.TestCase):
         out = c.evaluate(proposal(goal="use crown_milestone to advance"))
         self.assertIn("scope_drift", kinds(out))
 
+
+class TestInvariants(unittest.TestCase):
     def test_all_results_advisory_only_and_no_mutation(self):
         for inp in (proposal(),
                     proposal(goal="begin V0.8 Brain work"),
                     proposal(goal="assign_verdict to myself"),
                     proposal(goal="promotion crown milestone"),
+                    proposal(goal="promote candidate now"),
                     proposal(goal="Strategic Reuse implementation")):
             out = c.evaluate(inp)
             self.assertIs(out["advisory_only"], True)
@@ -84,6 +137,18 @@ class TestCorrections(unittest.TestCase):
             self.assertEqual(set(out.keys()),
                              {"schema", "corrections", "advisory_only", "non_authority",
                               "mutated_external_state", "detection_note"})
+
+    def test_rejection_envelopes_retain_advisory_flags(self):
+        """REWORK NEXT_ACTION: rejection envelopes keep the all-results invariant."""
+        for bad in (None, [], "x", 3, {},
+                    {"proposal": {"goal": "g"}},
+                    {"proposal": None, "frozen_route": ROUTE},
+                    {"proposal": {"goal": "g"}, "frozen_route": []}):
+            out = c.evaluate(bad)
+            self.assertIs(out["advisory_only"], True)
+            self.assertIs(out["non_authority"], True)
+            self.assertIs(out["mutated_external_state"], False)
+            self.assertIs(out["valid"], False)
 
 
 class TestFailClosed(unittest.TestCase):

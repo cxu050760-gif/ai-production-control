@@ -16,14 +16,20 @@ Boundary contract (per task scope):
 Design invariants (provable by test_strategic_correction_offline.py):
 1. Pure computation: no IO, no subprocess, no eval/exec, no global state, no
    imports from the runtime internals. The only observable effect is the
-   returned dict (every returned dict carries "advisory_only": true and
-   "non_authority": true).
+   returned dict (every returned dict, including every rejection envelope,
+   carries "advisory_only": true, "non_authority": true, and
+   "mutated_external_state": false).
 2. Fail closed on ill-formed / out-of-bound input: a present non-object (incl.
    falsey) proposal or frozen_route is rejected with a machine-parseable
    {"valid": false, "error": "<code>"}; bounds are deterministic.
 3. Canonicalization/serialization failures become structured deterministic
    rejection results (json.dumps allow_nan=False guarded).
 4. Deterministic: identical input -> identical correction result.
+5. Premature-milestone detection derives EXCLUSIVELY from the supplied
+   frozen_route facts (premature_milestones minus explicitly allowed
+   milestones); a milestone explicitly allowed by the route is never
+   corrected as premature, and no hard-coded milestone token is treated as
+   premature.
 
 Input contract (strict, bounded):
     {
@@ -82,9 +88,12 @@ MAX_OWNED = 16
 MAX_ROUTE_SERIALIZED = 4096
 
 # Detection lexicons (pure data; never executed).
-_PREMATURE_MILESTONES_HINT = ("V0.8", "V0.9", "v0.8", "v0.9", "V1.0", "v1.0")
-_PROMOTION_TERMS = ("promotion", "crown", "advance_milestone", "advance milestone",
-                    "milestone crown", "declare pass", "declare_pass")
+# Premature-milestone detection derives EXCLUSIVELY from the supplied
+# frozen_route facts (premature_milestones minus explicitly allowed
+# milestones); no hard-coded milestone tokens are treated as premature.
+_PROMOTION_TERMS = ("promote", "promotion", "crown", "advance_milestone",
+                    "advance milestone", "milestone crown", "declare pass",
+                    "declare_pass")
 _SELF_REVIEW_TERMS = ("self-report", "self review", "self-review", "self_report",
                       "assign_verdict", "assign verdict", "own verdict",
                       "builder self", "declare_pass", "declare pass",
@@ -95,7 +104,9 @@ _SCOPE_DRIFT_TERMS = ("strategic reuse", "strategic_reuse", "brain_url", "Brain_
 
 
 def _bounded_error(code: str) -> Dict[str, Any]:
-    return {"valid": False, "schema": SCHEMA, "error": code, "corrections": None}
+    return {"valid": False, "schema": SCHEMA, "error": code, "corrections": None,
+            "advisory_only": True, "non_authority": True,
+            "mutated_external_state": False}
 
 
 def _canonical(obj: Any, cap: int) -> Tuple[str, Optional[str]]:
@@ -229,12 +240,13 @@ def evaluate(input_: Any) -> Dict[str, Any]:
     def add(kind: str, detail: str) -> None:
         corrections.append({"kind": kind, "severity": "advisory", "detail": detail})
 
-    # premature milestone work (explicit hints or milestone tokens outside the allowed set)
-    if any(t in corpus for t in _PREMATURE_MILESTONES_HINT) or any(
-            p and p.lower() in corpus for p in premature if isinstance(p, str)):
+    # premature milestone work: derived ONLY from supplied frozen_route facts;
+    # a milestone explicitly in the route's allowed set is never corrected.
+    effective_premature = [p for p in premature if p not in allowed]
+    if any(p in corpus for p in effective_premature):
         add("premature_milestone",
-            "proposal references a milestone outside the frozen route's allowed set")
-    # unauthorized promotion assumptions
+            "proposal references a route-declared premature milestone not in the allowed set")
+    # unauthorized promotion assumptions (direct detection incl. "promote")
     if any(t in corpus for t in _PROMOTION_TERMS):
         add("promotion_assumption",
             "proposal assumes promotion/crowning/advance milestones contrary to Controller authority")
