@@ -22,6 +22,11 @@ Design invariants (provable by test_strategic_correction_offline.py):
 2. Fail closed on ill-formed / out-of-bound input: a present non-object (incl.
    falsey) proposal or frozen_route is rejected with a machine-parseable
    {"valid": false, "error": "<code>"}; bounds are deterministic.
+   evaluate() NEVER raises: explicit null or non-list values for
+   proposal.plan, allowed_milestones, premature_milestones, and
+   controller_owned_actions are structurally rejected (PROPOSAL_PLAN_INVALID /
+   ROUTE_LIST_INVALID_*) before any iteration, so no TypeError can ever
+   surface to the caller.
 3. Canonicalization/serialization failures become structured deterministic
    rejection results (json.dumps allow_nan=False guarded).
 4. Deterministic: identical input -> identical correction result.
@@ -36,16 +41,16 @@ Input contract (strict, bounded):
       "proposal": {                     # bounded Strategic-Brain-shaped proposal
         "schema": str,                  # optional; accepted as-is
         "goal": str,                    # 1..256 chars
-        "plan": [                       # 0..32 items
+        "plan": [                       # list 0..32 items (explicit null rejected)
           {"step": int, "action": str, "detail": str(1..128)}
         ],
         "context": {str: <json scalar>, ...}   # dict; <=16 keys; SB bounds apply
       },
       "frozen_route": {
         "current_milestone": str,       # 1..64 chars
-        "allowed_milestones": [str,...] # 0..16 items, each <=64 chars
-        "premature_milestones": [str,...]  # 0..8 items, each <=64 chars
-        "controller_owned_actions": [str,...]  # 0..16 items
+        "allowed_milestones": [str,...] # list 0..16 items, each <=64 chars (explicit null rejected)
+        "premature_milestones": [str,...]  # list 0..8 items, each <=64 chars (explicit null rejected)
+        "controller_owned_actions": [str,...]  # list 0..16 items (explicit null rejected)
       }
     }
 
@@ -151,6 +156,9 @@ def _validate_proposal(proposal: Any) -> Optional[str]:
         return "PROPOSAL_GOAL_INVALID"
     plan = proposal.get("plan")
     if plan is None:
+        if "plan" in proposal:
+            # explicit null plan is rejected (fail-closed; never iterated)
+            return "PROPOSAL_PLAN_INVALID"
         plan = []
     if not isinstance(plan, list) or not (0 <= len(plan) <= MAX_STEPS):
         return "PROPOSAL_PLAN_INVALID"
@@ -178,20 +186,23 @@ def _validate_route(route: Any) -> Optional[str]:
         return "ROUTE_CURRENT_INVALID"
     for field, cap in (("allowed_milestones", MAX_MILES), ("controller_owned_actions", MAX_OWNED)):
         items = route.get(field)
-        if items is None:
-            continue
+        if items is None and field not in route:
+            continue  # absent list field is allowed (bounded to [] in evaluation)
         if not isinstance(items, list) or not (0 <= len(items) <= cap):
+            # explicit null or non-list value is rejected (fail-closed)
             return "ROUTE_LIST_INVALID_" + field.upper()
         for it in items:
             if not isinstance(it, str) or not (1 <= len(it) <= MAX_MILE_LEN):
                 return "ROUTE_ITEM_INVALID_" + field.upper()
     prem = route.get("premature_milestones")
-    if prem is not None:
-        if not isinstance(prem, list) or not (0 <= len(prem) <= MAX_PREMATURE):
-            return "ROUTE_LIST_INVALID_PREMATURE"
-        for it in prem:
-            if not isinstance(it, str) or not (1 <= len(it) <= MAX_MILE_LEN):
-                return "ROUTE_ITEM_INVALID_PREMATURE"
+    if prem is None and "premature_milestones" not in route:
+        prem = []
+    if not isinstance(prem, list) or not (0 <= len(prem) <= MAX_PREMATURE):
+        # explicit null or non-list value is rejected (fail-closed)
+        return "ROUTE_LIST_INVALID_PREMATURE"
+    for it in prem:
+        if not isinstance(it, str) or not (1 <= len(it) <= MAX_MILE_LEN):
+            return "ROUTE_ITEM_INVALID_PREMATURE"
     return None
 
 
@@ -209,7 +220,11 @@ def _corpus(proposal: Dict[str, Any]) -> str:
 
 
 def evaluate(input_: Any) -> Dict[str, Any]:
-    """C boundary function: bounded proposal + frozen-route facts -> advisory result."""
+    """C boundary function: bounded proposal + frozen-route facts -> advisory result.
+
+    Guaranteed to NEVER raise: every ill-formed or out-of-bound branch returns
+    a structured rejection envelope (see invariant 2).
+    """
     if not isinstance(input_, dict):
         return _bounded_error("INPUT_NOT_OBJECT")
     proposal = input_.get("proposal")

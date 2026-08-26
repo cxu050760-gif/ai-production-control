@@ -1,6 +1,6 @@
 """Offline deterministic tests for the V0.7 C strategic-correction contract.
 
-Proves (per V07-C-CONTRACT-2 acceptance + REWORK NEXT_ACTION):
+Proves (per V07-C-CONTRACT-2 acceptance + REWORK v2 NEXT_ACTION):
 - at least one passing no-correction case;
 - at least one passing premature-milestone correction case (route-fact derived);
 - at least one passing Builder-role-separation (self-review/verdict) correction case;
@@ -9,6 +9,9 @@ Proves (per V07-C-CONTRACT-2 acceptance + REWORK NEXT_ACTION):
 - fact-driven premature-milestone detection: an explicitly allowed milestone
   (e.g. allowed V0.8/V0.9) must NOT be corrected as premature, while a
   route-declared premature milestone outside the allowed set IS corrected;
+- evaluate() NEVER raises: explicit null or non-list proposal.plan,
+  allowed_milestones, premature_milestones, and controller_owned_actions are
+  rejected with structured advisory rejection envelopes (REWORK v2);
 - advisory-only: no mutation occurs (pure dict return; no IO/state);
 - every result, INCLUDING every rejection envelope, carries advisory_only=true,
   non_authority=true, and mutated_external_state=false;
@@ -43,6 +46,22 @@ def with_plan(goal, detail):
     return proposal(goal=goal, plan=[{"step": 1, "action": "plan_item", "detail": detail}])
 
 
+def with_route(route, goal="deliver the C contract slice", plan=None, context=None):
+    p = {"goal": goal,
+         "plan": plan if plan is not None else [{"step": 1, "action": "plan_item", "detail": "assemble_proposal"}],
+         "context": context if context is not None else {"milestone": "V0.7"}}
+    return {"proposal": p, "frozen_route": route}
+
+
+def assert_advisory_envelope(tc, out, error=None):
+    tc.assertIs(out["advisory_only"], True)
+    tc.assertIs(out["non_authority"], True)
+    tc.assertIs(out["mutated_external_state"], False)
+    tc.assertIs(out["valid"], False)
+    if error is not None:
+        tc.assertEqual(out["error"], error)
+
+
 class TestNoCorrection(unittest.TestCase):
     def test_no_correction_case(self):
         out = c.evaluate(proposal())
@@ -64,29 +83,20 @@ class TestFactDrivenPremature(unittest.TestCase):
     def test_allowed_v09_not_premature(self):
         route = {"current_milestone": "V0.9", "allowed_milestones": ["V0.9"],
                  "premature_milestones": [], "controller_owned_actions": []}
-        out = c.evaluate({"proposal": {"goal": "finish V0.9 work",
-                                       "plan": [{"step": 1, "action": "plan_item", "detail": "d"}],
-                                       "context": {}},
-                          "frozen_route": route})
+        out = c.evaluate(with_route(route, goal="finish V0.9 work"))
         self.assertNotIn("premature_milestone", kinds(out))
         self.assertIn("none", kinds(out))
 
     def test_allowed_v08_not_corrected_despite_premature_list(self):
         route = {"current_milestone": "V0.7", "allowed_milestones": ["V0.7", "V0.8"],
                  "premature_milestones": ["V0.8", "V0.9"], "controller_owned_actions": []}
-        out = c.evaluate({"proposal": {"goal": "begin V0.8 approved work",
-                                       "plan": [{"step": 1, "action": "plan_item", "detail": "d"}],
-                                       "context": {}},
-                          "frozen_route": route})
+        out = c.evaluate(with_route(route, goal="begin V0.8 approved work"))
         self.assertNotIn("premature_milestone", kinds(out))
 
     def test_unallowed_premature_still_corrected(self):
         route = {"current_milestone": "V0.7", "allowed_milestones": ["V0.7"],
                  "premature_milestones": ["V0.8"], "controller_owned_actions": []}
-        out = c.evaluate({"proposal": {"goal": "begin V0.8 work now",
-                                       "plan": [{"step": 1, "action": "plan_item", "detail": "d"}],
-                                       "context": {}},
-                          "frozen_route": route})
+        out = c.evaluate(with_route(route, goal="begin V0.8 work now"))
         self.assertIn("premature_milestone", kinds(out))
 
     def test_premature_milestone_correction(self):
@@ -145,10 +155,7 @@ class TestInvariants(unittest.TestCase):
                     {"proposal": None, "frozen_route": ROUTE},
                     {"proposal": {"goal": "g"}, "frozen_route": []}):
             out = c.evaluate(bad)
-            self.assertIs(out["advisory_only"], True)
-            self.assertIs(out["non_authority"], True)
-            self.assertIs(out["mutated_external_state"], False)
-            self.assertIs(out["valid"], False)
+            assert_advisory_envelope(self, out)
 
 
 class TestFailClosed(unittest.TestCase):
@@ -184,6 +191,58 @@ class TestFailClosed(unittest.TestCase):
         b = c.evaluate({"proposal": [], "frozen_route": ROUTE})
         self.assertEqual(a, b)
         self.assertIs(a["valid"], False)
+
+
+class TestExplicitNullAndNonList(unittest.TestCase):
+    """REWORK v2: explicit null / non-list list-typed fields are structurally
+    rejected with advisory envelopes; evaluate() NEVER raises."""
+
+    def test_explicit_null_plan_rejected(self):
+        out = c.evaluate({"proposal": {"goal": "g", "plan": None, "context": {}},
+                          "frozen_route": ROUTE})
+        assert_advisory_envelope(self, out, error="PROPOSAL_PLAN_INVALID")
+
+    def test_non_list_plan_rejected(self):
+        out = c.evaluate({"proposal": {"goal": "g", "plan": "not-a-list", "context": {}},
+                          "frozen_route": ROUTE})
+        assert_advisory_envelope(self, out, error="PROPOSAL_PLAN_INVALID")
+
+    def test_explicit_null_allowed_milestones_rejected(self):
+        route = dict(ROUTE, allowed_milestones=None)
+        out = c.evaluate(with_route(route))
+        assert_advisory_envelope(self, out, error="ROUTE_LIST_INVALID_ALLOWED_MILESTONES")
+
+    def test_non_list_allowed_milestones_rejected(self):
+        route = dict(ROUTE, allowed_milestones="V0.7")
+        out = c.evaluate(with_route(route))
+        assert_advisory_envelope(self, out, error="ROUTE_LIST_INVALID_ALLOWED_MILESTONES")
+
+    def test_explicit_null_premature_milestones_rejected(self):
+        route = dict(ROUTE, premature_milestones=None)
+        out = c.evaluate(with_route(route))
+        assert_advisory_envelope(self, out, error="ROUTE_LIST_INVALID_PREMATURE")
+
+    def test_explicit_null_controller_owned_actions_rejected(self):
+        route = dict(ROUTE, controller_owned_actions=None)
+        out = c.evaluate(with_route(route))
+        assert_advisory_envelope(self, out, error="ROUTE_LIST_INVALID_CONTROLLER_OWNED_ACTIONS")
+
+    def test_all_four_null_cases_never_raise(self):
+        inputs = [
+            {"proposal": {"goal": "g", "plan": None}, "frozen_route": ROUTE},
+            {"proposal": {"goal": "g"}, "frozen_route": dict(ROUTE, allowed_milestones=None)},
+            {"proposal": {"goal": "g"}, "frozen_route": dict(ROUTE, premature_milestones=None)},
+            {"proposal": {"goal": "g"}, "frozen_route": dict(ROUTE, controller_owned_actions=None)},
+        ]
+        for inp in inputs:
+            out = c.evaluate(inp)  # must NOT raise
+            assert_advisory_envelope(self, out)
+
+    def test_absent_list_fields_still_valid(self):
+        route = {"current_milestone": "V0.7"}
+        out = c.evaluate(with_route(route, goal="deliver the C contract slice"))
+        self.assertIn("none", kinds(out))
+        self.assertIs(out["advisory_only"], True)
 
 
 if __name__ == "__main__":
