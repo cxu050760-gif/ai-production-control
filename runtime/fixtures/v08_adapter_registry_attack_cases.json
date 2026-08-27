@@ -16,7 +16,7 @@
     {"id":"wrong_schema_version","operation":"set","path":["schema_version"],"value":2},
     {"id":"credential_like_secret_field","operation":"set","path":["providers",0,"api_key"],"value":"should-never-exist"},
     {"id":"transport_internal_leakage","operation":"set","path":["workers",0,"bsk_session"],"value":"opaque"},
-    {"id":"registry_generation_rollback","operation":"set","path":["registry_generation"],"value":0,"minimum_generation":1},
+    {"id":"registry_generation_rollback","operation":"set","path":["registry_generation"],"value":1,"minimum_generation":2},
     {"id":"api_model_web_session_confusion","operation":"set","path":["providers",0,"kind"],"value":"API_MODEL"},
     {"id":"availability_falsely_implying_verified","operation":"set","path":["reviewers",0,"availability"],"value":"AVAILABLE"},
     {"id":"malformed_inner_object_correct_outer","operation":"set","path":["providers",0],"value":{"provider_id":"broken","kind":"API_MODEL"}},
