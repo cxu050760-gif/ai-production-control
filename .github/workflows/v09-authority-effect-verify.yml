@@ -1,0 +1,93 @@
+name: V0.9 Authority Effect Speculative Evidence
+
+on:
+  push:
+    branches:
+      - spec/v0.9-b2/authority-effect-evidence
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SPECULATIVE_BASE: b65a51267969824c05a8794376eac766edc08eb9
+
+jobs:
+  offline-red-evidence:
+    name: Offline RED / Evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify speculative ancestry and B2 ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${SPECULATIVE_BASE}^{commit}"
+          git merge-base --is-ancestor "${SPECULATIVE_BASE}" HEAD
+          python - <<'PY'
+          import subprocess
+          allowed = {
+              "runtime/fixtures/v09_authority_effect_attack_cases.json",
+              "runtime/test_v09_attack_matrix_offline.py",
+              "runtime/v09_authority_effect_evidence.py",
+              ".github/workflows/v09-authority-effect-verify.yml",
+          }
+          base = "b65a51267969824c05a8794376eac766edc08eb9"
+          changed = {
+              line.strip()
+              for line in subprocess.check_output(
+                  ["git", "diff", "--name-only", f"{base}..HEAD"], text=True
+              ).splitlines()
+              if line.strip()
+          }
+          extra = sorted(changed - allowed)
+          missing = sorted(allowed - changed)
+          if extra:
+              raise SystemExit(f"OUT_OF_OWNERSHIP:{extra}")
+          if missing:
+              raise SystemExit(f"MISSING_B2_PATHS:{missing}")
+          print("B2_OWNERSHIP_OK", sorted(changed))
+          PY
+
+      - name: Compile B2 harnesses
+        run: |
+          python -m py_compile \
+            runtime/test_v09_attack_matrix_offline.py \
+            runtime/v09_authority_effect_evidence.py
+
+      - name: Execute frozen 36-case RED baseline
+        run: |
+          python runtime/test_v09_attack_matrix_offline.py \
+            --emit-jsonl "${RUNNER_TEMP}/v09-attack-results.jsonl"
+
+      - name: Generate exact-SHA machine Evidence
+        run: |
+          python runtime/v09_authority_effect_evidence.py \
+            --base-sha "${SPECULATIVE_BASE}" \
+            --candidate-sha "$(git rev-parse HEAD)" \
+            --output "${RUNNER_TEMP}/v09-authority-effect-evidence.json"
+          python - <<'PY'
+          import json, os, pathlib
+          p = pathlib.Path(os.environ["RUNNER_TEMP"]) / "v09-authority-effect-evidence.json"
+          doc = json.loads(p.read_text(encoding="utf-8"))
+          print(json.dumps({
+              "candidate_sha": doc["candidate_sha"],
+              "attack_matrix_count": doc["attack_matrix_count"],
+              "red_baseline_count": doc["red_baseline_count"],
+              "crown_test_status": doc["crown_test_status"],
+              "overall_result": doc["overall_result"],
+              "evidence_digest": doc["evidence_digest"],
+          }, sort_keys=True))
+          if doc["attack_matrix_count"] != 36:
+              raise SystemExit("ATTACK_MATRIX_COUNT_MISMATCH")
+          PY
