@@ -1,8 +1,8 @@
-"""V07-INTEGRATE-2 preflight verification against the three frozen V0.7 contracts.
+"""V07-INTEGRATE-2 verification matrix against the three frozen V0.7 contracts.
 
-This is NOT a replacement integration implementation. It attacks the accepted
-contracts at their public boundaries so the later B1 candidate can be checked
-against an already-fixed semantic matrix.
+This is NOT a replacement integration implementation. It attacks accepted public
+contract boundaries and freezes the exact valid output shapes expected by the
+candidate malformed-intermediate tests.
 """
 from __future__ import annotations
 
@@ -27,19 +27,75 @@ class ContractMatrix(unittest.TestCase):
         if "mutated_external_state" in result:
             self.assertFalse(result.get("mutated_external_state"), result)
 
+    def assert_brain_shape(self, proposal):
+        self.assertEqual(proposal.get("schema"), "v0.7-strategic-brain-proposal")
+        self.assertIsInstance(proposal.get("proposal_id"), str, proposal)
+        self.assertIsInstance(proposal.get("goal"), str, proposal)
+        self.assertEqual(proposal.get("origin"), "strategic-brain", proposal)
+        self.assertIsInstance(proposal.get("plan"), list, proposal)
+        self.assertTrue(proposal["plan"], proposal)
+        for item in proposal["plan"]:
+            self.assertIsInstance(item, dict, proposal)
+            self.assertIsInstance(item.get("step"), int, proposal)
+            self.assertEqual(item.get("action"), "plan_item", proposal)
+            self.assertIsInstance(item.get("detail"), str, proposal)
+            self.assertTrue(item["detail"], proposal)
+        self.assert_advisory(proposal)
+
+    def assert_c_shape(self, correction):
+        self.assertEqual(correction.get("schema"), "v0.7-c-advisory")
+        self.assertIsInstance(correction.get("corrections"), list, correction)
+        self.assertTrue(correction["corrections"], correction)
+        allowed = {"none", "scope_drift", "premature_milestone",
+                   "builder_role_self_review", "promotion_assumption"}
+        for item in correction["corrections"]:
+            self.assertIsInstance(item, dict, correction)
+            self.assertIn(item.get("kind"), allowed, correction)
+            self.assertEqual(item.get("severity"), "advisory", correction)
+            self.assertIsInstance(item.get("detail"), str, correction)
+            self.assertTrue(item["detail"], correction)
+        self.assertIsInstance(correction.get("detection_note"), str, correction)
+        self.assertTrue(correction["detection_note"], correction)
+        self.assert_advisory(correction)
+
+    def assert_reuse_shape(self, reuse):
+        self.assertEqual(reuse.get("schema"), "v0.7-strategic-reuse-advisory")
+        self.assertIn(reuse.get("decision"), {"reuse", "reject"}, reuse)
+        self.assertIsInstance(reuse.get("decision_detail"), str, reuse)
+        self.assertTrue(reuse["decision_detail"], reuse)
+        self.assertIsInstance(reuse.get("reasons"), list, reuse)
+        self.assertTrue(reuse["reasons"], reuse)
+        allowed = {"none", "milestone_incompatible", "scope_incompatible",
+                   "acceptance_unsatisfied", "role_separation_violation", "authority_violation"}
+        for item in reuse["reasons"]:
+            self.assertIsInstance(item, dict, reuse)
+            self.assertIn(item.get("kind"), allowed, reuse)
+            self.assertEqual(item.get("severity"), "advisory", reuse)
+            self.assertIsInstance(item.get("detail"), str, reuse)
+            self.assertTrue(item["detail"], reuse)
+        self.assertIsInstance(reuse.get("detection_note"), str, reuse)
+        self.assertTrue(reuse["detection_note"], reuse)
+        self.assert_advisory(reuse)
+
+    def test_candidate_fixture_uses_one_native_fact_source(self):
+        packet = fx.integration_case()
+        self.assertEqual(set(packet), {"brain_input", "frozen_facts", "reuse_material"})
+        self.assertNotIn("frozen_route", packet)
+        self.assertNotIn("reuse_input", packet)
+        self.assertEqual(packet["frozen_facts"]["current_milestone"], "V0.7")
+
     def test_normal_three_contract_path(self):
         proposal = sb.build_proposal(fx.brain_input())
-        self.assertEqual(proposal.get("schema"), "v0.7-strategic-brain-proposal")
-        self.assert_advisory(proposal)
+        self.assert_brain_shape(proposal)
 
         correction = cmod.evaluate({"proposal": proposal, "frozen_route": fx.frozen_route()})
         self.assertEqual([c["kind"] for c in correction["corrections"]], ["none"])
-        self.assert_advisory(correction)
+        self.assert_c_shape(correction)
 
         reuse = sr.evaluate({"material": fx.reusable_material(), "current": fx.reuse_current()})
         self.assertEqual(reuse.get("decision"), "reuse", reuse)
         self.assertEqual([r["kind"] for r in reuse["reasons"]], ["none"])
-        self.assert_advisory(reuse)
+        self.assert_reuse_shape(reuse)
 
     def test_c_attack_matrix_detected(self):
         matrix = fx.load_attack_matrix()["c_attacks"]
@@ -50,23 +106,18 @@ class ContractMatrix(unittest.TestCase):
                 kinds = {item["kind"] for item in result.get("corrections") or []}
                 self.assertIn(attack["expected_kind"], kinds, result)
                 self.assertNotEqual(kinds, {"none"}, result)
-                self.assert_advisory(result)
+                self.assert_c_shape(result)
 
     def test_reuse_reject_matrix(self):
         cases = []
-
         material = fx.reusable_material(); material["claimed_milestone"] = "V0.6"
         cases.append(("stale_milestone", material, fx.reuse_current(), "milestone_incompatible"))
-
         material = fx.reusable_material(); material["requested_scope"] = ["provider-adapter"]
         cases.append(("out_of_scope", material, fx.reuse_current(), "scope_incompatible"))
-
         material = fx.reusable_material(); material["promises"] = ["deterministic"]
         cases.append(("acceptance", material, fx.reuse_current(), "acceptance_unsatisfied"))
-
         material = fx.reusable_material(); material["strategy"] = "Builder self-review and assign verdict"
         cases.append(("role", material, fx.reuse_current(), "role_separation_violation"))
-
         material = fx.reusable_material(); material["strategy"] = "promotion and crown milestone"
         cases.append(("authority", material, fx.reuse_current(), "authority_violation"))
 
@@ -76,7 +127,7 @@ class ContractMatrix(unittest.TestCase):
                 self.assertEqual(result.get("decision"), "reject", result)
                 kinds = {item["kind"] for item in result.get("reasons") or []}
                 self.assertIn(expected, kinds, result)
-                self.assert_advisory(result)
+                self.assert_reuse_shape(result)
 
     def test_current_facts_override_historical_material(self):
         current = fx.reuse_current()
@@ -88,6 +139,7 @@ class ContractMatrix(unittest.TestCase):
         kinds = {x["kind"] for x in result["reasons"]}
         self.assertTrue({"milestone_incompatible", "scope_incompatible", "acceptance_unsatisfied"} <= kinds)
         self.assertEqual(result["decision"], "reject")
+        self.assert_reuse_shape(result)
 
     def test_authority_text_never_becomes_authority(self):
         route_before = copy.deepcopy(fx.frozen_route())
@@ -96,13 +148,12 @@ class ContractMatrix(unittest.TestCase):
         for text in matrix:
             with self.subTest(text=text):
                 proposal = sb.build_proposal(fx.brain_input(text))
-                self.assert_advisory(proposal)
-                self.assertTrue(all(step.get("action") == "plan_item" for step in proposal.get("plan", [])))
+                self.assert_brain_shape(proposal)
                 correction = cmod.evaluate({"proposal": proposal, "frozen_route": route_before})
-                self.assert_advisory(correction)
+                self.assert_c_shape(correction)
                 material = fx.reusable_material(); material["strategy"] = text
                 reuse = sr.evaluate({"material": material, "current": current_before})
-                self.assert_advisory(reuse)
+                self.assert_reuse_shape(reuse)
         self.assertEqual(route_before, fx.frozen_route())
         self.assertEqual(current_before, fx.reuse_current())
 
