@@ -71,6 +71,7 @@ jobs:
             --emit-jsonl "${RUNNER_TEMP}/v09-attack-results.jsonl"
 
       - name: Generate exact-SHA machine Evidence
+        id: evidence
         run: |
           python runtime/v09_authority_effect_evidence.py \
             --base-sha "${SPECULATIVE_BASE}" \
@@ -90,4 +91,17 @@ jobs:
           }, sort_keys=True))
           if doc["attack_matrix_count"] != 36:
               raise SystemExit("ATTACK_MATRIX_COUNT_MISMATCH")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"red_baseline_count={doc['red_baseline_count']}\n")
+              out.write(f"crown_test_status={doc['crown_test_status']}\n")
           PY
+
+      - name: Publish speculative machine Evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-red-${{ steps.evidence.outputs.red_baseline_count }}-crown-${{ steps.evidence.outputs.crown_test_status }}
+          path: |
+            ${{ runner.temp }}/v09-authority-effect-evidence.json
+            ${{ runner.temp }}/v09-attack-results.jsonl
+          if-no-files-found: error
+          retention-days: 7
