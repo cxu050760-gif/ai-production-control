@@ -4,8 +4,8 @@ Usage:
   python runtime/v07_integration_evidence.py --candidate <40-char-HEAD> --preflight
   python runtime/v07_integration_evidence.py --candidate <40-char-HEAD>
 
-Full mode fails if B1's test-only adapter is still unbound. Success is machine
-asserted by command exits plus the explicit final marker; no Builder prose counts.
+Full mode fails if B1's test-only adapter is unbound. Success is machine asserted
+by command exits plus the explicit final marker; no Builder prose counts.
 """
 from __future__ import annotations
 
@@ -35,15 +35,7 @@ LEGACY_NO_DIFF_PATHS = (
 
 
 def run(cmd, env=None):
-    """Run one fail-fast evidence command with deterministic UTF-8 child stdio.
-
-    The production Runtime already forces UTF-8 at its official CLI entry, but
-    some historical offline tests invoke internal helper CLIs directly. Hosted
-    Windows runners otherwise default redirected stdout to cp1252, which can
-    make an unrelated historical test crash while printing Chinese fixture text.
-    Normalizing only the Evidence process environment preserves the tested code
-    and makes the regression runner portable; it does not alter production.
-    """
+    """Run one fail-fast evidence command with deterministic UTF-8 child stdio."""
     proc_env = os.environ.copy()
     proc_env["PYTHONUTF8"] = "1"
     proc_env["PYTHONIOENCODING"] = "utf-8"
@@ -75,11 +67,10 @@ def require_git_binding(candidate):
 
 
 def require_legacy_surfaces_unchanged():
-    # Top-level legacy tests include machine-bound fixtures (specific local Python
-    # executable/browser profile paths) and therefore are not portable to a clean
-    # hosted runner. Rather than weakening those tests or pretending they pass,
-    # prove B2 changed neither their implementation nor their tested production
-    # surface, then run the portable core smoke plus every runtime offline test.
+    # The frozen repository's top-level legacy suite contains machine-bound paths
+    # (local Python/browser profile). Do not weaken those tests or pretend they are
+    # portable: prove the legacy code/tests are byte-identical to the accepted base,
+    # then run every portable runtime offline test plus the core store/path smoke.
     run(["git", "diff", "--exit-code", BASE_COMMIT, "--", *LEGACY_NO_DIFF_PATHS])
     print("REGRESSION_LEGACY_SURFACES=UNCHANGED_FROM_FROZEN_BASE")
 
@@ -103,18 +94,14 @@ def main():
         "runtime/test_strategic_brain_contract_offline.py",
         "runtime/test_strategic_correction_offline.py",
         "runtime/test_strategic_reuse_contract_offline.py",
+        "runtime/test_strategic_integration_offline.py",
         "runtime/test_v07_integration_contract_matrix_offline.py",
     ):
         run([PYTHON, test])
 
-    # Complete V0.1-V0.7 runtime offline regression collection. Candidate-only
-    # B1 tests remain explicit skips until the adapter is bound; preflight can
-    # never turn those skips into a full-integration success marker.
+    # Complete runtime offline regression, including B1 smoke and B2 candidate
+    # attack tests when the adapter is bound.
     run([PYTHON, "-m", "unittest", "discover", "-s", "runtime", "-p", "test_*_offline.py"])
-
-    # Portable controller/store/path smoke. The rest of top-level tests are
-    # machine-bound on the frozen base; byte-identical legacy surface binding
-    # above is the fail-fast regression guarantee for those fixtures.
     run([PYTHON, "tests/test_core.py"])
 
     if args.preflight:
@@ -125,6 +112,7 @@ def main():
     if not adapter_bound():
         raise SystemExit("EVIDENCE_FAIL=B1_INTERFACE_NOT_BOUND")
 
+    # Run the candidate attack file explicitly again as the final integration gate.
     run([PYTHON, "runtime/test_v07_integration_candidate_offline.py"])
     print(f"{SUCCESS_MARKER} candidate={args.candidate}")
     return 0
