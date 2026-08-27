@@ -21,6 +21,9 @@ from v08_adapter_contract import (
     ERROR_WORKER_FAILED,
     ERROR_WORKER_TIMEOUT,
     ERROR_WORKER_UNAVAILABLE,
+    PROVIDER_KIND_API_MODEL,
+    PROVIDER_KIND_WEB_SESSION,
+    PROVIDER_KINDS,
     RESULT_DONE,
     AdapterContractError,
     build_task_capsule,
@@ -100,6 +103,16 @@ def _worker_record(registry: dict[str, Any], worker_id: str) -> tuple[dict[str, 
     return worker, providers[worker["provider_id"]]
 
 
+def _validate_provider_kind_runtime(provider: dict[str, Any], expected_kind: str) -> None:
+    if expected_kind not in PROVIDER_KINDS:
+        raise AdapterContractError(ERROR_REGISTRY_INVALID, f"invalid invocation ProviderKind: {expected_kind!r}")
+    actual_kind = provider.get("kind")
+    if actual_kind != expected_kind:
+        raise AdapterContractError(
+            ERROR_WORKER_FAILED,
+            f"provider kind mismatch: invocation expects {expected_kind}, registry binds {actual_kind}",
+        )
+
 
 def _workspace_snapshot(root: Path) -> dict[str, str]:
     snapshot: dict[str, str] = {}
@@ -136,6 +149,7 @@ def invoke_worker(
     registry: dict[str, Any] | None = None,
     bootstrap_path: str | Path = DEFAULT_BOOTSTRAP,
     timeout_seconds: float | None = None,
+    provider_kind: str = PROVIDER_KIND_API_MODEL,
 ) -> dict[str, Any]:
     if registry is None:
         registry_path, registry = resolve_registry_from_bootstrap(bootstrap_path)
@@ -145,6 +159,7 @@ def invoke_worker(
         registry_source = "INJECTED_TEST_REGISTRY"
 
     worker, provider = _worker_record(registry, worker_id)
+    _validate_provider_kind_runtime(provider, provider_kind)
     root = Path(workspace).resolve(strict=True)
     if not root.is_dir():
         raise AdapterContractError(ERROR_WORKER_FAILED, "workspace must be an existing directory")
@@ -205,6 +220,7 @@ def invoke_worker(
         "artifact_proof": artifact_proof,
         "source_binding": dict(result["source_binding"]),
         "provider_metadata": {"provider_id": provider["provider_id"], "kind": provider["kind"]},
+        "invocation_provider_kind": provider_kind,
         "registry_source": registry_source,
         "process": {"exit_code": process.returncode},
     }
@@ -237,6 +253,11 @@ def _parser() -> argparse.ArgumentParser:
     invoke.add_argument("--workspace", required=True)
     invoke.add_argument("--artifact", action="append", required=True)
     invoke.add_argument("--media-type", default="application/octet-stream")
+    invoke.add_argument(
+        "--provider-kind",
+        choices=(PROVIDER_KIND_API_MODEL, PROVIDER_KIND_WEB_SESSION),
+        default=PROVIDER_KIND_API_MODEL,
+    )
     invoke.add_argument("--timeout-seconds", type=float, default=None)
     return parser
 
@@ -257,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
                 artifact_declarations=declarations,
                 bootstrap_path=args.bootstrap,
                 timeout_seconds=args.timeout_seconds,
+                provider_kind=args.provider_kind,
             )
         print(json.dumps(output, ensure_ascii=False, sort_keys=True))
         return 0
