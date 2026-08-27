@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -22,8 +23,22 @@ PYTHON = sys.executable
 
 
 def run(cmd, env=None):
+    """Run one fail-fast evidence command with deterministic UTF-8 child stdio.
+
+    The production Runtime already forces UTF-8 at its official CLI entry, but
+    some historical offline tests invoke internal helper CLIs directly. Hosted
+    Windows runners otherwise default redirected stdout to cp1252, which can
+    make an unrelated historical test crash while printing Chinese fixture text.
+    Normalizing only the Evidence process environment preserves the tested code
+    and makes the regression runner portable; it does not alter production.
+    """
+    proc_env = os.environ.copy()
+    proc_env["PYTHONUTF8"] = "1"
+    proc_env["PYTHONIOENCODING"] = "utf-8"
+    if env:
+        proc_env.update(env)
     print("EVIDENCE_RUN=" + " ".join(cmd), flush=True)
-    proc = subprocess.run(cmd, cwd=str(ROOT), env=env, text=True)
+    proc = subprocess.run(cmd, cwd=str(ROOT), env=proc_env, text=True)
     if proc.returncode != 0:
         print("EVIDENCE_FAIL=" + " ".join(cmd), flush=True)
         raise SystemExit(proc.returncode or 1)
