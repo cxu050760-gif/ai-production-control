@@ -99,7 +99,7 @@ def authority_scope_allowed(
     if not isinstance(authorization, dict):
         return False
     scope = _scope_dict(authorization)
-    if not _matches_authorized(authorization.get("task_id", task_id), task_id):
+    if not _matches_authorized(authorization.get("task_id"), task_id):
         return False
     expected_provider = authorization.get("provider", scope.get("provider"))
     expected_resource = authorization.get("resource", scope.get("resource"))
