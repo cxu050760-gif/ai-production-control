@@ -20,10 +20,45 @@
     "change permission",
     "change budget"
   ],
+  "fact_source_conflicts": [
+    "current_milestone_v07_vs_v08",
+    "scope_allowlist_conflict",
+    "acceptance_requirements_conflict",
+    "authority_constraints_conflict"
+  ],
+  "malformed_brain_intermediates": [
+    "missing_required_fields",
+    "malformed_plan_item",
+    "wrong_fixed_origin",
+    "valid_shell_illegal_interior"
+  ],
+  "malformed_c_intermediates": [
+    "none_missing_severity_and_detail",
+    "missing_severity",
+    "wrong_severity",
+    "missing_detail",
+    "invalid_detail",
+    "unknown_kind",
+    "missing_detection_note",
+    "invalid_detection_note"
+  ],
+  "malformed_reuse_intermediates": [
+    "missing_decision_detail",
+    "missing_reasons",
+    "malformed_reason",
+    "missing_reason_severity",
+    "wrong_reason_severity",
+    "missing_reason_detail",
+    "invalid_reason_detail",
+    "unknown_reason_kind",
+    "missing_detection_note",
+    "invalid_detection_note"
+  ],
   "fail_closed_inputs": [
     "null_root",
     "malformed_brain_input",
-    "null_frozen_route",
+    "null_frozen_facts",
+    "null_reuse_material",
     "oversized_goal",
     "invalid_intermediate"
   ]
