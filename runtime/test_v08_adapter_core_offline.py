@@ -528,6 +528,64 @@ class V08AdapterCoreOfflineTests(unittest.TestCase):
                     )
             self.assertEqual(caught.exception.code, ERROR_ARTIFACT_INTEGRITY)
 
+    # D01: missing digest map must use the controlled artifact-integrity failure path.
+    def test_35_d01_missing_digest_map_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            artifact = root / "artifact.txt"
+            artifact.write_text("hello", encoding="utf-8")
+            capsule = capsule_for()
+            result = {"artifact_paths": ["artifact.txt"]}
+            with self.assertRaises(AdapterContractError) as caught:
+                validate_worker_artifacts(result, capsule, root)
+            self.assertEqual(caught.exception.code, ERROR_ARTIFACT_INTEGRITY)
+
+    # D09: duplicate artifact paths are malformed, never silently deduplicated.
+    def test_36_d09_duplicate_artifact_path_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            artifact = root / "artifact.txt"
+            artifact.write_text("hello", encoding="utf-8")
+            capsule = capsule_for()
+            result = {
+                "artifact_paths": ["artifact.txt", "artifact.txt"],
+                "artifact_hashes": {"artifact.txt": digest(artifact)},
+            }
+            with self.assertRaises(AdapterContractError) as caught:
+                validate_worker_artifacts(result, capsule, root)
+            self.assertEqual(caught.exception.code, ERROR_ARTIFACT_INTEGRITY)
+
+    # F01: a WEB_SESSION provider cannot satisfy the default API_MODEL invocation.
+    def test_37_f01_web_session_as_api_model_fail_closed(self) -> None:
+        value = registry_for("fixture-alpha")
+        value["workers"][0]["provider_id"] = "provider-web"
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(AdapterContractError):
+                adapter.invoke_worker(
+                    worker_id="fixture-alpha",
+                    task_id="task-provider-kind",
+                    context_id="context-provider-kind",
+                    objective="provider kind separation probe",
+                    workspace=temporary,
+                    artifact_declarations=[{"path": "artifact.txt", "media_type": "text/plain"}],
+                    registry=value,
+                )
+
+    # F02: an API_MODEL provider cannot satisfy an explicit WEB_SESSION invocation.
+    def test_38_f02_api_model_as_web_session_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(AdapterContractError):
+                adapter.invoke_worker(
+                    worker_id="fixture-alpha",
+                    task_id="task-provider-kind",
+                    context_id="context-provider-kind",
+                    objective="provider kind separation probe",
+                    workspace=temporary,
+                    artifact_declarations=[{"path": "artifact.txt", "media_type": "text/plain"}],
+                    registry=registry_for("fixture-alpha"),
+                    provider_kind=PROVIDER_KIND_WEB_SESSION,
+                )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
