@@ -1,13 +1,18 @@
-name: V07 Integrate2 Verification
+name: V07 Integrate2 Rework Verification
 
 on:
   push:
     branches:
-      - manual/v07-integrate2-verify
+      - manual/v07-rework-verify
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  # Intentionally blank during B2-only rework. Bind the exact B1 rework SHA
+  # after it is supplied; never substitute the old 027170c4 candidate.
+  CORE_COMMIT: ""
 
 jobs:
   candidate-verification:
@@ -20,6 +25,18 @@ jobs:
       - name: Python version
         shell: pwsh
         run: python --version
-      - name: Run pinned V0.7 candidate verification and regressions
+      - name: Run rework RED gate or full bound Evidence
         shell: pwsh
-        run: python runtime/v07_integration_evidence.py --candidate "$env:GITHUB_SHA"
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CORE_COMMIT)) {
+            Write-Host "WAITING_FOR_CORE_COMMIT=YES"
+            python -m compileall runtime src tests
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            python runtime/test_v07_integration_contract_matrix_offline.py
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            # Expected RED against the frozen old core; assertions stay strict.
+            python runtime/test_v07_integration_candidate_offline.py
+            exit $LASTEXITCODE
+          }
+          python runtime/v07_integration_evidence.py --candidate "$env:GITHUB_SHA" --core-commit "$env:CORE_COMMIT"
+          exit $LASTEXITCODE
