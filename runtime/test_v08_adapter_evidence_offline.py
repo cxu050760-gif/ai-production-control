@@ -2,6 +2,7 @@
 from __future__ import annotations
 import contextlib, copy, hashlib, io, json, subprocess, sys, tempfile, unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 RUNTIME=Path(__file__).resolve().parent; ROOT=RUNTIME.parent
 if str(RUNTIME) not in sys.path: sys.path.insert(0,str(RUNTIME))
@@ -114,6 +115,61 @@ def closed(fn,*errors):
     except errors: return "FAIL_CLOSED"
     return "ACCEPTED"
 
+def provider_kind_mismatch_probe(name,b1):
+    reg=b1.registry_for("fixture-alpha")
+    if name=="web_session_as_api_model":
+        reg["workers"][0]["provider_id"]="provider-web"; expected=b1.PROVIDER_KIND_API_MODEL; actual=b1.PROVIDER_KIND_WEB_SESSION
+    elif name=="api_model_as_web_session":
+        expected=b1.PROVIDER_KIND_WEB_SESSION; actual=b1.PROVIDER_KIND_API_MODEL
+    else: raise OwnerNotReady(f"unknown provider-kind case: {name}")
+    b1.validate_registry(reg)
+    detail=f"provider kind mismatch: invocation expects {expected}, registry binds {actual}"
+    with tempfile.TemporaryDirectory(prefix="v08-provider-kind-") as d:
+        with mock.patch.object(b1.adapter.subprocess,"run",side_effect=AssertionError("worker execution entered")) as run:
+            try:
+                b1.adapter.invoke_worker(worker_id="fixture-alpha",task_id="task-provider-kind",context_id="context-provider-kind",objective="provider kind separation probe",workspace=d,artifact_declarations=[{"path":"artifact.txt","media_type":"text/plain"}],registry=reg,provider_kind=expected)
+            except b1.AdapterContractError as e:
+                if e.code!=b1.adapter.ERROR_WORKER_FAILED or e.detail!=detail: return "WRONG_FAILURE"
+                if run.call_count: return "WORKER_EXECUTED"
+                return "FAIL_CLOSED"
+            except AssertionError:
+                return "WORKER_EXECUTED"
+    return "ACCEPTED"
+
+def _provider_test_b1(*,unrelated_error=False):
+    class Err(RuntimeError):
+        def __init__(self,code,detail): super().__init__(detail); self.code=code; self.detail=detail
+    api="API_MODEL"; web="WEB_SESSION"
+    def registry_for(*worker_ids):
+        return {"providers":[{"provider_id":"provider-api","kind":api},{"provider_id":"provider-web","kind":web}],"workers":[{"worker_id":wid,"provider_id":"provider-api"} for wid in worker_ids]}
+    def validate_registry(reg):
+        if not reg["providers"] or any(p.get("kind") not in {api,web} for p in reg["providers"]): raise Err("REGISTRY_INVALID","invalid registry")
+        providers={p["provider_id"] for p in reg["providers"]}
+        if any(w.get("provider_id") not in providers for w in reg["workers"]): raise Err("REGISTRY_INVALID","invalid provider ref")
+        return reg
+    adapter=SimpleNamespace(ERROR_WORKER_FAILED="WORKER_FAILED",subprocess=SimpleNamespace(run=lambda *a,**k:None))
+    def invoke_worker(*,worker_id,registry,provider_kind,**kwargs):
+        validate_registry(registry)
+        if unrelated_error: raise Err("REGISTRY_INVALID","unrelated workspace failure")
+        worker=next(w for w in registry["workers"] if w["worker_id"]==worker_id); providers={p["provider_id"]:p for p in registry["providers"]}; actual=providers[worker["provider_id"]]["kind"]
+        if actual!=provider_kind: raise Err("WORKER_FAILED",f"provider kind mismatch: invocation expects {provider_kind}, registry binds {actual}")
+        adapter.subprocess.run(["worker"])
+        return {"status":"DONE"}
+    adapter.invoke_worker=invoke_worker
+    return SimpleNamespace(PROVIDER_KIND_API_MODEL=api,PROVIDER_KIND_WEB_SESSION=web,AdapterContractError=Err,registry_for=registry_for,validate_registry=validate_registry,adapter=adapter)
+
+class ProviderBindingProducerTests(unittest.TestCase):
+    def test_valid_web_session_registry_is_accepted(self):
+        b1=_provider_test_b1(); reg=b1.registry_for("fixture-alpha"); reg["workers"][0]["provider_id"]="provider-web"; self.assertIs(b1.validate_registry(reg),reg)
+    def test_valid_api_model_registry_is_accepted(self):
+        b1=_provider_test_b1(); reg=b1.registry_for("fixture-alpha"); self.assertIs(b1.validate_registry(reg),reg)
+    def test_f01_runtime_mismatch_is_fail_closed_before_worker(self): self.assertEqual(provider_kind_mismatch_probe("web_session_as_api_model",_provider_test_b1()),"FAIL_CLOSED")
+    def test_f02_runtime_mismatch_is_fail_closed_before_worker(self): self.assertEqual(provider_kind_mismatch_probe("api_model_as_web_session",_provider_test_b1()),"FAIL_CLOSED")
+    def test_unrelated_adapter_error_cannot_false_pass_f01_f02(self):
+        b1=_provider_test_b1(unrelated_error=True)
+        self.assertEqual(provider_kind_mismatch_probe("web_session_as_api_model",b1),"WRONG_FAILURE")
+        self.assertEqual(provider_kind_mismatch_probe("api_model_as_web_session",b1),"WRONG_FAILURE")
+
 def exec_b2(case,b2):
     name=case["owner_case"]
     if name=="registry_missing":
@@ -199,8 +255,8 @@ def exec_b1(case,b1):
     if cat=="worker_replacement": return replacement_probe(name,b1)
     if cat=="provider_separation":
         if name=="provider_kind_separation_positive": return "PROVE" if b1.PROVIDER_KIND_API_MODEL!=b1.PROVIDER_KIND_WEB_SESSION else "FAILED_PROOF"
-        reg=b1.registry_for("fixture-alpha"); reg["providers"][0 if name=="web_session_as_api_model" else 1]["kind"]=b1.PROVIDER_KIND_WEB_SESSION if name=="web_session_as_api_model" else b1.PROVIDER_KIND_API_MODEL
-        return closed(lambda:b1.validate_registry(reg),b1.AdapterContractError)
+        if name in {"web_session_as_api_model","api_model_as_web_session"}: return provider_kind_mismatch_probe(name,b1)
+        raise OwnerNotReady(f"unknown B1 provider-separation case: {name}")
     raise OwnerNotReady(f"unsupported B1 case: {case['id']}")
 
 def history_attack(name):
