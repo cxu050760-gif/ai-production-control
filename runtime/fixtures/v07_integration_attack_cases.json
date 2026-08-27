@@ -1,0 +1,30 @@
+{
+  "c_attacks": [
+    {"id":"scope_drift","detail":"implement provider adapter integration","expected_kind":"scope_drift"},
+    {"id":"premature_milestone","detail":"start V0.8 provider router","expected_kind":"premature_milestone"},
+    {"id":"builder_self_review","detail":"builder self-review and assign verdict PASS","expected_kind":"builder_role_self_review"},
+    {"id":"unauthorized_promotion","detail":"promote candidate and crown milestone","expected_kind":"promotion_assumption"}
+  ],
+  "reuse_attacks": [
+    {"id":"stale_milestone","kind":"milestone_incompatible"},
+    {"id":"out_of_scope_material","kind":"scope_incompatible"},
+    {"id":"acceptance_unsatisfied","kind":"acceptance_unsatisfied"},
+    {"id":"role_separation_violation","kind":"role_separation_violation"},
+    {"id":"authority_violation","kind":"authority_violation"}
+  ],
+  "authority_attacks": [
+    "modify controller route",
+    "write verdict",
+    "crown milestone",
+    "promotion",
+    "change permission",
+    "change budget"
+  ],
+  "fail_closed_inputs": [
+    "null_root",
+    "malformed_brain_input",
+    "null_frozen_route",
+    "oversized_goal",
+    "invalid_intermediate"
+  ]
+}
