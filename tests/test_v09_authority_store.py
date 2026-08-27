@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from aicontrol.security import (
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from aicontrol.security import (  # noqa: E402
     authority_scope_allowed,
     egress_allowed,
     human_gate_allowed,
     require_credential_isolation,
 )
-from aicontrol.store import ControlStore, GateDenied
+from aicontrol.store import ControlStore, GateDenied  # noqa: E402
 
 
 class V09AuthorityStoreTests(unittest.TestCase):
@@ -85,6 +91,30 @@ class V09AuthorityStoreTests(unittest.TestCase):
             }
             kwargs[field] = value
             self.assertFalse(authority_scope_allowed(authorization=authorization, **kwargs))
+
+    def test_missing_task_binding_fails_closed(self):
+        authorization = {
+            "provider": "provider-a",
+            "resource": "resource-a",
+            "purpose": "publish",
+            "identity": "executor-a",
+            "scope": {
+                "destination": "dest-a",
+                "data_classes": ["INTERNAL"],
+            },
+        }
+        self.assertFalse(
+            authority_scope_allowed(
+                authorization=authorization,
+                task_id="task-v09",
+                provider="provider-a",
+                resource="resource-a",
+                purpose="publish",
+                identity="executor-a",
+                destination="dest-a",
+                classification="INTERNAL",
+            )
+        )
 
     def test_secret_egress_is_always_denied(self):
         self.assertFalse(
