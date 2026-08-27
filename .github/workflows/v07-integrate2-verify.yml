@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  preflight:
+  candidate-verification:
     runs-on: windows-latest
     steps:
       - name: Checkout exact candidate
@@ -20,6 +20,6 @@ jobs:
       - name: Python version
         shell: pwsh
         run: python --version
-      - name: Run pinned V0.7 preflight and regressions
+      - name: Run pinned V0.7 candidate verification and regressions
         shell: pwsh
-        run: python runtime/v07_integration_evidence.py --candidate "$env:GITHUB_SHA" --preflight
+        run: python runtime/v07_integration_evidence.py --candidate "$env:GITHUB_SHA"
