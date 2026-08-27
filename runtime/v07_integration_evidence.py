@@ -21,6 +21,18 @@ from v07_integration_verify_support import BASE_COMMIT, SUCCESS_MARKER
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 
+# Existing production/control surfaces B2 is not allowed to alter. Keeping these
+# byte-identical to the frozen base plus running the complete runtime offline suite
+# prevents a verification-only branch from silently changing V0.1-V0.6 behavior.
+LEGACY_NO_DIFF_PATHS = (
+    "src",
+    "tests",
+    "runtime/runtime.py",
+    "runtime/strategic_brain_contract.py",
+    "runtime/strategic_correction.py",
+    "runtime/strategic_reuse_contract.py",
+)
+
 
 def run(cmd, env=None):
     """Run one fail-fast evidence command with deterministic UTF-8 child stdio.
@@ -62,6 +74,16 @@ def require_git_binding(candidate):
     print(f"EVIDENCE_BASE={BASE_COMMIT}")
 
 
+def require_legacy_surfaces_unchanged():
+    # Top-level legacy tests include machine-bound fixtures (specific local Python
+    # executable/browser profile paths) and therefore are not portable to a clean
+    # hosted runner. Rather than weakening those tests or pretending they pass,
+    # prove B2 changed neither their implementation nor their tested production
+    # surface, then run the portable core smoke plus every runtime offline test.
+    run(["git", "diff", "--exit-code", BASE_COMMIT, "--", *LEGACY_NO_DIFF_PATHS])
+    print("REGRESSION_LEGACY_SURFACES=UNCHANGED_FROM_FROZEN_BASE")
+
+
 def adapter_bound():
     mod = importlib.import_module("v07_integration_candidate_adapter")
     return bool(mod.is_bound())
@@ -75,6 +97,7 @@ def main():
     args = parser.parse_args()
 
     require_git_binding(args.candidate)
+    require_legacy_surfaces_unchanged()
 
     for test in (
         "runtime/test_strategic_brain_contract_offline.py",
@@ -84,8 +107,15 @@ def main():
     ):
         run([PYTHON, test])
 
+    # Complete V0.1-V0.7 runtime offline regression collection. Candidate-only
+    # B1 tests remain explicit skips until the adapter is bound; preflight can
+    # never turn those skips into a full-integration success marker.
     run([PYTHON, "-m", "unittest", "discover", "-s", "runtime", "-p", "test_*_offline.py"])
-    run([PYTHON, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"])
+
+    # Portable controller/store/path smoke. The rest of top-level tests are
+    # machine-bound on the frozen base; byte-identical legacy surface binding
+    # above is the fail-fast regression guarantee for those fixtures.
+    run([PYTHON, "tests/test_core.py"])
 
     if args.preflight:
         print("V07_INTEGRATE2_PREFLIGHT_SUCCESS=" + args.candidate)
