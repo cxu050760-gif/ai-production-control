@@ -29,6 +29,17 @@
     {"id":"specific_web_session_url_leak","operation":"set","path":["providers",0,"session_url"],"value":"https://chatgpt.com/c/example"},
     {"id":"stale_incompatible_provider_contract","operation":"set","path":["providers",0,"contract"],"value":"M1_PROVIDER_CONTRACT"},
     {"id":"reviewer_provider_impersonation","operation":"set","path":["reviewers",0,"kind"],"value":"WEB_SESSION"},
-    {"id":"worker_provider_impersonation","operation":"set","path":["workers",0,"adapter_class"],"value":"APIModelProvider"}
+    {"id":"worker_provider_impersonation","operation":"set","path":["workers",0,"adapter_class"],"value":"APIModelProvider"},
+    {"id":"worker_capability_scheduler","operation":"set","path":["workers",0,"capabilities"],"value":["scheduler"]},
+    {"id":"worker_capability_promotion","operation":"set","path":["workers",0,"capabilities"],"value":["promotion"]},
+    {"id":"worker_capability_grant_authority","operation":"set","path":["workers",0,"capabilities"],"value":["grant_authority"]},
+    {"id":"worker_capability_secret_cookie","operation":"set","path":["workers",0,"capabilities"],"value":["api_key=secret-cookie"]},
+    {"id":"worker_capability_mixed_case_scheduler","operation":"set","path":["workers",0,"capabilities"],"value":["ScHeDuLeR"]},
+    {"id":"embedded_credential_like_worker_id","operation":"set","path":["workers",0,"worker_id"],"value":"worker-ApiKey-Secret-Token"},
+    {"id":"embedded_control_semantics_worker_id","operation":"set","path":["workers",0,"worker_id"],"value":"worker-ReViEwEr_PaSs"},
+    {"id":"worker_capability_unknown_but_benign","operation":"set","path":["workers",0,"capabilities"],"value":["shell-exec"]}
+  ],
+  "positive_cases": [
+    {"id":"worker_capability_allowlist_positive","operation":"set","path":["workers",0,"capabilities"],"value":["analysis","proposal"]}
   ]
 }

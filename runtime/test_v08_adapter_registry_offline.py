@@ -26,6 +26,7 @@ REVIEWER_ROLES = frozenset({"R_PROD", "E_LAB"})
 CONSERVATIVE_STATUS = frozenset({"UNVERIFIED_CURRENT", "UNKNOWN", "DISABLED"})
 TRANSPORT_IDENTITY_OWNER = "RUNTIME_CONTROLLER"
 WORKER_SELECTION_MODE = "SINGLE_ACTIVE_REPLACEMENT"
+CAPABILITY_ALLOWLIST = frozenset({"analysis", "mechanical-read", "proposal", "code-review"})
 MAX_COLLECTION_ITEMS = 64
 MAX_STRING_LENGTH = 512
 MAX_CAPABILITIES = 32
@@ -80,6 +81,23 @@ TRANSPORT_INTERNAL_KEY_TERMS = frozenset(
 TRANSPORT_INTERNAL_VALUE_TERMS = frozenset(
     {"bsk", "daemon", "marker", "yz_lib", "chrome-extension://", "chrome extension internals", "cft_executable"}
 )
+CREDENTIAL_VALUE_TERMS = frozenset(
+    {"api_key", "apikey", "token", "secret", "password", "cookie", "authorization", "credential"}
+)
+FORBIDDEN_CONTROL_VALUE_TERMS = frozenset(
+    {
+        "scheduler",
+        "multi_worker",
+        "promotion",
+        "promote",
+        "crown",
+        "grant_authority",
+        "revoke_authority",
+        "verdict",
+        "reviewer_pass",
+        "effect_authority",
+    }
+)
 FORBIDDEN_CONTROL_KEYS = frozenset(
     {
         "authority",
@@ -115,6 +133,12 @@ def _fail(code: str) -> None:
 
 def _normalized_key(key: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", key.strip().lower()).strip("_")
+
+
+def _value_contains_term(value: str, terms: frozenset[str]) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    compact = re.sub(r"[^a-z0-9]+", "", value.strip().lower())
+    return any(term in normalized or re.sub(r"[^a-z0-9]+", "", term) in compact for term in terms)
 
 
 def _strict_positive_int(value: Any, where: str, *, allow_zero: bool = False) -> int:
@@ -160,6 +184,10 @@ def _walk_security(value: Any, path: tuple[str, ...] = (), depth: int = 0) -> No
             _fail(f"DYNAMIC_OR_SESSION_URL:{'.'.join(path)}")
         if any(term in lowered for term in TRANSPORT_INTERNAL_VALUE_TERMS):
             _fail(f"TRANSPORT_INTERNAL_VALUE:{'.'.join(path)}")
+        if _value_contains_term(value, CREDENTIAL_VALUE_TERMS):
+            _fail(f"SECRET_LIKE_VALUE:{'.'.join(path)}")
+        if _value_contains_term(value, FORBIDDEN_CONTROL_VALUE_TERMS):
+            _fail(f"FORBIDDEN_CONTROL_VALUE:{'.'.join(path)}")
 
 
 def _require_exact_fields(obj: Any, allowed: frozenset[str], where: str) -> dict[str, Any]:
@@ -276,6 +304,8 @@ def validate_registry(registry: Any, *, minimum_generation: int = 1) -> dict[str
         for cap_index, capability in enumerate(capabilities):
             if not isinstance(capability, str) or not capability or len(capability) > MAX_ID_LENGTH:
                 _fail(f"WORKERS[{index}].capabilities[{cap_index}]:INVALID")
+            if capability not in CAPABILITY_ALLOWLIST:
+                _fail(f"WORKERS[{index}].capabilities[{cap_index}]:NOT_ALLOWED")
         _require_status(item["availability"], f"WORKERS[{index}].availability")
         normalized_workers.append(item)
     _unique_ids(normalized_workers, "worker_id", "worker")
@@ -386,6 +416,17 @@ class V08AdapterRegistryConformance(unittest.TestCase):
         self.assertIsInstance(bootstrap["adapter_registry"], str)
         self.assertNotRegex(bootstrap["adapter_registry"], r"(?i)https?://|token|secret|cookie|session[_-]?id|bsk")
 
+    def test_declared_positive_cases_are_accepted(self) -> None:
+        positive_cases = self.attacks.get("positive_cases", [])
+        self.assertGreaterEqual(len(positive_cases), 1)
+        ids = [case["id"] for case in positive_cases]
+        self.assertEqual(len(ids), len(set(ids)))
+        for case in positive_cases:
+            with self.subTest(case=case["id"]):
+                mutated = apply_attack(self.registry, case)
+                proof = validate_registry(mutated, minimum_generation=case.get("minimum_generation", 1))
+                self.assertEqual(proof["worker_count"], 2)
+
     def test_all_declared_red_first_attack_cases_fail_closed(self) -> None:
         self.assertGreaterEqual(len(self.attacks.get("cases", [])), 20)
         ids = [case["id"] for case in self.attacks["cases"]]
@@ -402,5 +443,9 @@ if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(V08AdapterRegistryConformance)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     if result.wasSuccessful():
-        print(f"V08_ADAPTER_REGISTRY_CONFORMANCE=PASS ATTACK_CASES={len(V08AdapterRegistryConformance.attacks['cases'])}")
+        print(
+            "V08_ADAPTER_REGISTRY_CONFORMANCE=PASS "
+            f"ATTACK_CASES={len(V08AdapterRegistryConformance.attacks['cases'])} "
+            f"POSITIVE_CASES={len(V08AdapterRegistryConformance.attacks.get('positive_cases', []))}"
+        )
     raise SystemExit(0 if result.wasSuccessful() else 1)
