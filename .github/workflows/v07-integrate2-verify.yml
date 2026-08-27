@@ -1,0 +1,25 @@
+name: V07 Integrate2 Verification
+
+on:
+  push:
+    branches:
+      - manual/v07-integrate2-verify
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Python version
+        shell: pwsh
+        run: python --version
+      - name: Run pinned V0.7 preflight and regressions
+        shell: pwsh
+        run: python runtime/v07_integration_evidence.py --candidate "$env:GITHUB_SHA" --preflight
