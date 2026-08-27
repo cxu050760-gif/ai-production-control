@@ -443,8 +443,16 @@ def validate_source_binding(result: dict[str, Any], capsule: dict[str, Any]) -> 
 def validate_worker_artifacts(result: dict[str, Any], capsule: dict[str, Any], workspace_root: str | Path) -> dict[str, Any]:
     workspace = Path(workspace_root).resolve(strict=True)
     declared = [item["path"] for item in capsule["artifact_declarations"]]
-    paths = result["artifact_paths"]
-    hashes = result["artifact_hashes"]
+    if not isinstance(result, dict):
+        raise AdapterContractError(ERROR_ARTIFACT_INTEGRITY, "worker artifact result must be an object")
+    paths = result.get("artifact_paths")
+    hashes = result.get("artifact_hashes")
+    if not isinstance(paths, list) or any(not _is_nonempty_str(item) for item in paths):
+        raise AdapterContractError(ERROR_ARTIFACT_INTEGRITY, "artifact_paths must be a string list")
+    if len(set(paths)) != len(paths):
+        raise AdapterContractError(ERROR_ARTIFACT_INTEGRITY, "artifact_paths must not contain duplicates")
+    if not isinstance(hashes, dict):
+        raise AdapterContractError(ERROR_ARTIFACT_INTEGRITY, "artifact_hashes must be a mapping")
 
     # Resolve every worker-supplied path before set comparison so traversal and
     # absolute-outside-workspace attempts are classified explicitly.
