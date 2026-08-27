@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """V0.9 speculative hardening of the existing Runtime Effect Safety Lite layer.
 
-This is deliberately NOT a second Authority / Effect subsystem. It hardens the
-existing Runtime Lite authority records and logical-effect log so they preserve
-the same core invariants already present in ``src/aicontrol/store.py``:
+This is NOT a second Authority / Effect subsystem. It hardens the existing
+Runtime Lite authority records and logical-effect log with the same invariants
+already represented by ControlStore's authority journal, reservations, fences,
+and effect WAL:
 
-Prepare -> durable write-ahead intent -> authority/fence recheck -> Execute ->
-Observe -> Commit. If Execute may have happened but the response is lost, the
-logical effect becomes OUTCOME_UNKNOWN. Ordinary retry is then forbidden until
-reality is reconciled, and a reconciled success can never cross the external
-boundary a second time.
+Prepare -> Write Intent -> Capture Preconditions -> Check Authority -> Execute
+-> Observe -> Commit.
 
-Executor self-grant is forbidden. Authorization must be provisioned by an
-explicit Authority identity before an external effect is prepared.
+If Execute may have happened but the response is lost, the effect becomes
+OUTCOME_UNKNOWN. Ordinary retry is forbidden until reality is reconciled. A
+reconciled success is permanently deduplicated and never Executes twice.
 """
 from __future__ import annotations
 
 import importlib.util
 import json
+import string
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -40,7 +40,12 @@ from aicontrol.util import canonical_json, sha256_text  # noqa: E402
 EFFECT_SCHEMA_VERSION = 2
 AUTHORIZED_ISSUER_ROLES = {"AUTHORITY", "HUMAN_AUTHORITY", "CONTROLLER_AUTHORITY"}
 TERMINAL_SUCCESS = {"SUCCESS", "ACTION_COMMITTED"}
-UNRESOLVED_EFFECT_STATES = {"INTENT_WRITTEN", "EXECUTE_STARTED", "OUTCOME_UNKNOWN", "RECONCILED_NOT_OCCURRED"}
+UNRESOLVED_EFFECT_STATES = {
+    "INTENT_WRITTEN",
+    "EXECUTE_STARTED",
+    "OUTCOME_UNKNOWN",
+    "RECONCILED_NOT_OCCURRED",
+}
 
 
 class EffectSafetyError(RuntimeError):
@@ -61,8 +66,8 @@ def _load_runtime():
 
 
 def effect_identity(run_id: str, slot: str, payload_hash: str) -> str:
-    # Preserve the existing logical-effect identity so V0.9 hardening does not
-    # fork or invalidate already-written Lite records.
+    # Preserve the existing V0.8 logical identity. V0.9 hardening must not fork
+    # previously recorded logical effects.
     core = {"task_id": run_id, "logical_effect_slot": slot, "payload_hash": payload_hash}
     return sha256_text(canonical_json(core))
 
@@ -92,28 +97,45 @@ def grant_authorization(
     ttl_seconds: int = 3600,
     max_effect_count: int = 1,
 ) -> dict[str, Any]:
-    """Provision a durable authorization from a distinct Authority identity.
+    """Provision authority from an identity distinct from the executor.
 
-    The executor cannot use this function as a convenience fallback: callers
-    must state an Authority role, and the issuer identity must differ from the
-    execution holder. Raw credentials are rejected; only references belong in
-    authorization scope.
+    The old Runtime Lite convenience path that silently self-granted authority
+    is intentionally gone. Missing authority now fails closed.
     """
     role = str(issuer_role or "").strip().upper()
     issuer = str(issuer_identity or "").strip()
+    holder = str(holder or "").strip()
     if role not in AUTHORIZED_ISSUER_ROLES:
         raise EffectDenied("authorization issuer is not an Authority role")
     if not issuer:
         raise EffectDenied("authorization issuer identity missing")
+    if not holder:
+        raise EffectDenied("authorization holder identity missing")
     if issuer == holder:
         raise EffectDenied("executor self-grant is forbidden")
     if max_effect_count < 1:
         raise EffectDenied("authorization effect count must be positive")
+
     scope = dict(scope or {})
     try:
         require_credential_isolation(scope)
-    except Exception as exc:  # GateDenied derives from RuntimeError outside this Lite API.
+    except Exception as exc:
         raise EffectDenied(str(exc)) from exc
+
+    required_scope = {"provider", "resource", "purpose", "identity", "destination", "data_classes"}
+    missing = sorted(required_scope - scope.keys())
+    if missing:
+        raise EffectDenied(f"authorization scope incomplete: {missing}")
+    if str(scope.get("identity")) != holder:
+        raise EffectDenied("authorization scope identity must equal execution holder")
+    classes = scope.get("data_classes")
+    if not isinstance(classes, list) or not classes:
+        raise EffectDenied("authorization data_classes must be a non-empty list")
+    for value in classes:
+        try:
+            normalized_classification(str(value))
+        except Exception as exc:
+            raise EffectDenied(str(exc)) from exc
 
     scope_digest = sha256_text(canonical_json(scope))
     generation = _next_authority_generation(state)
@@ -135,11 +157,11 @@ def grant_authorization(
         "authorization_id": authorization_id,
         "task_id": state["run_id"],
         "holder": holder,
-        "identity": scope.get("identity", holder),
-        "provider": scope.get("provider"),
-        "resource": scope.get("resource"),
-        "purpose": scope.get("purpose"),
-        "destination": scope.get("destination"),
+        "identity": scope["identity"],
+        "provider": scope["provider"],
+        "resource": scope["resource"],
+        "purpose": scope["purpose"],
+        "destination": scope["destination"],
         "scope": scope,
         "scope_digest": scope_digest,
         "status": "GRANTED",
@@ -210,15 +232,14 @@ def _valid_authorization(
     identity: str,
     destination: str,
     classification: str,
+    require_capacity: bool = True,
 ) -> dict[str, Any]:
     auths = state.get("effect_authorizations") or {}
-    candidates: list[dict[str, Any]]
     if authorization_id:
         rec = auths.get(authorization_id)
         candidates = [rec] if isinstance(rec, dict) else []
     else:
         candidates = [rec for rec in auths.values() if isinstance(rec, dict) and _is_live(rec)]
-
     if not candidates:
         raise EffectDenied("no authorization bound to effect")
 
@@ -238,6 +259,9 @@ def _valid_authorization(
         if int(rec.get("revocation_epoch", -1)) != current_epoch:
             stale_reason = "authorization revocation epoch stale"
             continue
+        if str(rec.get("holder") or "") != identity:
+            stale_reason = "authorization holder/identity mismatch"
+            continue
         if not authority_scope_allowed(
             authorization=rec,
             task_id=state["run_id"],
@@ -250,7 +274,7 @@ def _valid_authorization(
         ):
             stale_reason = "authorization provider/resource/purpose/identity/egress scope mismatch"
             continue
-        if int(rec.get("consumed_effect_count", 0)) >= int(rec.get("max_effect_count", 0)):
+        if require_capacity and int(rec.get("consumed_effect_count", 0)) >= int(rec.get("max_effect_count", 0)):
             stale_reason = "authorization effect count exhausted"
             continue
         return rec
@@ -265,10 +289,7 @@ def ensure_valid_authorization(
     scope: dict | None = None,
     authorization_id: str | None = None,
 ) -> dict[str, Any]:
-    """Compatibility name with V0.8 behavior removed: this never grants.
-
-    Callers must pre-provision authority. Missing or stale authority fails closed.
-    """
+    """Compatibility name; unlike V0.8 this function NEVER grants authority."""
     del rt
     scope = dict(scope or {})
     classes = scope.get("data_classes") if isinstance(scope.get("data_classes"), list) else ["INTERNAL"]
@@ -282,6 +303,7 @@ def ensure_valid_authorization(
         identity=str(scope.get("identity") or holder),
         destination=str(scope.get("destination") or ""),
         classification=classification,
+        require_capacity=True,
     )
 
 
@@ -306,6 +328,7 @@ def _execution_fence(record: dict[str, Any]) -> str:
         "logical_effect_id": record["logical_effect_id"],
         "authorization_id": record["authorization_id"],
         "authorization_generation": record["authorization_generation"],
+        "authorization_scope_digest": record["authorization_scope_digest"],
         "revocation_epoch": record["revocation_epoch"],
         "state_revision": record["state_revision"],
         "provider": record["provider"],
@@ -337,8 +360,8 @@ def prepare_effect(
     human_gate_required: bool = False,
     human_gate_reference: str | None = None,
 ) -> dict[str, Any]:
-    """Prepare and durably write the effect intent before Execute."""
-    if not payload_hash or len(payload_hash) != 64:
+    """Prepare, capture preconditions, and durably Write Intent before Execute."""
+    if len(payload_hash or "") != 64 or any(ch not in string.hexdigits for ch in payload_hash):
         raise EffectDenied("payload_hash missing or invalid")
     try:
         classification = normalized_classification(classification)
@@ -357,7 +380,7 @@ def prepare_effect(
     if not human_gate_allowed(required=human_gate_required, reference=human_gate_reference):
         raise EffectDenied("required Human Gate authorization missing")
 
-    logical_effect_id = effect_identity(state["run_id"], slot, payload_hash)
+    logical_effect_id = effect_identity(state["run_id"], slot, payload_hash.lower())
     for prior in reversed(_effect_log(state)):
         if prior.get("logical_effect_id") != logical_effect_id:
             continue
@@ -381,14 +404,13 @@ def prepare_effect(
         identity=identity,
         destination=destination,
         classification=classification,
+        require_capacity=True,
     )
     consumed = int(auth.get("consumed_effect_count", 0)) + 1
     if consumed > int(auth.get("max_effect_count", 0)):
         raise EffectDenied("authorization effect count exhausted")
     auth["consumed_effect_count"] = consumed
 
-    # FakeRuntime and the official runtime both increment revision exactly once
-    # inside save_state(), so this is the revision the durable intent will own.
     current_revision = int(state.get("revision", 0))
     durable_revision = current_revision + 1
     record = {
@@ -401,7 +423,7 @@ def prepare_effect(
         "provider": provider,
         "resource": resource,
         "identity": identity,
-        "payload_hash": payload_hash,
+        "payload_hash": payload_hash.lower(),
         "purpose": purpose,
         "classification": classification,
         "authorization_id": auth["authorization_id"],
@@ -412,8 +434,14 @@ def prepare_effect(
         "revocation_epoch": int(auth["revocation_epoch"]),
         "precondition_revision": current_revision,
         "state_revision": durable_revision,
-        "human_gate_required": bool(human_gate_required),
-        "human_gate_reference": human_gate_reference,
+        "preconditions": {
+            "capability_permitted": True,
+            "egress_permitted": True,
+            "resource_fresh": True,
+            "tcb_verified": True,
+            "human_gate_required": bool(human_gate_required),
+            "human_gate_reference": human_gate_reference,
+        },
         "ordinary_retry_permitted": False,
         "deduplicated": False,
         "status": "INTENT_WRITTEN",
@@ -452,7 +480,7 @@ def begin_effect(
     tcb_verified: bool = True,
     human_gate_reference: str | None = None,
 ) -> dict[str, Any]:
-    """Final fence immediately before crossing the external boundary."""
+    """Last fail-closed fence immediately before crossing the external boundary."""
     record = _find_effect(state, logical_effect_id)
     if record.get("status") != "INTENT_WRITTEN":
         raise EffectDenied(f"effect is not executable from {record.get('status')}")
@@ -473,10 +501,14 @@ def begin_effect(
     if not tcb_verified:
         raise EffectDenied("Controller TCB failed before Execute")
     gate_ref = human_gate_reference if human_gate_reference is not None else record.get("human_gate_reference")
-    if not human_gate_allowed(required=bool(record.get("human_gate_required")), reference=gate_ref):
+    if gate_ref is None:
+        gate_ref = (record.get("preconditions") or {}).get("human_gate_reference")
+    if not human_gate_allowed(required=bool((record.get("preconditions") or {}).get("human_gate_required")), reference=gate_ref):
         raise EffectDenied("required Human Gate missing before Execute")
 
-    # Reuse the same Authority Matrix at the last possible safe point.
+    # Quota is consumed at Prepare/reservation time. Execute must revalidate
+    # identity/generation/revocation/scope, but must not reject the already
+    # reserved final quota merely because consumed == max.
     auth = _valid_authorization(
         state,
         record.get("authorization_id"),
@@ -486,11 +518,14 @@ def begin_effect(
         identity=str(record["identity"]),
         destination=str(record["destination"]),
         classification=str(record["classification"]),
+        require_capacity=False,
     )
     if int(auth.get("generation", -1)) != int(record["authorization_generation"]):
         raise EffectDenied("authorization changed after Write Intent")
     if int(auth.get("revocation_epoch", -1)) != int(record["revocation_epoch"]):
         raise EffectDenied("authorization revoked after Write Intent")
+    if int(auth.get("consumed_effect_count", 0)) < 1 or int(auth.get("consumed_effect_count", 0)) > int(auth.get("max_effect_count", 0)):
+        raise EffectDenied("authorization reservation accounting invalid before Execute")
 
     record["status"] = "EXECUTE_STARTED"
     record["execute_started_at"] = _now_iso()
@@ -507,7 +542,13 @@ def begin_effect(
     return record
 
 
-def commit_effect_success(rt, state: dict, logical_effect_id: str, *, observation: dict[str, Any] | None = None) -> dict[str, Any]:
+def commit_effect_success(
+    rt,
+    state: dict,
+    logical_effect_id: str,
+    *,
+    observation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     record = _find_effect(state, logical_effect_id)
     if record.get("status") != "EXECUTE_STARTED":
         raise EffectDenied("effect success cannot be committed from current state")
@@ -566,9 +607,8 @@ def reconcile_effect(
         record["status"] = "SUCCESS"
         event = "EFFECT_RECONCILED_SUCCESS"
     else:
-        # A negative inspection does not itself authorize replay. A new explicit
-        # authority decision / policy can be added in a later version; V0.9 is
-        # intentionally fail-closed.
+        # Negative inspection is not itself replay authority. V0.9 remains
+        # fail-closed; any later replay needs a new explicit authority decision.
         record["status"] = "RECONCILED_NOT_OCCURRED"
         event = "EFFECT_RECONCILED_NOT_OCCURRED"
     state["effect_safety"] = record
@@ -596,11 +636,7 @@ def record_effect(
     egress_permitted: bool = True,
     resource_fresh: bool = True,
 ) -> dict[str, Any]:
-    """Compatibility facade for callers that only used reservation semantics.
-
-    V0.9 callers should use prepare_effect/begin_effect explicitly. This facade
-    still refuses missing authorization and never self-grants.
-    """
+    """Compatibility facade for old reservation-only callers; never self-grants."""
     auths = state.get("effect_authorizations") or {}
     if authorization_id:
         auth = auths.get(authorization_id)
@@ -648,7 +684,16 @@ def _runtime_preconditions(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _prepare_runtime_send(rt, state: dict[str, Any], *, operation: str, destination: str, payload_hash: str, slot: str, purpose: str) -> dict[str, Any]:
+def _prepare_runtime_send(
+    rt,
+    state: dict[str, Any],
+    *,
+    operation: str,
+    destination: str,
+    payload_hash: str,
+    slot: str,
+    purpose: str,
+) -> dict[str, Any]:
     provider = str(state.get("effect_provider") or "chatgpt-web")
     identity = str(state.get("effect_executor_identity") or "runtime-v1")
     resource = str(state.get("effect_resource") or destination)
@@ -763,9 +808,6 @@ def install(rt, options: dict) -> None:
                     observation={"transport_exit_code": code},
                 )
             except EffectDenied:
-                # The underlying Runtime may already have transitioned itself to
-                # a terminal failure state, but ordinary replay remains denied by
-                # the durable logical-effect record.
                 pass
         return code
 
