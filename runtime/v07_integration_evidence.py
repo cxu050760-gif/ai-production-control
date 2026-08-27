@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import List, Set, Tuple
 
 from v07_integration_verify_support import (
     BASE_COMMIT,
@@ -61,7 +61,7 @@ def require_exact_sha(label: str, value: str) -> str:
     return value
 
 
-def parse_name_status(text: str) -> List[Tuple[str, str]]:
+def parse_name_status(text: str, allowed_statuses: Set[str]) -> List[Tuple[str, str]]:
     rows: List[Tuple[str, str]] = []
     if not text:
         return rows
@@ -70,9 +70,7 @@ def parse_name_status(text: str) -> List[Tuple[str, str]]:
         if len(parts) != 2:
             hard_fail("DIFF_NAME_STATUS_RENAME_COPY_OR_MALFORMED")
         status, path = parts
-        # BASE->FINAL paths are all additions from the accepted base. Any delete,
-        # rename/copy, type change, or other status is outside the frozen candidate.
-        if status != "A":
+        if status not in allowed_statuses:
             hard_fail(f"DIFF_STATUS_NOT_ALLOWED:{status}:{path}")
         rows.append((status, path))
     return rows
@@ -80,7 +78,9 @@ def parse_name_status(text: str) -> List[Tuple[str, str]]:
 
 def require_exact_changed_path_allowlist(candidate: str) -> None:
     text = capture("git", "diff", "--name-status", f"{BASE_COMMIT}..{candidate}", "--")
-    rows = parse_name_status(text)
+    # All nine paths are absent at the Accepted Base, so the final base-bound
+    # diff must show exactly nine additions. Delete/rename/copy/type-change fails.
+    rows = parse_name_status(text, {"A"})
     paths = [path for _, path in rows]
     expected = set(CHANGED_PATH_ALLOWLIST)
     actual = set(paths)
@@ -96,7 +96,7 @@ def require_exact_changed_path_allowlist(candidate: str) -> None:
 
 
 def require_core_binding(candidate: str, core_commit: str) -> None:
-    # All ancestry failures occur before any formal test command.
+    # All ancestry/scope/core-immutability failures occur before formal tests.
     run(["git", "cat-file", "-e", f"{core_commit}^{{commit}}"])
     if core_commit == FAILED_CANDIDATE:
         hard_fail("CORE_COMMIT_IS_FROZEN_FAILED_CANDIDATE")
@@ -105,11 +105,11 @@ def require_core_binding(candidate: str, core_commit: str) -> None:
     run(["git", "merge-base", "--is-ancestor", FAILED_CANDIDATE, core_commit])
     run(["git", "merge-base", "--is-ancestor", core_commit, candidate])
 
-    # B1 rework must itself be a targeted successor: from the frozen failed
-    # candidate to CORE_COMMIT, only B1-owned core paths may change, and at least
-    # one of them must actually change.
+    # B1 rework itself must be a targeted successor: from the frozen failed
+    # candidate to CORE_COMMIT, only the two already-existing B1-owned files may
+    # be modified, and strategic_integration.py must actually change.
     core_delta = capture("git", "diff", "--name-status", f"{FAILED_CANDIDATE}..{core_commit}", "--")
-    rows = parse_name_status(core_delta)
+    rows = parse_name_status(core_delta, {"M"})
     changed = {path for _, path in rows}
     if not changed:
         hard_fail("CORE_COMMIT_HAS_NO_CORE_REWORK_DELTA")
@@ -155,18 +155,13 @@ def main() -> int:
     parser.add_argument("--core-commit", required=True)
     args = parser.parse_args()
 
-    # Structural provenance/scope/core immutability checks must precede tests.
     require_git_binding(args.candidate, args.core_commit)
     if not adapter_bound():
         hard_fail("B1_INTERFACE_NOT_BOUND")
 
-    # Patch/whitespace validity is part of Evidence and must fail fast.
     run(["git", "diff", "--check", f"{BASE_COMMIT}..{args.candidate}"])
-
-    # Syntax/bytecode compile coverage required by R0 + R-FINAL rework.
     run([PYTHON, "-m", "compileall", "runtime", "src", "tests"])
 
-    # Named V0.7 contracts and B1 integration smoke.
     for test in (
         "runtime/test_strategic_brain_contract_offline.py",
         "runtime/test_strategic_correction_offline.py",
@@ -177,7 +172,6 @@ def main() -> int:
     ):
         run([PYTHON, test])
 
-    # Full portable runtime regression plus stable controller/store/path core smoke.
     run([PYTHON, "-m", "unittest", "discover", "-s", "runtime", "-p", "test_*_offline.py"])
     run([PYTHON, "tests/test_core.py"])
 
