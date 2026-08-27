@@ -1,11 +1,13 @@
-"""Independent rerunnable Evidence driver for V07-INTEGRATE-2 verification.
+"""Independent full-candidate Evidence driver for V07-INTEGRATE-2.
 
 Usage:
-  python runtime/v07_integration_evidence.py --candidate <40-char-HEAD> --preflight
-  python runtime/v07_integration_evidence.py --candidate <40-char-HEAD>
+  python runtime/v07_integration_evidence.py \
+      --candidate <FINAL_40_CHAR_SHA> \
+      --core-commit <B1_REWORK_40_CHAR_SHA>
 
-Full mode fails if B1's test-only adapter is unbound. Success is machine asserted
-by command exits plus the explicit final marker; no Builder prose counts.
+There is intentionally no preflight/partial-success mode. Structural Git binding
+is verified before formal tests. The success marker is printed only after every
+machine assertion and regression command succeeds.
 """
 from __future__ import annotations
 
@@ -15,27 +17,25 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Iterable, List, Tuple
 
-from v07_integration_verify_support import BASE_COMMIT, SUCCESS_MARKER
+from v07_integration_verify_support import (
+    BASE_COMMIT,
+    CHANGED_PATH_ALLOWLIST,
+    CORE_OWNED_PATHS,
+    FAILED_CANDIDATE,
+    SUCCESS_MARKER,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 
-# Existing production/control surfaces B2 is not allowed to alter. Keeping these
-# byte-identical to the frozen base plus running the complete runtime offline suite
-# prevents a verification-only branch from silently changing V0.1-V0.6 behavior.
-LEGACY_NO_DIFF_PATHS = (
-    "src",
-    "tests",
-    "runtime/runtime.py",
-    "runtime/strategic_brain_contract.py",
-    "runtime/strategic_correction.py",
-    "runtime/strategic_reuse_contract.py",
-)
+
+def hard_fail(code: str) -> None:
+    raise SystemExit("EVIDENCE_HARD_FAIL=" + code)
 
 
-def run(cmd, env=None):
-    """Run one fail-fast evidence command with deterministic UTF-8 child stdio."""
+def run(cmd: List[str], env=None) -> None:
     proc_env = os.environ.copy()
     proc_env["PYTHONUTF8"] = "1"
     proc_env["PYTHONIOENCODING"] = "utf-8"
@@ -48,72 +48,140 @@ def run(cmd, env=None):
         raise SystemExit(proc.returncode or 1)
 
 
-def capture(*args):
+def capture(*args: str) -> str:
     return subprocess.check_output(args, cwd=str(ROOT), text=True).strip()
 
 
-def require_git_binding(candidate):
-    if len(candidate) != 40 or any(c not in "0123456789abcdef" for c in candidate.lower()):
-        raise SystemExit("EVIDENCE_FAIL=candidate must be an exact 40-char commit SHA")
+def require_exact_sha(label: str, value: str) -> str:
+    if not isinstance(value, str) or len(value) != 40:
+        hard_fail(f"{label}_NOT_EXACT_40_CHAR_SHA")
+    lowered = value.lower()
+    if value != lowered or any(c not in "0123456789abcdef" for c in value):
+        hard_fail(f"{label}_NOT_LOWER_HEX_SHA")
+    return value
+
+
+def parse_name_status(text: str) -> List[Tuple[str, str]]:
+    rows: List[Tuple[str, str]] = []
+    if not text:
+        return rows
+    for raw in text.splitlines():
+        parts = raw.split("\t")
+        if len(parts) != 2:
+            hard_fail("DIFF_NAME_STATUS_RENAME_COPY_OR_MALFORMED")
+        status, path = parts
+        # BASE->FINAL paths are all additions from the accepted base. Any delete,
+        # rename/copy, type change, or other status is outside the frozen candidate.
+        if status != "A":
+            hard_fail(f"DIFF_STATUS_NOT_ALLOWED:{status}:{path}")
+        rows.append((status, path))
+    return rows
+
+
+def require_exact_changed_path_allowlist(candidate: str) -> None:
+    text = capture("git", "diff", "--name-status", f"{BASE_COMMIT}..{candidate}", "--")
+    rows = parse_name_status(text)
+    paths = [path for _, path in rows]
+    expected = set(CHANGED_PATH_ALLOWLIST)
+    actual = set(paths)
+    if len(paths) != len(CHANGED_PATH_ALLOWLIST) or len(actual) != len(paths):
+        hard_fail(f"CHANGED_PATH_COUNT_NOT_EXACT_9:{len(paths)}")
+    unexpected = sorted(actual - expected)
+    missing = sorted(expected - actual)
+    if unexpected:
+        hard_fail("UNEXPECTED_CHANGED_PATHS:" + ",".join(unexpected))
+    if missing:
+        hard_fail("MISSING_CHANGED_PATHS:" + ",".join(missing))
+    print("EVIDENCE_CHANGED_PATHS=EXACT_9_ALLOWLIST")
+
+
+def require_core_binding(candidate: str, core_commit: str) -> None:
+    # All ancestry failures occur before any formal test command.
+    run(["git", "cat-file", "-e", f"{core_commit}^{{commit}}"])
+    if core_commit == FAILED_CANDIDATE:
+        hard_fail("CORE_COMMIT_IS_FROZEN_FAILED_CANDIDATE")
+    run(["git", "merge-base", "--is-ancestor", BASE_COMMIT, candidate])
+    run(["git", "merge-base", "--is-ancestor", FAILED_CANDIDATE, candidate])
+    run(["git", "merge-base", "--is-ancestor", FAILED_CANDIDATE, core_commit])
+    run(["git", "merge-base", "--is-ancestor", core_commit, candidate])
+
+    # B1 rework must itself be a targeted successor: from the frozen failed
+    # candidate to CORE_COMMIT, only B1-owned core paths may change, and at least
+    # one of them must actually change.
+    core_delta = capture("git", "diff", "--name-status", f"{FAILED_CANDIDATE}..{core_commit}", "--")
+    rows = parse_name_status(core_delta)
+    changed = {path for _, path in rows}
+    if not changed:
+        hard_fail("CORE_COMMIT_HAS_NO_CORE_REWORK_DELTA")
+    illegal = sorted(changed - set(CORE_OWNED_PATHS))
+    if illegal:
+        hard_fail("CORE_COMMIT_OUT_OF_SCOPE_PATHS:" + ",".join(illegal))
+    if "runtime/strategic_integration.py" not in changed:
+        hard_fail("CORE_COMMIT_DID_NOT_CHANGE_STRATEGIC_INTEGRATION")
+
+    # Once exact B1 CORE_COMMIT is merged, B2 may not touch either B1-owned file.
+    run(["git", "diff", "--exit-code", f"{core_commit}..{candidate}", "--", *CORE_OWNED_PATHS])
+    print(f"EVIDENCE_CORE_COMMIT={core_commit}")
+    print("EVIDENCE_CORE_FILES_AFTER_CORE=IMMUTABLE")
+
+
+def require_git_binding(candidate: str, core_commit: str) -> None:
+    require_exact_sha("CANDIDATE", candidate)
+    require_exact_sha("CORE_COMMIT", core_commit)
+
     head = capture("git", "rev-parse", "HEAD")
     if head != candidate:
-        raise SystemExit(f"EVIDENCE_FAIL=HEAD_MISMATCH expected={candidate} actual={head}")
-    run(["git", "merge-base", "--is-ancestor", BASE_COMMIT, candidate])
+        hard_fail(f"HEAD_MISMATCH:expected={candidate}:actual={head}")
     dirty = capture("git", "status", "--porcelain")
     if dirty:
-        raise SystemExit("EVIDENCE_FAIL=WORKTREE_DIRTY")
-    print(f"EVIDENCE_CANDIDATE={candidate}")
+        hard_fail("WORKTREE_DIRTY")
+
+    require_core_binding(candidate, core_commit)
+    require_exact_changed_path_allowlist(candidate)
+
     print(f"EVIDENCE_BASE={BASE_COMMIT}")
+    print(f"EVIDENCE_FAILED_CANDIDATE={FAILED_CANDIDATE}")
+    print(f"EVIDENCE_CANDIDATE={candidate}")
 
 
-def require_legacy_surfaces_unchanged():
-    # The frozen repository's top-level legacy suite contains machine-bound paths
-    # (local Python/browser profile). Do not weaken those tests or pretend they are
-    # portable: prove the legacy code/tests are byte-identical to the accepted base,
-    # then run every portable runtime offline test plus the core store/path smoke.
-    run(["git", "diff", "--exit-code", BASE_COMMIT, "--", *LEGACY_NO_DIFF_PATHS])
-    print("REGRESSION_LEGACY_SURFACES=UNCHANGED_FROM_FROZEN_BASE")
-
-
-def adapter_bound():
+def adapter_bound() -> bool:
     mod = importlib.import_module("v07_integration_candidate_adapter")
     return bool(mod.is_bound())
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate", required=True)
-    parser.add_argument("--preflight", action="store_true",
-                        help="run base-contract + regression evidence without claiming B1 integration success")
+    parser.add_argument("--core-commit", required=True)
     args = parser.parse_args()
 
-    require_git_binding(args.candidate)
-    require_legacy_surfaces_unchanged()
+    # Structural provenance/scope/core immutability checks must precede tests.
+    require_git_binding(args.candidate, args.core_commit)
+    if not adapter_bound():
+        hard_fail("B1_INTERFACE_NOT_BOUND")
 
+    # Patch/whitespace validity is part of Evidence and must fail fast.
+    run(["git", "diff", "--check", f"{BASE_COMMIT}..{args.candidate}"])
+
+    # Syntax/bytecode compile coverage required by R0 + R-FINAL rework.
+    run([PYTHON, "-m", "compileall", "runtime", "src", "tests"])
+
+    # Named V0.7 contracts and B1 integration smoke.
     for test in (
         "runtime/test_strategic_brain_contract_offline.py",
         "runtime/test_strategic_correction_offline.py",
         "runtime/test_strategic_reuse_contract_offline.py",
         "runtime/test_strategic_integration_offline.py",
         "runtime/test_v07_integration_contract_matrix_offline.py",
+        "runtime/test_v07_integration_candidate_offline.py",
     ):
         run([PYTHON, test])
 
-    # Complete runtime offline regression, including B1 smoke and B2 candidate
-    # attack tests when the adapter is bound.
+    # Full portable runtime regression plus stable controller/store/path core smoke.
     run([PYTHON, "-m", "unittest", "discover", "-s", "runtime", "-p", "test_*_offline.py"])
     run([PYTHON, "tests/test_core.py"])
 
-    if args.preflight:
-        print("V07_INTEGRATE2_PREFLIGHT_SUCCESS=" + args.candidate)
-        print("WAITING_FOR_B1=" + ("false" if adapter_bound() else "true"))
-        return 0
-
-    if not adapter_bound():
-        raise SystemExit("EVIDENCE_FAIL=B1_INTERFACE_NOT_BOUND")
-
-    # Run the candidate attack file explicitly again as the final integration gate.
-    run([PYTHON, "runtime/test_v07_integration_candidate_offline.py"])
+    # MUST remain the final Evidence output line.
     print(f"{SUCCESS_MARKER} candidate={args.candidate}")
     return 0
 
