@@ -1,0 +1,76 @@
+{
+  "schema": "V08_ADAPTER_REGISTRY",
+  "schema_version": 1,
+  "registry_generation": 1,
+  "worker_selection_mode": "SINGLE_ACTIVE_REPLACEMENT",
+  "providers": [
+    {
+      "provider_id": "chatgpt-web",
+      "kind": "WEB_SESSION",
+      "adapter_class": "WebSessionProvider",
+      "contract": "V08_PROVIDER_CONTRACT",
+      "availability": "UNVERIFIED_CURRENT",
+      "transport_identity_owner": "RUNTIME_CONTROLLER"
+    },
+    {
+      "provider_id": "workbuddy-cli",
+      "kind": "API_MODEL",
+      "adapter_class": "APIModelProvider",
+      "contract": "V08_PROVIDER_CONTRACT",
+      "availability": "UNVERIFIED_CURRENT",
+      "transport_identity_owner": "RUNTIME_CONTROLLER"
+    },
+    {
+      "provider_id": "codex-cli",
+      "kind": "API_MODEL",
+      "adapter_class": "APIModelProvider",
+      "contract": "V08_PROVIDER_CONTRACT",
+      "availability": "UNVERIFIED_CURRENT",
+      "transport_identity_owner": "RUNTIME_CONTROLLER"
+    }
+  ],
+  "reviewers": [
+    {
+      "reviewer_id": "r-prod-chatgpt-web",
+      "role": "R_PROD",
+      "provider_id": "chatgpt-web",
+      "contract": "V08_REVIEWER_IDENTITY_CONTRACT",
+      "availability": "UNVERIFIED_CURRENT",
+      "health": "UNVERIFIED_CURRENT"
+    },
+    {
+      "reviewer_id": "e-lab-codex-cli",
+      "role": "E_LAB",
+      "provider_id": "codex-cli",
+      "contract": "V08_REVIEWER_IDENTITY_CONTRACT",
+      "availability": "UNVERIFIED_CURRENT",
+      "health": "UNVERIFIED_CURRENT"
+    }
+  ],
+  "workers": [
+    {
+      "worker_id": "worker-workbuddy-cli",
+      "type": "AI_CLI",
+      "provider_id": "workbuddy-cli",
+      "contract": "V08_WORKER_ADAPTER_CONTRACT",
+      "capabilities": [
+        "analysis",
+        "mechanical-read",
+        "proposal"
+      ],
+      "availability": "UNVERIFIED_CURRENT"
+    },
+    {
+      "worker_id": "worker-codex-cli",
+      "type": "AI_CLI",
+      "provider_id": "codex-cli",
+      "contract": "V08_WORKER_ADAPTER_CONTRACT",
+      "capabilities": [
+        "analysis",
+        "code-review",
+        "proposal"
+      ],
+      "availability": "UNVERIFIED_CURRENT"
+    }
+  ]
+}
