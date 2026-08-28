@@ -74,3 +74,37 @@
 - evidence: `docs/evidence/v09-close/TIER2-b-egress-defect-HARD-STOP.md`（含检索命令、拒绝点行号、9 例清单，以及 canonical 侧 egress 已正确接线的对照：V09 矩阵 egress/scope 例全绿）。
 - 范围: 该路径对全部 CLOSE 任务为 FORBIDDEN_FILES（且规格 §0.3 禁改 runtime.py）；9 例先于基线 50cf8bd1 即红，非本施工引入。
 - status: OPEN —— 待裁决为缺陷修复（需独立授权任务）或登记为已知红 + V0.10 待办。
+
+## D011 — T11 授权、归因修正与 runtime/ 例外边界（actor=主脑，经 Builder 转录）
+
+- 归因修正（BUILDER_RULING_EGRESS §1）：9 例 egress 红**不是历史遗留**，而是 b1 核心升级提交
+  `50cf8bd1` 自身引入的能力回归。基座 `e8c53d4` 的 `effect_safety_lite.py:131` 为
+  `capability_permitted: bool = True, egress_permitted: bool = True`（参数式、默认放行，
+  且基座全仓不存在 `effect_egress_permitted` 状态键）；b1 重写为状态键读取
+  `state.get("effect_egress_permitted", False)` 且未建生产者。
+  故依规格 §6 第 7 条**必须本轮修复，不得推迟至 V0.10**。
+  Builder 前一份证据（TIER2-b）中"先于基线即红"一句据此勘误；其结论（缺陷、禁改期望）不变且更强。
+- 追认（§2）：(c) 以实测推翻裁决预设（根因为夹具陈旧、胶囊逻辑完好、改产品反破 R33）——追认并记功；
+  m1 适配为保真令两次 probe 使用不同 goal——追认。
+- T11 授权与边界（§3）：对 `runtime/` 开出**单任务、单位点例外**，
+  ALLOWED 仅 `runtime/runtime.py`（发送路径接线）、`runtime/effect_safety_lite.py`
+  （仅 `_runtime_preconditions` 取值来源，二选一并论证选址）、新增测试文件；
+  判定函数必须复用 `security.egress_allowed`；9 例期望一字不改作为验收件；
+  须补 SECRET/UNKNOWN/scope 不匹配负例以防恒真；
+  矩阵件、冻结件、`src/**`、`config/**` 及 runtime.py 任何结构性改动仍为 FORBIDDEN。
+
+## D012 — T11 触发 §3 停止条款，上报设计方案并请求 T11b（actor=Builder）
+
+- decision: 不在本授权内实施；停下上报设计方案。
+- reason: REQUIRED_BEHAVIOR 要求合法外发放行，而 `egress_allowed` 的必需输入
+  `goal_contract["data_egress_policy"]` 在 runtime 侧**完全不存在**
+  （`grep -rn "data_egress_policy" runtime/` 仅命中冻结矩阵夹具）。直接接线只能传空 dict →
+  恒 False（9 例仍红），或塞入全分级 → 恒真（§3.4 明令禁止，且比现状更危险）。
+  真实许可须把 Goal Contract 持久化穿过多层 —— 正是 §3 IMPLEMENTATION_BOUNDARY 的停止条件。
+- 取证补充：4 个失败套件均以子进程启动 `runtime.py`，状态仅 `APC_RUNTIME_STATE_ROOT` 下的
+  JSON run state，无 control.db、不 import aicontrol（`grep -ln "control.db|aicontrol|ControlStore"` → NONE），
+  故"委托 canonical 判定源"方案被排除，唯一可行路线为 runtime state schema 变更（结构性，超出本例外）。
+- evidence: `docs/evidence/v09-close/T11-egress-wiring-DESIGN-STOP.md`
+- 请求: 开设 T11b（授权 runtime state schema 变更 + 单列回归面：state 恢复兼容性、
+  j4 跨进程一致性、Slice A AC-1..AC-11 冻结契约）。
+- status: OPEN
