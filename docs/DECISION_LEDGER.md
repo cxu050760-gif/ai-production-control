@@ -59,3 +59,10 @@
   - 排除项：`SEND_AI_MESSAGE` 与 `EXTERNAL` 分别是 `operation` 与 `effect_scope` 字段值，不是 effect_type，未纳入；`TOTALLY_UNKNOWN_EFFECT_TYPE` 是攻击载荷，不得纳入。
 - evidence: 集合内类型端到端正例通过；`test_v08_adapter_core_offline` 44/44、`test_v08_adapter_evidence_offline` 27/27、`test_v09_effect_core_offline` 13/13 均维持绿，未见既有绿色流程被打红。
 - status: ACTIVE
+
+## D009 — V0.9 CLOSE TCB 重封推迟（机械事实，非判定）
+
+- decision: actor=Builder。不在本施工线运行 `seal_tcb`，TCB 维持 `UNVERIFIED_AFTER_CONTROLLER_CHANGE`。
+- reason: 既有封印机制的目标根为 `E:\WB\tools\ai-production-control` + `E:\WB\state\ai-production-control`（config 明列，本机实测均存在且为在产状态）。从本 worktree 运行会（1）写入活的 Controller 状态，（2）产出的 manifest 描述的代码树并非本候选，二者均使证据失真。
+- evidence: `config/production.json` code_root/state_root；`ls E:/WB/state/ai-production-control` 含 acceptance-fixtures/browser-auth-profile-* 等在产物；全新 store 的 `meta('tcb_status')` = `UNVERIFIED_AFTER_CONTROLLER_CHANGE`。
+- status: ACTIVE —— 待发布负责人在权威配对上重封，判定权在独立审查者与用户（R1/R2 裁决书 §3.5）。

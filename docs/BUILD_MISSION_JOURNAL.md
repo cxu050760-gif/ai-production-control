@@ -31,3 +31,13 @@
   - 适配运行器 `runtime/test_v09_attack_matrix_on_b1_core.py`（AD-1..AD-5）首测：36 例 matched=25 / red=11，R34 忠实探针 MISMATCH（未知类型端到端 ALLOW）。
   - `python scripts/state_doctor.py` = `DRIFT_FREE`（exit 0），残留 WARN 仅 journal staleness（裁决书 §2 预告合法）。
   - `RELEASE_STATUS` 维持 `PRODUCT_NOT_READY`；TCB 处于 `UNVERIFIED_AFTER_CONTROLLER_CHANGE`（代码任务尚未开始，T0 未触碰 `src/`）。
+- 2026-08-28 TASK-1..TASK-5 checkpoint：code commits `26014c06`(TASK-1) `3e67f261`(TASK-2) `df6492b5`(TASK-3)
+  `6cb04b05`(TASK-4) `c6d1a55b`(TASK-5)。适配运行器 36/36 matched、R34 忠实探针 FAIL_CLOSED；
+  `tests/` 137 ran 与基线同 2F+8E（零新增）；`runtime/` 全量逐文件与基线逐项同值。
+  CLOSE 单测 40 例 OK。`state/branch_registry.json` 仅同步 v0.9-b1 head 字段（裁决书 §3.3）。
+- TCB 重封**未执行**（如实记录）：`security.seal_tcb` 为既有机制，但其目标 `code_root`/`state_root`
+  指向 `E:\WB\tools|state\ai-production-control` —— 本机为**另一个检出与在产状态**，
+  从中封印得到的 manifest 描述的并非本候选代码树，且会写入活的 Controller 状态。
+  故封印推迟到由发布负责人在权威 code_root/state_root 配对上执行；
+  本线 TCB 状态如实维持 `UNVERIFIED_AFTER_CONTROLLER_CHANGE`（AGENTS.md 要求），
+  且"封印是否成立"不属 Builder 判定（裁决书 §3.5）。
