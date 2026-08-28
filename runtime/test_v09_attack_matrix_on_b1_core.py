@@ -67,6 +67,18 @@ AD-5  R18 adjudicated expectation override (BUILDER_RULING_R18.md §3)
       from this measurement-side file; the frozen fixture and frozen runner stay
       byte-unchanged apart from the T0-authorised ``spec_anchor`` metadata field.
 
+AD-7  R34 original-pass scoring with issuance-side attribution
+      (V09_CLOSE_BUILD_SPEC.md §2 CASE V09-R34, REGRESSION_REQUIREMENTS
+      "矩阵 R34 原走法与忠实探针双路径实测均 = FAIL_CLOSED" and §5 双侧 fail-closed)
+      Once the issuance side closed, the frozen R34 body raises while it is still
+      *constructing* its attack authorization -- a statement outside that body's own
+      ``try`` -- so a correct fail-closed denial would otherwise be reported as a
+      harness error. This adaptation reproduces the frozen R34 mutation verbatim
+      (same slot, same unknown effect_type, same adapter) inside the adapted runner
+      and scores FAIL_CLOSED, recording in ``detail`` which side closed
+      (issuance or execution). The frozen runner and the frozen fixture stay
+      byte-unchanged; no expectation in the fixture is edited.
+
 Faithful probe (carried over from the b1 re-measurement, V09_CLOSE_BUILD_SPEC.md
 §2 CASE V09-R34 and 用户裁决 4): R34 is additionally exercised with the unknown
 effect_type on BOTH the authorization and the intent, because the plain matrix
@@ -99,6 +111,7 @@ ADAPTATION_NOTES = {
     "AD-3": "authorization resource bound to intent resource (resource-a), not destination",
     "AD-4": "restart simulated by a NEW Controller instance over the same state root (V09-R21)",
     "AD-5": "R18 expectation revised by adjudication to ALLOW_DISTINCT_EFFECT with identity assertions",
+    "AD-7": "R34 original pass scored with issuance-vs-execution side attribution (T9 dual-sided fail-closed)",
 }
 
 R18_ADJUDICATED_EXPECTATION = "ALLOW_DISTINCT_EFFECT"
@@ -247,12 +260,53 @@ def r18_adjudicated_case(case):
         fx.close()
 
 
+def _closure_side(grant_error: Exception | None) -> str:
+    return "issuance_side(store.grant_authorization)" if grant_error else "execution_side"
+
+
+def r34_original_path_case(case):
+    """AD-7: frozen R34 mutation, scored with issuance-vs-execution attribution."""
+    fx = mx.Fixture()
+    try:
+        reality = mx.CountedExternalReality()
+        grant_error: Exception | None = None
+        try:
+            weird_auth = fx.authorization(effect_type="TOTALLY_UNKNOWN_EFFECT_TYPE", max_effect_count=1)
+        except Exception as exc:
+            grant_error = exc
+            weird_auth = None
+        if grant_error is not None:
+            return mx._obs(case, "FAIL_CLOSED", external_effect_count=reality.real_effect_count,
+                           detail=f"AD-7 closed at {_closure_side(grant_error)}: "
+                                  f"{type(grant_error).__name__}: {grant_error}")
+        try:
+            fx.execute(auth=weird_auth, intent=fx.intent(slot="unknown-effect-type"),
+                       adapter=reality.succeed)
+        except Exception as exc:
+            return mx._obs(case, "FAIL_CLOSED", external_effect_count=reality.real_effect_count,
+                           detail=f"AD-7 closed at {_closure_side(None)}: {type(exc).__name__}: {exc}")
+        return mx._obs(case, "ALLOW", external_effect_count=reality.real_effect_count,
+                       detail="AD-7: unknown effect_type accepted end-to-end")
+    finally:
+        fx.close()
+
+
 def r34_faithful_probe():
     """R34 with the unknown effect_type on BOTH authorization and intent."""
     fx = mx.Fixture()
+    reality = mx.CountedExternalReality()
     try:
-        weird_auth = fx.authorization(effect_type="TOTALLY_UNKNOWN_EFFECT_TYPE", max_effect_count=1)
-        reality = mx.CountedExternalReality()
+        try:
+            weird_auth = fx.authorization(effect_type="TOTALLY_UNKNOWN_EFFECT_TYPE", max_effect_count=1)
+        except Exception as exc:
+            return {
+                "test_id": "V09-R34-FAITHFUL",
+                "expected_outcome": "FAIL_CLOSED",
+                "observed_outcome": "FAIL_CLOSED",
+                "external_effect_count": reality.real_effect_count,
+                "matched": True,
+                "detail": f"closed at {_closure_side(exc)}: {type(exc).__name__}: {exc}",
+            }
         try:
             fx.execute(
                 auth=weird_auth,
@@ -266,7 +320,7 @@ def r34_faithful_probe():
                 "observed_outcome": "FAIL_CLOSED",
                 "external_effect_count": reality.real_effect_count,
                 "matched": True,
-                "detail": f"{type(exc).__name__}: {exc}",
+                "detail": f"closed at {_closure_side(None)}: {type(exc).__name__}: {exc}",
             }
         return {
             "test_id": "V09-R34-FAITHFUL",
@@ -283,6 +337,7 @@ def r34_faithful_probe():
 CASE_OVERRIDES = {
     "V09-R18": r18_adjudicated_case,
     "V09-R21": r21_restarted_case,
+    "V09-R34": r34_original_path_case,
 }
 
 

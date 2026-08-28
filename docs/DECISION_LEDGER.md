@@ -47,3 +47,15 @@
 - decision: actor=主脑（BUILDER_RULING_R3_R4 §2(a)）。设立 AD-6：允许修改**仅限测试文件**（`tests/**`、`runtime/test_*.py`），按 AD-1 同构模式为被测流程预置外部权威授权（decision nonce → grant），断言强度不降；禁止为让旧测试通过而改动任何产品代码。
 - reason: 8 例 self-grant ERROR 依赖的"Controller 自签发"已被 V0.9 永久禁止（规格 §3 对 R13 的永久约束），修回产品代码即违宪。
 - status: ACTIVE
+
+## D008 — V09-R34 封闭 effect_type 集合（策略变更留痕）
+
+- decision: actor=Builder（依据 V09_CLOSE_BUILD_SPEC.md T9 IMPLEMENTATION_BOUNDARY 第 2 条）。`config/production.json` 新增 `policy.authority_effect.known_effect_types = ["AI_MESSAGE","TEST","PUBLIC_TEST_INTERACTION"]`，签发侧（`store.grant_authorization`）与执行侧（`controller.execute_effect`）双侧强制成员判定。
+- reason: T9 要求未知 effect_type 端到端 fail-closed；集合变更属策略变更，按项目制度在此留痕。
+- 盘点清单（规格 T9 第 1 条要求"初始集合必须先盘点既有合法用法"）：
+  - `AI_MESSAGE` — `src/aicontrol/controller.py:517/543/599`（`execute_workbuddy_fallback` 与 run_goal 路径）、`acceptance.py:326/394`、攻击矩阵 AD-2 默认类型；
+  - `TEST` — `src/aicontrol/acceptance.py:174/183/806/809/862`（验收自测流程）；
+  - `PUBLIC_TEST_INTERACTION` — `src/aicontrol/acceptance.py:264`；
+  - 排除项：`SEND_AI_MESSAGE` 与 `EXTERNAL` 分别是 `operation` 与 `effect_scope` 字段值，不是 effect_type，未纳入；`TOTALLY_UNKNOWN_EFFECT_TYPE` 是攻击载荷，不得纳入。
+- evidence: 集合内类型端到端正例通过；`test_v08_adapter_core_offline` 44/44、`test_v08_adapter_evidence_offline` 27/27、`test_v09_effect_core_offline` 13/13 均维持绿，未见既有绿色流程被打红。
+- status: ACTIVE

@@ -51,7 +51,12 @@
       "external_effect_requires_tcb_verified": true,
       "raw_credentials_in_authority_scope": "DENY",
       "credential_transport": "REFERENCE_ONLY",
-      "high_risk_human_gate": "REQUIRED"
+      "high_risk_human_gate": "REQUIRED",
+      "known_effect_types": [
+        "AI_MESSAGE",
+        "TEST",
+        "PUBLIC_TEST_INTERACTION"
+      ]
     }
   },
   "allowed_roots": [

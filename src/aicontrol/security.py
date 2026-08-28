@@ -156,6 +156,21 @@ def human_gate_allowed(*, required: bool, reference: str | None) -> bool:
     return bool(isinstance(reference, str) and reference.strip())
 
 
+def known_effect_type_allowed(*, effect_type: Any, known_effect_types: Iterable[str] | None) -> bool:
+    """Closed-set membership for effect_type (V14-FROZEN §29/§30 effect model).
+
+    Adds no classification semantics -- it only asks whether a label is one of the
+    configured effect types. Returns True when no set is configured, so a
+    deployment without the policy key keeps its previous behaviour.
+    """
+    if known_effect_types is None:
+        return True
+    allowed = {str(item).strip().upper() for item in known_effect_types if str(item).strip()}
+    if not allowed:
+        return True
+    return isinstance(effect_type, str) and effect_type.strip().upper() in allowed
+
+
 def egress_allowed(
     *,
     classification: str,

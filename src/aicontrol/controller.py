@@ -40,7 +40,15 @@ class IndependentReviewAdapter:
             review_source=review_source,
             verdict=verdict,
         )
-from .security import authority_scope_allowed, browser_profile_identity, egress_allowed, seal_tcb, verify_tcb
+from .security import (
+    authority_scope_allowed,
+    browser_profile_identity,
+    egress_allowed,
+    human_gate_allowed,
+    known_effect_type_allowed,
+    seal_tcb,
+    verify_tcb,
+)
 from .store import (
     AuthorityStateUncertain,
     ControlStore,
@@ -123,7 +131,11 @@ class Controller:
         self.output_root = Path(self.config["output_root"])
         self.state_root.mkdir(parents=True, exist_ok=True)
         self.output_root.mkdir(parents=True, exist_ok=True)
-        self.store = ControlStore(self.config["database_path"], state_root=self.state_root)
+        self.store = ControlStore(
+            self.config["database_path"],
+            state_root=self.state_root,
+            known_effect_types=self.config.get("policy", {}).get("authority_effect", {}).get("known_effect_types"),
+        )
         self.controller_instance_id = f"controller-{uuid.uuid4()}"
         self.process_start_identity = sha256_text(f"{os.getpid()}:{time.time_ns()}:{self.code_root}")[:24]
         self.runtime = RuntimeManager(
@@ -341,6 +353,13 @@ class Controller:
             raise GateDenied("effect intent type binding missing")
         if not data_classification:
             raise GateDenied("effect intent data classification binding missing")
+        if not known_effect_type_allowed(
+            effect_type=effect_type,
+            known_effect_types=self.config.get("policy", {}).get("authority_effect", {}).get("known_effect_types"),
+        ):
+            # Re-checked at execution so an authorization issued before a policy
+            # tightening cannot come back to life (V14 §27A monotonic direction).
+            raise GateDenied("effect intent type is outside the closed effect model")
         if not (capability_permitted and egress_permitted and resource_fresh):
             raise GateDenied("capability, egress, or resource precondition denied")
         self._require_existing_authorization(
@@ -354,6 +373,14 @@ class Controller:
             destination=str(intent.get("destination") or ""),
             data_classes=[data_classification],
         )
+        if (
+            str(intent.get("impact") or "").strip().upper() == "HIGH"
+            or str(intent.get("reversibility") or "").strip().upper() == "IRREVERSIBLE"
+        ):
+            if not human_gate_allowed(
+                required=True, reference=str(intent.get("human_gate_reference") or "")
+            ):
+                raise GateDenied("high-impact effect requires an explicit Human Gate reference")
         expected_account = str(intent.get("expected_account", ""))
         if expected_account.startswith("profile-sha256:"):
             if observed_account_identity != expected_account.removeprefix("profile-sha256:"):

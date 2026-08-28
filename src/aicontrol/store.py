@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 from .util import (
     atomic_write,
@@ -477,8 +477,17 @@ def validate_actor_trajectory(actor_type: str, envelope: dict[str, Any]) -> None
 
 
 class ControlStore:
-    def __init__(self, database_path: str | Path, *, state_root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        database_path: str | Path,
+        *,
+        state_root: str | Path | None = None,
+        known_effect_types: Iterable[str] | None = None,
+    ) -> None:
         self.database_path = Path(database_path)
+        self.known_effect_types = (
+            None if known_effect_types is None else [str(item) for item in known_effect_types]
+        )
         self.state_root = Path(state_root) if state_root else self.database_path.parent
         self.snapshot_root = self.state_root / "snapshots"
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -886,6 +895,12 @@ class ControlStore:
     ) -> dict[str, Any]:
         if max_effect_count < 1:
             raise GateDenied("authorization quota must be positive")
+        if self.known_effect_types is not None:
+            # Mirrors security.known_effect_type_allowed; store must not import
+            # security (security already depends on store), so the rule is restated here.
+            allowed_types = {str(item).strip().upper() for item in self.known_effect_types if str(item).strip()}
+            if not isinstance(effect_type, str) or effect_type.strip().upper() not in allowed_types:
+                raise GateDenied("effect_type is outside the closed effect model")
         goal = self.latest_goal(task_id)
         scope_digest = sha256_text(canonical_json(scope))
         authorization_id = str(uuid.uuid4())
