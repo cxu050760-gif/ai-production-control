@@ -11,6 +11,26 @@ from .util import canonical_json, read_json, redact, sha256_file, sha256_text, u
 
 DATA_CLASSES = ("PUBLIC", "INTERNAL", "PRIVATE_LOCAL", "SENSITIVE", "SECRET", "UNKNOWN")
 
+# Raw credentials are never authority material. Authorization scopes may carry
+# references to credentials, but not the credentials themselves.
+RAW_CREDENTIAL_KEYS = {
+    "password",
+    "passwd",
+    "secret",
+    "client_secret",
+    "token",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "apikey",
+    "cookie",
+    "cookies",
+    "authorization",
+    "authorization_header",
+    "bearer",
+}
+CREDENTIAL_REFERENCE_KEYS = {"credential_ref", "secret_ref", "token_ref", "profile_ref", "account_ref"}
+
 TCB_RELATIVE_FILES = (
     "ai-control.cmd",
     "scripts/ai_control.py",
@@ -35,6 +55,105 @@ def normalized_classification(value: str) -> str:
     if result not in DATA_CLASSES:
         raise GateDenied(f"unknown data classification: {value}")
     return "PRIVATE_LOCAL" if result == "UNKNOWN" else result
+
+
+def _scope_dict(authorization: dict[str, Any]) -> dict[str, Any]:
+    scope = authorization.get("scope")
+    if isinstance(scope, dict):
+        return scope
+    raw = authorization.get("scope_json")
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _matches_authorized(expected: Any, actual: Any, *, wildcard: bool = False) -> bool:
+    if expected is None:
+        return False
+    if wildcard and expected == "*":
+        return True
+    return str(expected) == str(actual)
+
+
+def authority_scope_allowed(
+    *,
+    authorization: dict[str, Any],
+    task_id: str,
+    provider: str,
+    resource: str,
+    purpose: str,
+    identity: str,
+    destination: str | None = None,
+    classification: str | None = None,
+) -> bool:
+    """Pure Authority Matrix check used by both legacy ControlStore and Runtime Lite.
+
+    The executor identity and purpose are deliberately exact-bound. Provider,
+    resource, and destination may use an explicitly granted ``*`` wildcard.
+    Missing bindings fail closed.
+    """
+    if not isinstance(authorization, dict):
+        return False
+    scope = _scope_dict(authorization)
+    if not _matches_authorized(authorization.get("task_id"), task_id):
+        return False
+    expected_provider = authorization.get("provider", scope.get("provider"))
+    expected_resource = authorization.get("resource", scope.get("resource"))
+    expected_purpose = authorization.get("purpose", scope.get("purpose"))
+    expected_identity = authorization.get("identity", scope.get("identity"))
+    if not _matches_authorized(expected_provider, provider, wildcard=True):
+        return False
+    if not _matches_authorized(expected_resource, resource, wildcard=True):
+        return False
+    if not _matches_authorized(expected_purpose, purpose):
+        return False
+    if not _matches_authorized(expected_identity, identity):
+        return False
+    if destination is not None:
+        expected_destination = scope.get("destination", authorization.get("destination"))
+        if not _matches_authorized(expected_destination, destination, wildcard=True):
+            return False
+    if classification is not None:
+        try:
+            normalized = normalized_classification(classification)
+        except GateDenied:
+            return False
+        allowed_classes = scope.get("data_classes")
+        if not isinstance(allowed_classes, list) or normalized not in allowed_classes:
+            return False
+    return True
+
+
+def require_credential_isolation(scope: dict[str, Any]) -> None:
+    """Reject raw credential material; references are the only permitted form."""
+    if not isinstance(scope, dict):
+        raise GateDenied("authorization scope must be an object")
+
+    def walk(value: Any, path: tuple[str, ...] = ()) -> None:
+        if isinstance(value, dict):
+            for raw_key, child in value.items():
+                key = str(raw_key).strip().lower()
+                if key in CREDENTIAL_REFERENCE_KEYS or key.endswith("_ref"):
+                    continue
+                if key in RAW_CREDENTIAL_KEYS:
+                    dotted = ".".join((*path, str(raw_key)))
+                    raise GateDenied(f"raw credential material forbidden in authority scope: {dotted}")
+                walk(child, (*path, str(raw_key)))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, (*path, str(index)))
+
+    walk(scope)
+
+
+def human_gate_allowed(*, required: bool, reference: str | None) -> bool:
+    if not required:
+        return True
+    return bool(isinstance(reference, str) and reference.strip())
 
 
 def egress_allowed(

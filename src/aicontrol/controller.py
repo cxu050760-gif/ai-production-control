@@ -40,7 +40,7 @@ class IndependentReviewAdapter:
             review_source=review_source,
             verdict=verdict,
         )
-from .security import browser_profile_identity, egress_allowed, seal_tcb, verify_tcb
+from .security import authority_scope_allowed, browser_profile_identity, egress_allowed, seal_tcb, verify_tcb
 from .store import (
     AuthorityStateUncertain,
     ControlStore,
@@ -48,7 +48,7 @@ from .store import (
     Reservation,
     StorageDurabilityUnavailable,
 )
-from .util import canonical_json, read_json, sha256_file, sha256_text, tree_manifest, utc_now, windows_boot_session_id, write_json
+from .util import canonical_json, is_expired, read_json, sha256_file, sha256_text, tree_manifest, utc_now, windows_boot_session_id, write_json
 
 
 def worker_result_is_delivery_candidate(envelope: dict[str, Any], artifact: Path, artifact_digest: str) -> bool:
@@ -200,6 +200,78 @@ class Controller:
         )
         return {**result, **capsule}
 
+    def _require_existing_authorization(
+        self,
+        *,
+        authorization_id: str,
+        task_id: str,
+        provider: str,
+        resource: str,
+        purpose: str,
+        effect_type: str,
+        identity: str,
+        destination: str,
+        data_classes: list[str],
+    ) -> dict[str, Any]:
+        if not authorization_id:
+            raise GateDenied("pre-existing authorization id required")
+        row = self.store.connection.execute(
+            "SELECT * FROM authorizations WHERE authorization_id=? AND task_id=?",
+            (authorization_id, task_id),
+        ).fetchone()
+        if not row:
+            raise GateDenied("pre-existing authorization missing or wrong task")
+        authorization = dict(row)
+        try:
+            scope = json.loads(authorization["scope_json"])
+        except (TypeError, ValueError) as error:
+            raise AuthorityStateUncertain("authorization scope is not reconstructable") from error
+        if not isinstance(scope, dict):
+            raise AuthorityStateUncertain("authorization scope is not an object")
+        authorization["scope"] = scope
+        if authorization["status"] != "ACTIVE":
+            raise GateDenied("authorization revoked or inactive")
+        if is_expired(authorization["expires_at"]):
+            raise GateDenied("authorization expired")
+        goal = self.store.latest_goal(task_id)
+        if authorization["goal_contract_hash"] != goal["contract_hash"]:
+            raise GateDenied("authorization bound to stale Goal Contract")
+        epoch_row = self.store.connection.execute(
+            "SELECT epoch FROM revocation_epochs WHERE task_id=?", (task_id,)
+        ).fetchone()
+        latest_epoch = int(epoch_row["epoch"]) if epoch_row else 0
+        if int(authorization["revocation_epoch"]) != latest_epoch:
+            raise GateDenied("authorization revocation epoch stale")
+        reconstructed = self.store.reconstruct_authority(task_id)["authorizations"].get(authorization_id)
+        if not reconstructed or reconstructed["status"] != "ACTIVE":
+            raise AuthorityStateUncertain("authorization not reconstructable as ACTIVE from Authority Journal")
+        if int(authorization["generation"]) != int(reconstructed["generation"]):
+            raise AuthorityStateUncertain("authorization generation does not match durable Authority Journal")
+        if int(authorization["consumed_effect_count"]) != int(reconstructed["consumed_effect_count"]):
+            raise AuthorityStateUncertain("authorization consumption does not match durable Authority Journal")
+        if int(authorization["consumed_effect_count"]) >= int(authorization["max_effect_count"]):
+            raise GateDenied("authorization effect count exhausted")
+        if authorization["effect_type"] != effect_type:
+            raise GateDenied("authorization effect type mismatch")
+        scoped_effect_type = scope.get("effect_type")
+        if scoped_effect_type is not None and scoped_effect_type != effect_type:
+            raise GateDenied("authorization scoped effect type mismatch")
+        if not data_classes:
+            raise GateDenied("authorization data classification binding missing")
+        for classification in data_classes:
+            if not authority_scope_allowed(
+                authorization=authorization,
+                task_id=task_id,
+                provider=provider,
+                resource=resource,
+                purpose=purpose,
+                identity=identity,
+                destination=destination,
+                classification=classification,
+            ):
+                raise GateDenied("authorization provider/resource/purpose/identity/data binding mismatch")
+        return authorization
+
     def scoped_authorization(
         self,
         *,
@@ -211,31 +283,39 @@ class Controller:
         data_classes: list[str],
         max_effect_count: int,
         user_decision_reference: str,
+        resource: str | None = None,
+        identity: str | None = None,
     ) -> dict[str, Any]:
-        scope = {
-            "provider": provider,
-            "destination": destination,
-            "purpose": purpose,
-            "effect_type": effect_type,
-            "data_classes": data_classes,
-        }
-        nonce = self.store.issue_decision_nonce(
-            task_id,
-            scope,
-            user_decision_reference=user_decision_reference,
-            ttl_seconds=900,
+        """Return a pre-existing scoped authorization; never mint or grant one.
+
+        The compatibility arguments ``max_effect_count`` and
+        ``user_decision_reference`` remain so existing Controller call sites do
+        not become an implicit authority-creation API. They are intentionally
+        not used to create authority.
+        """
+        del max_effect_count, user_decision_reference
+        bound_resource = resource or destination
+        bound_identity = identity or self.controller_instance_id
+        rows = self.store.connection.execute(
+            "SELECT authorization_id FROM authorizations WHERE task_id=? ORDER BY granted_at DESC",
+            (task_id,),
         )
-        return self.store.grant_authorization(
-            task_id,
-            nonce["decision_nonce"],
-            scope,
-            provider=provider,
-            resource=destination,
-            purpose=purpose,
-            effect_type=effect_type,
-            max_effect_count=max_effect_count,
-            ttl_seconds=7200,
-        )
+        for row in rows:
+            try:
+                return self._require_existing_authorization(
+                    authorization_id=str(row["authorization_id"]),
+                    task_id=task_id,
+                    provider=provider,
+                    resource=bound_resource,
+                    purpose=purpose,
+                    effect_type=effect_type,
+                    identity=bound_identity,
+                    destination=destination,
+                    data_classes=data_classes,
+                )
+            except GateDenied:
+                continue
+        raise GateDenied("pre-existing scoped authorization required; Controller self-grant is forbidden")
 
     def execute_effect(
         self,
@@ -253,6 +333,27 @@ class Controller:
         resource_fresh: bool = True,
         observed_account_identity: str | None = None,
     ) -> dict[str, Any]:
+        if intent.get("task_id") != task_id:
+            raise GateDenied("effect intent task binding mismatch")
+        effect_type = str(intent.get("effect_type") or "")
+        data_classification = str(intent.get("data_classification") or "")
+        if not effect_type:
+            raise GateDenied("effect intent type binding missing")
+        if not data_classification:
+            raise GateDenied("effect intent data classification binding missing")
+        if not (capability_permitted and egress_permitted and resource_fresh):
+            raise GateDenied("capability, egress, or resource precondition denied")
+        self._require_existing_authorization(
+            authorization_id=authorization_id,
+            task_id=task_id,
+            provider=str(intent.get("provider") or ""),
+            resource=str(intent.get("resource") or ""),
+            purpose=str(intent.get("purpose") or ""),
+            effect_type=effect_type,
+            identity=str(intent.get("executor_identity") or self.controller_instance_id),
+            destination=str(intent.get("destination") or ""),
+            data_classes=[data_classification],
+        )
         expected_account = str(intent.get("expected_account", ""))
         if expected_account.startswith("profile-sha256:"):
             if observed_account_identity != expected_account.removeprefix("profile-sha256:"):
@@ -320,9 +421,10 @@ class Controller:
         lease: dict[str, Any],
         context_fence: str,
     ) -> dict[str, Any]:
-        """Invoke the fallback Brain through its own authorization and Effect WAL record."""
+        """Invoke the fallback Brain only with a pre-existing authorization."""
         provider = "WorkBuddy"
         purpose = "goal-planning"
+        effect_resource = "fresh-workbuddy-session"
         authorization = self.scoped_authorization(
             task_id=task_id,
             provider=provider,
@@ -332,6 +434,8 @@ class Controller:
             data_classes=[data_classification],
             max_effect_count=1,
             user_decision_reference=f"controlled-cli-fallback:{sha256_text(goal)}",
+            resource=effect_resource,
+            identity=self.controller_instance_id,
         )
         scope_row = self.store.connection.execute(
             "SELECT scope_json FROM authorizations WHERE authorization_id=?",
@@ -351,7 +455,10 @@ class Controller:
             "provider": provider,
             "destination": provider,
             "expected_account": "credential-ref:workbuddy-existing-auth",
-            "resource": "fresh-workbuddy-session",
+            "resource": effect_resource,
+            "effect_type": "AI_MESSAGE",
+            "data_classification": data_classification,
+            "executor_identity": self.controller_instance_id,
             "payload_hash": sha256_text(goal),
             "critical_params": {"role": "FALLBACK"},
             "purpose": purpose,
@@ -399,6 +506,7 @@ class Controller:
         brain_route = "LOCAL_ONLY"
         if data_classification in ("PUBLIC", "INTERNAL"):
             verify_tcb(self.store, self.code_root)
+            effect_resource = "new-chat-session"
             auth = self.scoped_authorization(
                 task_id=task_id,
                 provider="ChatGPT",
@@ -408,6 +516,8 @@ class Controller:
                 data_classes=[data_classification],
                 max_effect_count=1,
                 user_decision_reference=f"controlled-cli-run:{sha256_text(goal)}",
+                resource=effect_resource,
+                identity=self.controller_instance_id,
             )
             goal_contract = self.store.latest_goal(task_id)
             allowed = egress_allowed(
@@ -424,7 +534,10 @@ class Controller:
                 "provider": "ChatGPT",
                 "destination": "chatgpt.com",
                 "expected_account": f"profile-sha256:{browser_profile_identity(self.config['browser']['authenticated_profile'])}",
-                "resource": "new-chat-session",
+                "resource": effect_resource,
+                "effect_type": "AI_MESSAGE",
+                "data_classification": data_classification,
+                "executor_identity": self.controller_instance_id,
                 "payload_hash": sha256_text(goal),
                 "critical_params": {"role": "MAIN"},
                 "purpose": "goal-planning",
