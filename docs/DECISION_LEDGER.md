@@ -132,3 +132,31 @@
   若 9 例须在未封印状态下转绿，只能由测试场景声明 TCB 已验证——那属于 §3.4 AD-8 的
   "场景构造"还是"为翻绿放宽前置"，需主脑裁定；若是前者，请明确 AD-8 是否涵盖 tcb 声明。
 - status: OPEN（§5(a)/(b) 待裁）
+
+## D014 — AD-8 涵盖 TCB 场景声明；环依赖消解（actor=主脑，Builder 转录）
+
+- decision（BUILDER_RULING_AD8TCB §2，SHA a32e14a4…d8da 已核验）：AD-8 的场景构造权限**涵盖**
+  在 per-run state 声明 TCB 已验证；9 例转绿不必等待真实封印。
+- reason：(1) 先例即规范——冻结 b2 矩阵夹具自身在 `test_v09_attack_matrix_offline.py:99-100`
+  设 `tcb_status/authority_status=VERIFIED`，主脑复核确认；(2) 语义分层——TCB 验证是**部署态**
+  （收口清单第 1 项，发布负责人审查后执行），场景模拟"已封印的健康世界"，二者不同层，
+  场景声明既不替代也不构成生产封印；(3) 被测对象不变——9 例测发送路径与出站许可，
+  须让非被测闸门满足才能行使被测闸门，此乃离线套件既有方法论。
+- 四条纪律：声明仅限场景构造（不得触碰产品默认值/闸门逻辑/生产路径）；**必须补 TCB 闸门负例**
+  （与 egress 四向负例并列入库，证第二门未被架空）；AD-8 登记册逐点位列出且注明"期望未改"；
+  期望与断言一字不改，为翻绿放宽默认值维持 HARD STOP（T11B §5.c 继续有效）。
+
+## D015 — 实测修正：发送路径为三道门串联，最终批据 §5 移交（actor=Builder）
+
+- finding: AD8TCB §3 工单假设两门（egress + TCB）。实测为三门串联：
+  ① egress（本会话已通，四向实测）；
+  ② `Controller TCB is not VERIFIED for external effect` —— 场景声明
+     `state["effect_tcb_verified"]=True` **可通过**；但改设 `tcb_status="VERIFIED"` 会转由
+     EC_GATE 以 `lifecycle frozen: PAUSE/STOP`（rc=5）拒绝，属不同子系统，非合法声明路径；
+  ③ `no authorization bound to effect` —— 需 run state 内与该 logical effect 绑定的有效授权
+     （常规由 `ensure_valid_authorization` 建立）。**本会话未验证第③门能否纯 per-run state 声明**。
+- decision: 上下文极限，按 AD8TCB §5 移交续作；未改任何期望/断言/产品默认值/闸门逻辑。
+  若第③门须产品侧签发位点方能满足，则触 D014 纪律 1 与 T11B §5.b，续作须停下上报而非自行扩写。
+- evidence: `docs/evidence/v09-close/HANDOFF-T11b-final-batch.md`（含 7 处调用点位、
+  探针复现步骤、`INVALID_R_URL` 前置、AD-8 登记册模板与出口判据）。
+- status: OPEN —— 9 例仍红；全量"真正全绿"未达成，§4.3 原文判据待最终批。
