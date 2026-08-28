@@ -1,0 +1,96 @@
+{
+  "schema": "PROJECT_STATE_1",
+  "generated_at": "2026-08-28",
+  "generated_by": "takeover-planning-session (actor=planner-brain, verified via repo clone + local test runs)",
+  "release_status": "PRODUCT_NOT_READY",
+  "current_stage": "PHASE_0",
+  "trunk_policy": {
+    "master": {
+      "branch": "master",
+      "head": "4cf41fd8ede05fa5edab52e52fc8e589ff1a441e",
+      "status": "MERGED_BASELINE_STALE",
+      "note": "behind development head by 78 commits; merge decision DEFERRED per user ruling 2026-08-28 until Phase 0 lands"
+    }
+  },
+  "baselines": {
+    "current_development_head": {
+      "branch": "v0.9-b2/authority-effect-evidence",
+      "head": "da6d1e5e01a15d4f4610f231550818567ad59e9d",
+      "verdict": "CANDIDATE_RED",
+      "evidence_level": "VERIFIED",
+      "anchor": {"type": "commit", "value": "da6d1e5e01a15d4f4610f231550818567ad59e9d"}
+    },
+    "current_accepted_base": {
+      "branch": "v0.8-integrate/adapter-final-4",
+      "head": "e8c53d4a2d6d6ce1d57a34472170c01577e15d6c",
+      "evidence_level": "VERIFIED",
+      "anchor": {"type": "file_content", "value": "runtime/v09_authority_effect_evidence.py:EXPECTED_BASE constant pins this SHA"}
+    },
+    "last_green_base": {
+      "ref": "v0.8-integrate/adapter-final-4@e8c53d4a2d6d6ce1d57a34472170c01577e15d6c",
+      "qualification": "TESTED_GREEN_REPO_SIDE_ONLY",
+      "note": "offline suites green in independent re-run (planner session, 2026-08-28); formal sealed-green requires an in-repo independent review record, which does not exist yet",
+      "evidence_level": "VERIFIED",
+      "anchor": {"type": "test_record", "value": "planner-session run: v08 adapter core 44/44, evidence 27/27, registry 36+1 PASS"}
+    },
+    "latest_review": {
+      "scope": "M0.5 hardening",
+      "commit": "63217a8",
+      "verdict": "PASS / M0_5_STATUS=VERIFIED / ALLOW_M1=YES",
+      "record_location": "STATUS.md text only; no anchored evidence file in repo",
+      "evidence_level": "INFERRED",
+      "gap": "all v0.5-v0.9 reviews happened out-of-repo; repo has 0 PR / 0 tag / 0 release / 0 review evidence files"
+    }
+  },
+  "current_blockers": [
+    {
+      "id": "BLK-1",
+      "text": "Full V0.9 spec not in repo (user local .codex attachment); 16 RED cases cannot be adjudicated",
+      "evidence_level": "VERIFIED",
+      "anchor": {"type": "file_content", "value": "runtime/fixtures/v09_authority_effect_attack_cases.json has no spec_anchor field"}
+    },
+    {
+      "id": "BLK-2",
+      "text": "No general Goal Worker/Adapter; system cannot execute a real general GOAL",
+      "evidence_level": "VERIFIED",
+      "anchor": {"type": "file_content", "value": "STATUS.md 'Blocking product gap' line (present on master and v0.9-b2)"}
+    },
+    {
+      "id": "BLK-3",
+      "text": "Authority/Effect gate has 16 RED attack cases (class A semantic gaps must DENY but ALLOW)",
+      "evidence_level": "VERIFIED",
+      "anchor": {"type": "test_record", "value": "runtime/test_v09_attack_matrix_offline.py FAILED (failures=1), 16 case records reproduced in planner session"}
+    },
+    {
+      "id": "BLK-4",
+      "text": "No reconciliation API (R21-R24 probe six candidate method names, none exist)",
+      "evidence_level": "VERIFIED",
+      "anchor": {"type": "file_content", "value": "runtime/test_v09_attack_matrix_offline.py:_find_reconciler candidates all absent"}
+    }
+  ],
+  "red_case_classification": {
+    "A_semantic_gap_fix_in_v09": ["V09-R01", "V09-R04", "V09-R06", "V09-R08", "V09-R09", "V09-R13", "V09-R26", "V09-R32", "V09-R34", "V09-R36"],
+    "B_capability_missing": ["V09-R21", "V09-R22", "V09-R23", "V09-R24"],
+    "C_spec_adjudication_required": ["V09-R18", "V09-R20"],
+    "note": "classification is planner adjudication proposal; final per-case ruling requires anchored spec (BLK-1)"
+  },
+  "spec_registry": [],
+  "evidence_registry": [],
+  "roadmap": {
+    "approved": "2026-08-28 by user",
+    "sequence": ["PHASE_0", "V0.9_CLOSE", "V0.10_REAL_GOAL", "V0.11_REWORK_RECOVERY", "V1.0_HARDENING"],
+    "discipline": "KEEP > REPAIR > SIMPLIFY > REPLACE > REBUILD"
+  },
+  "open_questions": [
+    "Q2 spec/v0.9-b1 (authorization/effect separation variant): merge or abandon",
+    "Q3 V0.10 first real goal class (proposal: local file/code tasks)",
+    "Q4 when to rule deletion of 5 DELETE_CANDIDATE branches",
+    "Q5 backfill version mapping table for V0.2-V0.4 chat-era planning"
+  ],
+  "do_not_reopen": [
+    "axiom layer (Canonical State / Effect WAL / Authority Journal) redesign",
+    "ai-control.cmd revival as official entry",
+    "F004-class dead ends (Chrome login-state copying)",
+    "any merge before Phase 0 lands (user ruling 2026-08-28)"
+  ]
+}
