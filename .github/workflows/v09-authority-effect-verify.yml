@@ -11,8 +11,10 @@ permissions:
 env:
   ACCEPTED_V08_BASE: e8c53d4a2d6d6ce1d57a34472170c01577e15d6c
   SPECULATIVE_BASE: b65a51267969824c05a8794376eac766edc08eb9
+  SPEC_COMMIT_1: abaa693ad3c0aea4b655d4caca8c73680ae7d934
+  SPEC_SOURCE: ed15bd2a6fa094bc295ed37bee4a0fa07e063e75
   FORMAL_BRANCH: v0.9-b2/authority-effect-evidence
-  CORRECTION_PARENT: 692df25056f27128546f1f23d8abc136a501743e
+  CORRECTION_PARENT: 41b6984196cf62a3dea5973d6d77f5e280070857
   BOOTSTRAP_REPLAY_SOURCE: 14578beb227e36c31db6cd3421fcb62a081f6368
 
 jobs:
@@ -124,7 +126,6 @@ jobs:
                   run: |
                     python - <<'PY'
                     import json, os, subprocess
-                    from collections import Counter
                     from pathlib import Path
                     ids=[f"V09-R{i:02d}" for i in range(1,37)]
                     reds=["V09-R01","V09-R04","V09-R06","V09-R08","V09-R09","V09-R13","V09-R18","V09-R20","V09-R21","V09-R22","V09-R23","V09-R24","V09-R26","V09-R32","V09-R34","V09-R36"]
