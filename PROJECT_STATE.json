@@ -15,10 +15,10 @@
   "baselines": {
     "current_development_head": {
       "branch": "v0.9-b2/authority-effect-evidence",
-      "head": "da6d1e5e01a15d4f4610f231550818567ad59e9d",
+      "head": "a0ce691faf4eb59fe8b2560bde7d0db59e7151fe",
       "verdict": "CANDIDATE_RED",
       "evidence_level": "VERIFIED",
-      "anchor": {"type": "commit", "value": "da6d1e5e01a15d4f4610f231550818567ad59e9d"}
+      "anchor": {"type": "commit", "value": "a0ce691faf4eb59fe8b2560bde7d0db59e7151fe"}
     },
     "current_accepted_base": {
       "branch": "v0.8-integrate/adapter-final-4",

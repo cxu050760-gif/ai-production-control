@@ -14,7 +14,7 @@
 
 | 概念 | 值 | 等级 |
 |---|---|---|
-| 当前开发头 | `v0.9-b2/authority-effect-evidence@da6d1e5e`，裁决 = **CANDIDATE_RED** | VERIFIED |
+| 当前开发头 | `v0.9-b2/authority-effect-evidence@a0ce691`，裁决 = **CANDIDATE_RED** | VERIFIED |
 | 当前被接受基线 | `v0.8-integrate/adapter-final-4@e8c53d4a`（v0.9 证据模块硬编码指认） | VERIFIED |
 | 最后绿基线 | 同上（仓库侧测试实测全绿；正式封绿还差入库独立审查记录） | VERIFIED + 限定 |
 | master | `@4cf41fd`，MERGED_BASELINE_STALE（落后开发头 78 提交）；**合并裁决暂缓至 Phase 0 后** | VERIFIED |

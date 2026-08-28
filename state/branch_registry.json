@@ -18,7 +18,7 @@
   },
   "branches": [
     {"name": "master", "role": "TRUNK", "head": "4cf41fd8", "note": "MERGED_BASELINE_STALE, 78 behind dev head; merge decision deferred per 2026-08-28 ruling"},
-    {"name": "v0.9-b2/authority-effect-evidence", "role": "CANDIDATE_RED", "head": "da6d1e5e", "note": "current development head; publishes formal RED evidence of 16 attack-matrix cases"},
+    {"name": "v0.9-b2/authority-effect-evidence", "role": "CANDIDATE_RED", "head": "a0ce691f", "note": "current development head; publishes formal RED evidence of 16 attack-matrix cases"},
     {"name": "v0.9-b1/authority-effect-core", "role": "ACTIVE", "head": "50cf8bd1", "note": "core replayed onto accepted v0.8 base"},
     {"name": "spec/v0.9-b1/authority-effect-core", "role": "ACTIVE", "head": "075480d3", "note": "authorization/effect separation variant; OPEN QUESTION Q2: merge or abandon"},
     {"name": "v0.8-integrate/adapter-final-4", "role": "ACCEPTED_BASE", "head": "e8c53d4a", "note": "LAST_GREEN_BASE (repo-side tested green); pinned by v0.9 evidence module EXPECTED_BASE"},
