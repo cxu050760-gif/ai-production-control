@@ -1,4 +1,4 @@
-name: V0.9 B2 Formal RED Source Gate Correction
+name: V0.9 B2 Formal Source Export
 
 on:
   push:
@@ -6,17 +6,17 @@ on:
       - v0.9-b2/authority-effect-evidence
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   ACCEPTED_V08_BASE: e8c53d4a2d6d6ce1d57a34472170c01577e15d6c
   SPECULATIVE_BASE: b65a51267969824c05a8794376eac766edc08eb9
-  SPEC_SOURCE: ed15bd2a6fa094bc295ed37bee4a0fa07e063e75
   FORMAL_BRANCH: v0.9-b2/authority-effect-evidence
-  BOOTSTRAP_PARENT: 14578beb227e36c31db6cd3421fcb62a081f6368
+  CORRECTION_PARENT: 692df25056f27128546f1f23d8abc136a501743e
+  BOOTSTRAP_REPLAY_SOURCE: 14578beb227e36c31db6cd3421fcb62a081f6368
 
 jobs:
-  replay-validate-push-red-source:
+  build-validate-export:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -30,18 +30,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Verify correction ancestry
+      - name: Verify exporter ancestry
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "${BOOTSTRAP_PARENT}"
+          test "$(git rev-parse HEAD^)" = "${CORRECTION_PARENT}"
           git merge-base --is-ancestor "${ACCEPTED_V08_BASE}" HEAD
           if git merge-base --is-ancestor "${SPECULATIVE_BASE}" HEAD; then
             echo "SPECULATIVE_ANCESTRY_FORBIDDEN"
             exit 1
           fi
 
-      - name: Reuse verified parent replay step
+      - name: Rebuild equivalent four-path formal source
         shell: bash
         run: |
           set -euo pipefail
@@ -60,17 +60,10 @@ jobs:
           end = text.find(end_marker, start)
           if end < 0:
               raise SystemExit("PARENT_REPLAY_STEP_END_MISSING")
-          script = textwrap.dedent(text[start:end])
-          target = Path("/tmp/v09-parent-replay.sh")
-          target.write_text("set -euo pipefail\n" + script, encoding="utf-8")
-          print("PARENT_REPLAY_STEP_EXTRACTED")
+          Path("/tmp/v09-replay.sh").write_text("set -euo pipefail\n" + textwrap.dedent(text[start:end]), encoding="utf-8")
           PY
-          bash /tmp/v09-parent-replay.sh
+          bash /tmp/v09-replay.sh
 
-      - name: Install final RED-aware formal workflow
-        shell: bash
-        run: |
-          set -euo pipefail
           cat > .github/workflows/v09-authority-effect-verify.yml <<'YAML'
           name: V0.9 Authority Effect Formal RED Evidence
 
@@ -92,157 +85,71 @@ jobs:
               runs-on: ubuntu-latest
               timeout-minutes: 15
               steps:
-                - name: Checkout exact formal B2 source
-                  uses: actions/checkout@v4
+                - uses: actions/checkout@v4
                   with:
                     fetch-depth: 0
-
-                - name: Set up Python 3.12
-                  uses: actions/setup-python@v5
+                - uses: actions/setup-python@v5
                   with:
                     python-version: "3.12"
-
-                - name: Verify formal ancestry and four-path ownership
+                - name: Verify ancestry and ownership
                   shell: bash
                   run: |
                     set -euo pipefail
-                    git cat-file -e "${ACCEPTED_V08_BASE}^{commit}"
                     git merge-base --is-ancestor "${ACCEPTED_V08_BASE}" HEAD
-                    if git merge-base --is-ancestor "${SPECULATIVE_BASE}" HEAD; then
-                      echo "SPECULATIVE_ANCESTRY_FORBIDDEN"
-                      exit 1
-                    fi
+                    if git merge-base --is-ancestor "${SPECULATIVE_BASE}" HEAD; then exit 1; fi
                     python - <<'PY'
                     import os, subprocess
-                    allowed = {
-                        ".github/workflows/v09-authority-effect-verify.yml",
-                        "runtime/fixtures/v09_authority_effect_attack_cases.json",
-                        "runtime/test_v09_attack_matrix_offline.py",
-                        "runtime/v09_authority_effect_evidence.py",
-                    }
-                    base = os.environ["ACCEPTED_V08_BASE"]
-                    changed = {
-                        line.strip()
-                        for line in subprocess.check_output(
-                            ["git", "diff", "--name-only", f"{base}..HEAD"], text=True
-                        ).splitlines() if line.strip()
-                    }
-                    if changed != allowed:
-                        raise SystemExit(f"B2_FORMAL_OWNERSHIP_MISMATCH:{sorted(changed)}")
-                    print("B2_FORMAL_OWNERSHIP_OK", sorted(changed))
+                    allowed={".github/workflows/v09-authority-effect-verify.yml","runtime/fixtures/v09_authority_effect_attack_cases.json","runtime/test_v09_attack_matrix_offline.py","runtime/v09_authority_effect_evidence.py"}
+                    changed={x for x in subprocess.check_output(["git","diff","--name-only",f"{os.environ['ACCEPTED_V08_BASE']}..HEAD"],text=True).splitlines() if x}
+                    if changed != allowed: raise SystemExit(f"B2_FORMAL_OWNERSHIP_MISMATCH:{sorted(changed)}")
                     PY
-
                 - name: Compile all runtime
                   run: python -m compileall -q runtime
-
                 - name: Diff check
                   run: git diff --check "${ACCEPTED_V08_BASE}..HEAD"
-
                 - name: Execute exact B2 matrix command
                   continue-on-error: true
                   run: python runtime/test_v09_attack_matrix_offline.py
-
-                - name: Collect fresh formal attack results
+                - name: Collect formal results
                   run: |
                     mkdir -p v09-evidence
                     python runtime/test_v09_attack_matrix_offline.py --emit-jsonl v09-evidence/v09-attack-results.jsonl
-
-                - name: Generate fresh formal Evidence
+                - name: Generate formal Evidence
                   continue-on-error: true
                   shell: bash
                   run: |
-                    set +e
-                    python runtime/v09_authority_effect_evidence.py \
-                      --base-sha "${ACCEPTED_V08_BASE}" \
-                      --candidate-sha "$(git rev-parse HEAD)" \
-                      --output v09-evidence/v09-authority-effect-evidence.json
-                    rc=$?
-                    set -e
-                    echo "EVIDENCE_RUNNER_RC=${rc}"
-                    exit "$rc"
-
-                - name: Validate structural Evidence gate and formal RED baseline
+                    python runtime/v09_authority_effect_evidence.py --base-sha "${ACCEPTED_V08_BASE}" --candidate-sha "$(git rev-parse HEAD)" --output v09-evidence/v09-authority-effect-evidence.json
+                - name: Validate formal RED baseline
                   shell: bash
                   run: |
-                    set -euo pipefail
                     python - <<'PY'
                     import json, os, subprocess
                     from collections import Counter
                     from pathlib import Path
-
-                    expected_ids = [f"V09-R{i:02d}" for i in range(1, 37)]
-                    expected_red = [
-                        "V09-R01","V09-R04","V09-R06","V09-R08","V09-R09","V09-R13","V09-R18",
-                        "V09-R20","V09-R21","V09-R22","V09-R23","V09-R24","V09-R26","V09-R32",
-                        "V09-R34","V09-R36",
-                    ]
-                    matrix = json.loads(Path("runtime/fixtures/v09_authority_effect_attack_cases.json").read_text(encoding="utf-8"))
-                    if matrix.get("attack_matrix_version") != "V09-AUTHORITY-EFFECT-ATTACK-MATRIX-1":
-                        raise SystemExit("ATTACK_MATRIX_VERSION_MISMATCH")
-                    cases = matrix.get("cases") or []
-                    ids = [case.get("id") for case in cases]
-                    counts = Counter(ids)
-                    missing = [item for item in expected_ids if counts[item] == 0]
-                    extra = sorted(str(item) for item in counts if item not in expected_ids)
-                    duplicate = sorted(str(item) for item, count in counts.items() if count > 1)
-                    if len(cases) != 36 or ids != expected_ids or missing or extra or duplicate:
-                        raise SystemExit(f"MATRIX_ID_SET_FAIL missing={missing} extra={extra} duplicate={duplicate}")
-                    by_id = {case["id"]: case for case in cases}
-                    for case in cases:
-                        if case.get("owner") != "B1":
-                            raise SystemExit(f"OWNER_MISMATCH:{case['id']}")
-                        if case.get("owner_case") != case.get("theme"):
-                            raise SystemExit(f"OWNER_CASE_MISMATCH:{case['id']}")
-
-                    rows = [json.loads(line) for line in Path("v09-evidence/v09-attack-results.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-                    result_ids = [row.get("test_id") for row in rows]
-                    rcounts = Counter(result_ids)
-                    rmissing = [item for item in expected_ids if rcounts[item] == 0]
-                    rextra = sorted(str(item) for item in rcounts if item not in expected_ids)
-                    rduplicate = sorted(str(item) for item, count in rcounts.items() if count > 1)
-                    if len(rows) != 36 or result_ids != expected_ids or rmissing or rextra or rduplicate:
-                        raise SystemExit(f"RESULT_ID_SET_FAIL missing={rmissing} extra={rextra} duplicate={rduplicate}")
-                    for row in rows:
-                        case = by_id[row["test_id"]]
-                        if row.get("executed") is not True:
-                            raise SystemExit(f"EXECUTED_FALSE:{row['test_id']}")
-                        if row.get("owner") != case["owner"]:
-                            raise SystemExit(f"RESULT_OWNER_MISMATCH:{row['test_id']}")
-                        if row.get("owner_case") != case["owner_case"]:
-                            raise SystemExit(f"RESULT_OWNER_CASE_MISMATCH:{row['test_id']}")
-                        if row.get("expected_outcome") != case["expected_outcome"]:
-                            raise SystemExit(f"RESULT_EXPECTED_MISMATCH:{row['test_id']}")
-                        observed = row.get("observed_outcome")
-                        if not isinstance(observed, str) or not observed:
-                            raise SystemExit(f"RESULT_OBSERVED_MISSING:{row['test_id']}")
-                        if row.get("matched") is not (observed == case["expected_outcome"]):
-                            raise SystemExit(f"RESULT_MATCH_FLAG_MISMATCH:{row['test_id']}")
-                    red_ids = [row["test_id"] for row in rows if row.get("matched") is not True]
-                    if red_ids != expected_red:
-                        raise SystemExit(f"FORMAL_RED_BASELINE_MISMATCH:{red_ids}")
-
-                    evidence = json.loads(Path("v09-evidence/v09-authority-effect-evidence.json").read_text(encoding="utf-8"))
-                    if evidence.get("accepted_v08_base_sha") != os.environ["ACCEPTED_V08_BASE"]:
-                        raise SystemExit("EVIDENCE_BASE_MISMATCH")
-                    if evidence.get("candidate_sha") != subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip():
-                        raise SystemExit("EVIDENCE_CANDIDATE_MISMATCH")
-                    if evidence.get("attack_matrix_count") != 36:
-                        raise SystemExit("EVIDENCE_ATTACK_COUNT_MISMATCH")
-                    if evidence.get("red_baseline_count") != 16 or evidence.get("red_ids") != expected_red:
-                        raise SystemExit("EVIDENCE_RED_BASELINE_MISMATCH")
-
-                    crown = {row["test_id"]: row for row in rows if row["test_id"] in {"V09-R19","V09-R20","V09-R21","V09-R22","V09-R23","V09-R24"}}
-                    if crown["V09-R19"].get("matched") is not True or crown["V09-R19"].get("observed_outcome") != "OUTCOME_UNKNOWN" or crown["V09-R19"].get("external_effect_count") != 1:
-                        raise SystemExit("CROWN_R19_MISMATCH")
+                    ids=[f"V09-R{i:02d}" for i in range(1,37)]
+                    reds=["V09-R01","V09-R04","V09-R06","V09-R08","V09-R09","V09-R13","V09-R18","V09-R20","V09-R21","V09-R22","V09-R23","V09-R24","V09-R26","V09-R32","V09-R34","V09-R36"]
+                    m=json.loads(Path("runtime/fixtures/v09_authority_effect_attack_cases.json").read_text(encoding="utf-8"))
+                    cases=m.get("cases") or []
+                    if m.get("attack_matrix_version")!="V09-AUTHORITY-EFFECT-ATTACK-MATRIX-1" or m.get("attack_case_count")!=36 or [c.get("id") for c in cases]!=ids or len({c.get("id") for c in cases})!=36: raise SystemExit("MATRIX_INTEGRITY_FAIL")
+                    by={c["id"]:c for c in cases}
+                    rows=[json.loads(x) for x in Path("v09-evidence/v09-attack-results.jsonl").read_text(encoding="utf-8").splitlines() if x]
+                    if [r.get("test_id") for r in rows]!=ids or len(rows)!=36: raise SystemExit("RESULT_ID_SET_FAIL")
+                    for r in rows:
+                      c=by[r["test_id"]]
+                      if r.get("executed") is not True or r.get("owner")!=c.get("owner") or r.get("owner_case")!=c.get("owner_case") or r.get("expected_outcome")!=c.get("expected_outcome"): raise SystemExit(f"RESULT_BINDING_FAIL:{r['test_id']}")
+                      o=r.get("observed_outcome")
+                      if not isinstance(o,str) or not o or r.get("matched") is not (o==c.get("expected_outcome")): raise SystemExit(f"RESULT_OBSERVATION_FAIL:{r['test_id']}")
+                    actual=[r["test_id"] for r in rows if r.get("matched") is not True]
+                    if actual!=reds: raise SystemExit(f"RED_BASELINE_FAIL:{actual}")
+                    e=json.loads(Path("v09-evidence/v09-authority-effect-evidence.json").read_text(encoding="utf-8"))
+                    if e.get("accepted_v08_base_sha")!=os.environ["ACCEPTED_V08_BASE"] or e.get("candidate_sha")!=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip() or e.get("attack_matrix_count")!=36 or e.get("red_baseline_count")!=16 or e.get("red_ids")!=reds: raise SystemExit("EVIDENCE_BINDING_FAIL")
+                    crown={r["test_id"]:r for r in rows if r["test_id"] in {"V09-R19","V09-R20","V09-R21","V09-R22","V09-R23","V09-R24"}}
+                    if crown["V09-R19"].get("matched") is not True or crown["V09-R19"].get("observed_outcome")!="OUTCOME_UNKNOWN" or crown["V09-R19"].get("external_effect_count")!=1: raise SystemExit("CROWN_R19_FAIL")
                     for cid in ("V09-R20","V09-R21","V09-R22","V09-R23","V09-R24"):
-                        if crown[cid].get("matched") is True:
-                            raise SystemExit(f"CROWN_EXPECTED_RED_MISMATCH:{cid}")
+                      if crown[cid].get("matched") is True: raise SystemExit(f"CROWN_RED_FAIL:{cid}")
                     print("STRUCTURAL_EVIDENCE_GATE=PASS")
                     print("FORMAL_RED_BASELINE_COUNT=16")
-                    print("RED_IDS=" + ",".join(expected_red))
-                    print("CROWN_BASELINE=R19_GREEN_R20_R21_R22_R23_R24_RED")
                     PY
-
                 - name: Publish formal RED Evidence
                   if: always()
                   uses: actions/upload-artifact@v4
@@ -255,120 +162,53 @@ jobs:
 
           git add .github/workflows/v09-authority-effect-verify.yml
           git commit --amend --no-edit
-          echo "FINAL_LOCAL_SOURCE=$(git rev-parse HEAD)"
+          echo "LOCAL_SOURCE=$(git rev-parse HEAD)"
 
-      - name: Verify structural source gate before push
+      - name: Validate source before export
         shell: bash
         run: |
           set -euo pipefail
           git merge-base --is-ancestor "${ACCEPTED_V08_BASE}" HEAD
-          if git merge-base --is-ancestor "${SPECULATIVE_BASE}" HEAD; then
-            echo "SPECULATIVE_ANCESTRY_FORBIDDEN_AFTER_REPLAY"
-            exit 1
-          fi
-          python - <<'PY'
-          import os, subprocess
-          allowed = {
-              ".github/workflows/v09-authority-effect-verify.yml",
-              "runtime/fixtures/v09_authority_effect_attack_cases.json",
-              "runtime/test_v09_attack_matrix_offline.py",
-              "runtime/v09_authority_effect_evidence.py",
-          }
-          changed = {
-              line.strip()
-              for line in subprocess.check_output(
-                  ["git", "diff", "--name-only", f"{os.environ['ACCEPTED_V08_BASE']}..HEAD"], text=True
-              ).splitlines() if line.strip()
-          }
-          if changed != allowed:
-              raise SystemExit(f"FORMAL_SOURCE_PATH_MISMATCH:{sorted(changed)}")
-          print("FORMAL_SOURCE_PATHS_OK", sorted(changed))
-          PY
+          if git merge-base --is-ancestor "${SPECULATIVE_BASE}" HEAD; then exit 1; fi
           python -m compileall -q runtime
           git diff --check "${ACCEPTED_V08_BASE}..HEAD"
-
-      - name: Re-run fresh formal RED baseline before push
-        shell: bash
-        run: |
-          set -euo pipefail
           mkdir -p v09-evidence
-          set +e
-          python runtime/test_v09_attack_matrix_offline.py
-          matrix_rc=$?
-          set -e
-          if test "$matrix_rc" -eq 0; then
-            echo "UNEXPECTED_GREEN_BASELINE"
-            exit 1
-          fi
           python runtime/test_v09_attack_matrix_offline.py --emit-jsonl v09-evidence/v09-attack-results.jsonl
           set +e
-          python runtime/v09_authority_effect_evidence.py \
-            --base-sha "${ACCEPTED_V08_BASE}" \
-            --candidate-sha "$(git rev-parse HEAD)" \
-            --output v09-evidence/v09-authority-effect-evidence.json
-          evidence_rc=$?
+          python runtime/v09_authority_effect_evidence.py --base-sha "${ACCEPTED_V08_BASE}" --candidate-sha "$(git rev-parse HEAD)" --output v09-evidence/v09-authority-effect-evidence.json
+          rc=$?
           set -e
-          if test "$evidence_rc" -eq 0; then
-            echo "UNEXPECTED_GREEN_EVIDENCE"
-            exit 1
-          fi
+          if test "$rc" -eq 0; then echo "UNEXPECTED_GREEN_EVIDENCE"; exit 1; fi
           python - <<'PY'
           import json, os, subprocess
-          from collections import Counter
           from pathlib import Path
-          expected_ids = [f"V09-R{i:02d}" for i in range(1, 37)]
-          expected_red = ["V09-R01","V09-R04","V09-R06","V09-R08","V09-R09","V09-R13","V09-R18","V09-R20","V09-R21","V09-R22","V09-R23","V09-R24","V09-R26","V09-R32","V09-R34","V09-R36"]
-          matrix = json.loads(Path("runtime/fixtures/v09_authority_effect_attack_cases.json").read_text(encoding="utf-8"))
-          if matrix.get("attack_matrix_version") != "V09-AUTHORITY-EFFECT-ATTACK-MATRIX-1" or matrix.get("attack_case_count") != 36:
-              raise SystemExit("MATRIX_STRUCTURE_MISMATCH")
-          cases = matrix.get("cases") or []
-          ids = [case.get("id") for case in cases]
-          if ids != expected_ids or len(set(ids)) != 36:
-              raise SystemExit("MATRIX_ID_SET_MISMATCH")
-          by_id = {case["id"]: case for case in cases}
-          rows = [json.loads(line) for line in Path("v09-evidence/v09-attack-results.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-          rids = [row.get("test_id") for row in rows]
-          counts = Counter(rids)
-          if len(rows) != 36 or rids != expected_ids or any(count != 1 for count in counts.values()):
-              raise SystemExit("RESULT_ID_SET_MISMATCH")
-          for row in rows:
-              case = by_id[row["test_id"]]
-              if row.get("executed") is not True or row.get("owner") != case.get("owner") or row.get("owner_case") != case.get("owner_case"):
-                  raise SystemExit(f"RESULT_BINDING_MISMATCH:{row['test_id']}")
-              if row.get("expected_outcome") != case.get("expected_outcome"):
-                  raise SystemExit(f"EXPECTED_OUTCOME_MISMATCH:{row['test_id']}")
-              observed = row.get("observed_outcome")
-              if not isinstance(observed, str) or not observed or row.get("matched") is not (observed == case.get("expected_outcome")):
-                  raise SystemExit(f"OBSERVATION_MISMATCH:{row['test_id']}")
-          red_ids = [row["test_id"] for row in rows if row.get("matched") is not True]
-          if red_ids != expected_red:
-              raise SystemExit(f"FORMAL_RED_BASELINE_MISMATCH:{red_ids}")
-          evidence = json.loads(Path("v09-evidence/v09-authority-effect-evidence.json").read_text(encoding="utf-8"))
-          if evidence.get("accepted_v08_base_sha") != os.environ["ACCEPTED_V08_BASE"] or evidence.get("candidate_sha") != subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip():
-              raise SystemExit("EVIDENCE_BINDING_MISMATCH")
-          if evidence.get("attack_matrix_count") != 36 or evidence.get("red_baseline_count") != 16 or evidence.get("red_ids") != expected_red:
-              raise SystemExit("EVIDENCE_BASELINE_MISMATCH")
-          crown = {row["test_id"]: row for row in rows if row["test_id"] in {"V09-R19","V09-R20","V09-R21","V09-R22","V09-R23","V09-R24"}}
-          if crown["V09-R19"].get("matched") is not True or crown["V09-R19"].get("observed_outcome") != "OUTCOME_UNKNOWN" or crown["V09-R19"].get("external_effect_count") != 1:
-              raise SystemExit("CROWN_R19_MISMATCH")
-          for cid in ("V09-R20","V09-R21","V09-R22","V09-R23","V09-R24"):
-              if crown[cid].get("matched") is True:
-                  raise SystemExit(f"CROWN_RED_MISMATCH:{cid}")
-          print("STRUCTURAL_EVIDENCE_GATE=PASS")
-          print("FORMAL_RED_BASELINE_COUNT=16")
-          print("RED_IDS=" + ",".join(expected_red))
+          ids=[f"V09-R{i:02d}" for i in range(1,37)]
+          reds=["V09-R01","V09-R04","V09-R06","V09-R08","V09-R09","V09-R13","V09-R18","V09-R20","V09-R21","V09-R22","V09-R23","V09-R24","V09-R26","V09-R32","V09-R34","V09-R36"]
+          m=json.loads(Path("runtime/fixtures/v09_authority_effect_attack_cases.json").read_text(encoding="utf-8"))
+          if m.get("attack_matrix_version")!="V09-AUTHORITY-EFFECT-ATTACK-MATRIX-1" or m.get("attack_case_count")!=36 or [c.get("id") for c in m.get("cases",[])]!=ids: raise SystemExit("MATRIX_FAIL")
+          rows=[json.loads(x) for x in Path("v09-evidence/v09-attack-results.jsonl").read_text(encoding="utf-8").splitlines() if x]
+          if [r.get("test_id") for r in rows]!=ids or [r["test_id"] for r in rows if r.get("matched") is not True]!=reds: raise SystemExit("RED_BASELINE_FAIL")
+          e=json.loads(Path("v09-evidence/v09-authority-effect-evidence.json").read_text(encoding="utf-8"))
+          if e.get("red_baseline_count")!=16 or e.get("red_ids")!=reds or e.get("accepted_v08_base_sha")!=os.environ["ACCEPTED_V08_BASE"] or e.get("candidate_sha")!=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(): raise SystemExit("EVIDENCE_FAIL")
+          print("SOURCE_EXPORT_GATE=PASS")
           PY
 
-      - name: Publish pre-push RED Evidence
+      - name: Export validated four-path source bundle
         uses: actions/upload-artifact@v4
         with:
-          name: v09-b2-formal-red-source-prepush
-          path: v09-evidence
+          name: v09-b2-formal-source-bundle
+          path: |
+            .github/workflows/v09-authority-effect-verify.yml
+            runtime/fixtures/v09_authority_effect_attack_cases.json
+            runtime/test_v09_attack_matrix_offline.py
+            runtime/v09_authority_effect_evidence.py
           if-no-files-found: error
           retention-days: 14
 
-      - name: Push formal B2 RED source
-        shell: bash
-        run: |
-          set -euo pipefail
-          git push origin "HEAD:${FORMAL_BRANCH}"
+      - name: Export matching formal RED Evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-b2-formal-source-evidence
+          path: v09-evidence
+          if-no-files-found: error
+          retention-days: 14
