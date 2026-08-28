@@ -1,0 +1,4988 @@
+
+# CODEX ONE-SHOT FINAL V14
+# FROZEN CONSOLIDATED EXECUTION SPEC
+
+## AI Production Control Plane + Universal Browser Runtime
+
+### Windows 本机 AI 自动生产环境 · ONE-SHOT FINAL EXECUTION
+
+---
+
+# FINAL FREEZE NOTICE｜最终冻结说明
+
+本文件是**唯一正式执行规格**。
+
+它合并并继承以下全部要求：
+
+```text
+PART I
+CODEX ONE-SHOT FINAL V14
+
+PART II
+V14 HARDENING ADDENDUM
+FINAL SECURITY / RUNTIME HARDENING PATCH
+
+PART III
+V14 HARDENING ADDENDUM
+FINAL PATCH 2
+- Logical Effect Identity
+- Invocation / Result Source Authenticity
+- Release Candidate Integrity
+
+PART IV
+V14 HARDENING ADDENDUM
+FINAL PATCH 3
+- Controller TCB Integrity
+- Privileged Worker External-Effect Boundary
+- Required Acceptance Test Execution Authenticity
+```
+
+以及已经完成最终结构性审计后确认的最后一项修补：
+
+```text
+AUTHORITY ROLLBACK SAFETY
++
+AUTHORITY_COMMIT_JOURNAL
+```
+
+该修补不是：
+
+```text
+PATCH 4
+V15
+V16
+V17
+```
+
+它属于当前 V14 Consolidated Final Execution Spec 的直接组成部分。
+
+最终优先级：
+
+```text
+AUTHORITY ROLLBACK SAFETY
+>
+FINAL PATCH 3
+>
+FINAL PATCH 2
+>
+HARDENING ADDENDUM
+>
+V14
+```
+
+仅在实际语义冲突的范围内覆盖旧条款。
+
+最终 Acceptance 范围始终为：
+
+```text
+A01-A65
+```
+
+不得新增：
+
+```text
+A66
+```
+
+---
+
+# FINAL STRUCTURAL AUDIT RESULT
+
+最后一次结构性审计已经完成。
+
+唯一剩余 STRUCTURAL P0：
+
+```text
+Canonical State rollback
+可能导致已撤销/已消费/已收紧的安全 authority
+随着 snapshot rollback 被错误复活
+```
+
+已通过：
+
+```text
+AUTHORITY_COMMIT_JOURNAL
+```
+
+正式覆盖。
+
+因此当前最终结论已经冻结为：
+
+```text
+STRUCTURAL_P0_COUNT = 0
+
+NO_NEW_STRUCTURAL_P0
+
+PROMPT_ARCHITECTURE = FROZEN
+
+DO_NOT_CREATE_V15
+DO_NOT_CREATE_V16
+DO_NOT_CREATE_V17
+DO_NOT_CREATE_PATCH_4
+
+STOP PROMPT ARCHITECTURE AUDIT
+```
+
+从现在开始：
+
+任何：
+
+```text
+implementation bug
+P1
+optimization
+dependency problem
+browser compatibility problem
+test failure
+performance problem
+adapter defect
+ACL limitation
+same-user enforcement limitation
+provider limitation
+UI drift
+```
+
+全部进入：
+
+```text
+BUILD
+TEST
+ATTACK
+FIX
+VERIFY
+```
+
+不得重新包装成：
+
+```text
+需要新一轮 Prompt Architecture
+```
+
+除非在真实实现过程中出现一个新的问题，同时严格满足：
+
+```text
+1. concrete realistic failure path
+
+2. directly breaks a core invariant
+
+3. current complete specification genuinely does not cover it
+
+4. cannot reasonably be handled as implementation defect
+
+5. can cause:
+   duplicate effect
+   unauthorized effect
+   credential/sensitive leak
+   canonical corruption
+   incorrect recovery
+   fake PASS
+   task loss
+   authority bypass
+   stale effect
+   release mismatch
+   or user relay
+```
+
+否则：
+
+禁止重新打开规格设计。
+
+---
+
+# 0. COMMANDER'S INTENT｜最高任务意图
+
+这是一次**真正的终局实施任务**。
+
+不是：
+
+- 再修一个 ChatGPT Bridge；
+- 再修一个 BrowserSkill；
+- 再审计一次 WorkBuddy；
+- 再写一份架构报告；
+- 再做一个 Proof of Concept；
+- 再发现几十个问题留给下一轮；
+- 再让用户开启 Phase 2 / Phase 3；
+- 再让用户充当不同 AI 之间的人工复制粘贴中转站。
+
+最终目标只有一个：
+
+> **在当前 Windows 电脑上，利用已经存在和当前能够工作的 AI、CLI、浏览器、文件、代码与本地工具，建立、部署并真实验证一套长期可用的 AI Production Control Plane + Universal Browser Runtime。**
+
+最终正常用户体验必须是：
+
+```text
+USER
+↓
+只给最终目标
+↓
+SYSTEM
+自动解析需求
+自动形成 Goal Contract
+自动调用 ChatGPT 主脑
+自动选择其他 Brain
+自动选择一个或多个 Worker
+自动操作本地电脑
+自动操作网页
+自动上传/下载
+自动处理文件/代码
+自动测试
+自动收集 Evidence
+自动多轮 Review
+自动 Rework
+自动 Retest
+自动 Rereview
+自动 Quality Gate
+↓
+FINAL ARTIFACT
+↓
+USER 最终验收
+```
+
+用户以后正常只负责：
+
+```text
+1. 给目标
+2. 看最终成果
+```
+
+目标：
+
+```text
+MANUAL_COPY_PASTE_COUNT = 0
+MANUAL_RELAY_COUNT = 0
+USER_INFRASTRUCTURE_OPERATION_COUNT = 0
+```
+
+用户不得再负责：
+
+- 从本地 AI 复制到 ChatGPT；
+- 从 ChatGPT 复制回本地 AI；
+- AI 之间搬 Prompt；
+- AI 之间搬结果；
+- 搬 conversation；
+- 手工告诉 Worker reviewer URL；
+- 手工告诉 Worker bsk path；
+- 手工告诉 Worker daemon port；
+- 手工判断任务是否已经发送；
+- 手工判断网页 AI 是否已经生成完成；
+- 手工管理重复 tab；
+- Browser reconnect；
+- 手工搬 review finding；
+- 因 AI 失忆重新解释历史。
+
+---
+
+# 1. NON-STOP BUILD RULE｜本任务禁止主动中断
+
+目标：
+
+```text
+ONE USER INVOCATION
+ONE LOGICAL BUILD MISSION
+CONTINUOUS MAIN EXECUTION
+ZERO MANUAL RELAY
+```
+
+Recovery 是保险，不是执行策略。
+
+Codex 必须优先保持当前唯一主 build owner 连续运行直到最终完成。
+
+禁止主动：
+
+- 结束当前任务以“稍后继续”；
+- 在 Phase 结束后 return 给用户；
+- 主动退出自己的 CLI / host；
+- kill 自己的主执行进程；
+- restart 自己；
+- 为测试 crash recovery 故意杀死当前唯一 Codex build owner；
+- 为测试 context recovery 故意结束当前唯一 Codex session；
+- 执行会重启当前 Windows 主机的操作；
+- 执行可能关闭当前 Codex host 的操作；
+- 做到一半要求用户重新发 Prompt；
+- 把关键长任务启动到后台后直接结束当前 Codex 任务；
+- 因 subprocess 正在运行就回复用户“等待完成”。
+
+长任务：
+
+```text
+start/manage process
+→ keep ownership
+→ monitor
+→ process result
+→ continue mission
+```
+
+后台是执行方式，不是退出理由。
+
+Crash / resume 验收只针对：
+
+```text
+Control Plane child process
+Browser control session
+test fixture
+isolated Worker
+isolated test process
+```
+
+不得杀当前唯一 builder。
+
+---
+
+# 2. ONE LOGICAL MISSION
+
+“一次性完成”意味着：
+
+> 用户只触发一次，系统不给用户重新接力。
+
+非 Codex 主动造成的：
+
+```text
+tool process crash
+Browser session crash
+daemon disconnect
+child Worker crash
+context compaction
+provider failure
+```
+
+必须自动恢复并继续当前 logical mission。
+
+---
+
+# 3. BUILD HOST AUTORELAUNCH BOUNDARY
+
+不得伪造当前 Codex host 不具备的 auto-relaunch 能力。
+
+若外部 Codex host 意外终止且平台没有程序化 auto-relaunch：
+
+```text
+BUILD_HOST_AUTORELAUNCH_UNAVAILABLE
+=
+RUNTIME_EXTERNAL_CONSTRAINT
+```
+
+若事故实际导致 mission 无法继续：
+
+```text
+FINAL_STATUS = EXTERNAL_BLOCKED
+```
+
+不得主动制造此事故测试。
+
+---
+
+# 4. BUILD MISSION JOURNAL
+
+大规模修改前建立轻量持久：
+
+```text
+BUILD_MISSION_JOURNAL
+```
+
+至少：
+
+```text
+mission_id
+prompt_version = V14-FROZEN
+prompt_hash
+
+stable_workspace
+
+current_build_stage
+completed_milestones
+
+modified_files
+important_file_hashes
+
+last_durable_checkpoint
+
+critical_build_decisions
+verified_facts
+rejected_approaches
+current_hypotheses
+
+open_defects
+active_risks
+
+latest_test_results
+latest_review_findings
+
+next_exact_actions
+
+resume_information
+
+latest_context_capsule_version
+
+updated_at
+```
+
+每完成关键实现更新 checkpoint。
+
+不得把 Journal 发展成大型项目管理系统。
+
+---
+
+# 5. 本任务禁止内部 Codex Subagent
+
+当前 Codex 是唯一 build owner。
+
+不得 spawn 内部 Codex subagent。
+
+允许为了验证最终系统真实调用：
+
+```text
+WorkBuddy
+其他 Codex CLI 实例
+DeepSeek CLI/Agent
+Hy3
+当前本地模型
+ChatGPT Web
+DeepSeek Web
+其他现有 AI Web
+```
+
+这些属于：
+
+```text
+PRODUCTION_RUNTIME_UNDER_TEST
+```
+
+---
+
+# 6. EXECUTION-FIRST RULE
+
+顺序：
+
+```text
+快速确认现状
+↓
+关键技术决策
+↓
+runnable control plane skeleton
+↓
+真实运行
+↓
+围绕真实失败修
+```
+
+运行系统才是产品。
+
+---
+
+# 7. DEFINITION OF DONE
+
+最终必须真实拥有：
+
+```text
+可运行生产系统
+唯一正式入口
+持久状态
+Brain Router
+Worker Runtime
+Universal Browser Runtime
+Local Runtime
+Action/Effect 安全协议
+自动 Review/Rework
+Evidence
+selftest
+doctor
+真实 E2E
+```
+
+不能只有：
+
+```text
+design
+TODO
+report
+issue list
+mock
+skeleton
+理论方案
+```
+
+---
+
+# 8. 唯一生产入口
+
+最终选定：
+
+```text
+OFFICIAL_PRODUCTION_ENTRY
+```
+
+概念例如：
+
+```bash
+ai-control run "<goal>"
+```
+
+至少：
+
+```text
+run
+status
+resume
+doctor
+selftest
+brain
+worker
+browser
+review
+```
+
+日常正式入口只能告诉用户一个：
+
+```text
+run
+```
+
+---
+
+# 9. CORE ARCHITECTURE
+
+```text
+USER
+ │
+ ▼
+GOAL / REQUIREMENTS ENGINE
+ │
+ ▼
+AI PRODUCTION CONTROL PLANE
+ │
+ ├─ Canonical State Engine
+ ├─ Authorization / Policy Engine
+ ├─ Brain Router + Brain Pool
+ ├─ Worker Router + Worker Pool
+ ├─ Universal Browser Runtime
+ ├─ Local Execution Runtime
+ ├─ Action Ledger
+ ├─ Effect WAL
+ ├─ Authority Commit Journal
+ ├─ Effect Execution Gate
+ ├─ Resource Lock / Leases
+ ├─ Context Continuity
+ ├─ Decision / Approach Ledger
+ ├─ Evidence / Trace
+ └─ Quality Gate
+ │
+ ▼
+FINAL ARTIFACT
+ │
+ ▼
+USER ACCEPTANCE
+```
+
+---
+
+# 10. 核心系统公理
+
+```text
+I1 EXTERNAL EFFECT DUPLICATION SAFETY
+
+I2 AUTHORIZATION DURABILITY
+
+I3 CONTROL PLANE ACTION AUTHORITY
+
+I4 CANONICAL STATE CONSISTENCY
+
+I5 EXTERNAL EFFECT SURVIVES STATE RECOVERY
+
+I6 CONTEXT LOSS SAFETY
+
+I7 STALE RESULT SAFETY
+
+I8 DATA EGRESS CONTAINMENT
+
+I9 RELEASE EVIDENCE
+
+I10 ZERO HUMAN RELAY
+
+I11 AUTHORITY ROLLBACK SAFETY
+```
+
+I11：
+
+> 已 durable commit 的撤销、授权消费、权限收紧和安全 generation，不得因为 Canonical State snapshot rollback 而倒退或复活旧权限。
+
+---
+
+# 11. RAW USER INPUT 不是直接副作用授权
+
+用户聊天属于：
+
+```text
+AUTHORITATIVE_INTENT_INPUT
+```
+
+但不能直接成为 external effect authority。
+
+必须：
+
+```text
+raw user input
+↓
+parse
+↓
+validate
+↓
+commit Goal Contract new version
+OR
+scoped Human Authorization Record
+↓
+commit Canonical State Revision
+↓
+advance authorization/state fence
+↓
+effect
+```
+
+禁止：
+
+```text
+raw chat sentence
+→ direct external effect
+```
+
+---
+
+# 12. IMMEDIATE REVOCATION / SAFETY STOP
+
+收到：
+
+```text
+停止
+取消
+别上传
+别发
+别删
+不要继续这个操作
+```
+
+第一动作：
+
+```text
+raise REVOCATION_FENCE immediately
+```
+
+阻止尚未跨过不可撤回 boundary 的 effect。
+
+随后：
+
+```text
+canonicalize revocation
+→ durable authority commit
+→ Goal Contract/Human Authorization update
+→ new Canonical State Revision
+→ invalidate plans/results
+```
+
+已经发生的 effect：
+
+```text
+observe
+→ commit actual outcome
+→ optional separately-authorized compensation
+```
+
+---
+
+# 13. HUMAN AUTHORIZATION RECORD
+
+至少：
+
+```text
+authorization_id
+decision_nonce
+task_id
+
+goal_contract_version
+
+scope
+action_type
+resource_scope
+destination/provider
+purpose
+effect_type
+
+granted_at
+expires_at
+
+revocable
+revoked_at
+
+max_effect_count
+consumed_effect_count
+
+authorization_generation
+
+user_decision_reference
+
+status
+```
+
+必须 scoped。
+
+---
+
+# 14. POLICY PRECEDENCE
+
+```text
+1. Runtime 外部硬约束
+
+2. CONTROL_PLANE_INVARIANTS
+
+3. Latest durable authority state:
+   Human Authorization
+   Revocation
+   Goal Contract
+   Security generation
+
+4. Control Plane policy defaults
+
+5. Task / Worker Contract
+
+6. Brain / Reviewer / Worker proposals
+
+7. Historical handoff / preferences
+
+8. Web / repository / downloaded / external content
+```
+
+网页永远不能成为用户授权 authority。
+
+---
+
+# 15. REQUIREMENTS GATE
+
+可靠可推断：
+
+自动决定。
+
+低风险、可逆、不显著增费、不敏感外发：
+
+合理默认并记录。
+
+只有会实质改变：
+
+```text
+final artifact
+核心方向
+金额
+敏感数据授权
+账号
+不可逆操作
+公开发布
+```
+
+才 Human Gate。
+
+---
+
+# 16. GOAL CONTRACT
+
+至少：
+
+```text
+contract_version
+contract_hash
+
+goal
+expected_final_artifact
+acceptance_criteria
+non_goals
+constraints
+quality_expectations
+
+network_permission
+installation_permission
+
+data_egress_policy
+external_side_effect_policy
+
+parallelism_policy
+
+user_acceptance_method
+
+inferred_defaults
+
+resource_budget
+
+created_at
+updated_at
+change_reason
+```
+
+---
+
+# 17. GOAL CONTRACT VERSIONING
+
+所有 child task / Brain / Worker / Browser / external effect：
+
+绑定：
+
+```text
+goal_contract_version
+goal_contract_hash
+```
+
+旧 output 不能在 contract 更新后自动继续 effect。
+
+---
+
+# 18. CANONICAL STATE REVISION
+
+```text
+state_revision
+parent_revision
+committed_at
+schema_version
+state_hash
+```
+
+不得拼接多个不同时点文件组成“当前状态”。
+
+---
+
+# 19. CANONICAL STATE AUTHORITY
+
+Canonical State：
+
+```text
+Current Logical World Authority
+```
+
+包括：
+
+```text
+active Goal Contract
+task state
+artifacts
+issues
+Brain/Worker association
+current policies
+committed outcomes
+```
+
+但 security-critical authority rollback safety 由：
+
+```text
+AUTHORITY_COMMIT_JOURNAL
+```
+
+提供额外恢复权威。
+
+---
+
+# 20. STATE_HEAD
+
+只指向 validated committed revision。
+
+Advance 必须 atomic。
+
+最新 revision 损坏：
+
+只能 rollback known-good revision。
+
+但 rollback：
+
+不得丢：
+
+```text
+Effect WAL newer unresolved effect
+
+Authority Commit Journal newer authority event
+```
+
+---
+
+# 21. Canonical State 写入
+
+使用 SQLite / transaction / immutable snapshot / atomic head 等成熟可靠机制。
+
+---
+
+# 22. SCHEMA MIGRATION
+
+```text
+load committed source
+↓
+create migration target
+↓
+migrate
+↓
+schema validation
+↓
+invariant validation
+↓
+commit new revision
+↓
+atomic STATE_HEAD advance
+```
+
+失败：
+
+旧 committed state 继续有效。
+
+---
+
+# 23. ACTION LEDGER
+
+每个 effect：
+
+```text
+action_id
+logical_effect_id
+effect_intent_hash
+logical_effect_slot
+attempt_id
+execution_fence_token
+```
+
+核心状态：
+
+```text
+ACTION_PREPARED
+PRECONDITION_CAPTURED
+RESERVATION_COMMITTED
+EFFECT_START_COMMITTED
+OUTCOME_UNKNOWN
+RECONCILING
+OUTCOME_OBSERVED
+ACTION_COMMITTED
+```
+
+---
+
+# 24. EFFECT WRITE-AHEAD JOURNAL
+
+```text
+EFFECT_WRITE_AHEAD_JOURNAL
+```
+
+用于：
+
+```text
+Uncertain / In-flight External Effect Recovery Authority
+```
+
+不能修改 Goal / 授权 / Decision。
+
+---
+
+# 25. WAL Authority Boundary
+
+```text
+Canonical State
+=
+Current Logical World Authority
+
+Effect WAL
+=
+Uncertain/In-flight External Effect Recovery Authority
+
+Authority Commit Journal
+=
+Durable Security-Critical Authority Recovery Authority
+```
+
+三者职责不得混淆。
+
+---
+
+# 26. Effect 执行前 durable record
+
+对于：
+
+```text
+RECONCILE_REQUIRED
+NEVER_AUTO_RETRY
+```
+
+必须：
+
+```text
+atomic reservation
+↓
+durable Effect WAL
+↓
+verify durable
+↓
+Effect Execution Gate
+↓
+Effect Start Commit
+↓
+external boundary
+```
+
+---
+
+# 27. WAL Crash Recovery
+
+```text
+recover latest valid Canonical State
+↓
+scan Effect WAL
+↓
+scan Authority Commit Journal
+↓
+restore latest durable authority generations/state
+↓
+reconcile uncertain effects
+↓
+commit recovered logical state
+↓
+resume safe actions
+```
+
+禁止删除 newer effect intent。
+
+---
+
+# 27A. AUTHORITY ROLLBACK SAFETY｜权威状态不得因 Canonical rollback 复活旧权限
+
+Effect WAL 负责保证：
+
+> 可能已经发生的 external effect 不能因为 Canonical State rollback 被遗忘。
+
+同样地：
+
+> 已经 committed 的安全关键 authority change 也不得因为 Canonical State rollback 被静默撤销。
+
+必须建立轻量、Controller-owned、append-oriented：
+
+```text
+AUTHORITY_COMMIT_JOURNAL
+```
+
+可使用：
+
+```text
+同一 SQLite backend 中独立 append-oriented table
+```
+
+不要求建立新的大型基础设施。
+
+至少覆盖：
+
+```text
+Goal Contract security-relevant change
+
+Human Authorization grant
+
+Authorization reservation
+
+Authorization consumption
+
+Authorization revocation
+
+Revocation fence
+
+Revocation epoch
+
+decision_nonce consumption
+
+security-critical Policy generation
+
+Worker trust classification change
+
+Worker capability classification change
+
+Controller TCB verification generation
+
+任何扩大、缩小或撤销 production effect authority 的 committed control decision
+```
+
+Authority event 至少记录：
+
+```text
+authority_event_id
+
+event_type
+
+task_id
+
+goal_contract_version/hash
+where relevant
+
+authorization_id
+where relevant
+
+decision_nonce
+where relevant
+
+previous_generation
+new_generation
+
+scope_digest
+
+state_revision_at_commit
+
+committed_at
+
+journal_sequence
+
+event_hash
+
+previous_event_hash
+or equivalent integrity linkage where practical
+```
+
+实现无需大型密码学系统，但必须具备：
+
+```text
+append-oriented durability
+transactional commit
+integrity validation
+monotonic ordering
+controller-owned authoritative write
+```
+
+---
+
+## Authority Monotonic Recovery Rule
+
+以下状态不能因为 snapshot rollback 倒退：
+
+```text
+REVOKED → ACTIVE
+
+CONSUMED → AVAILABLE
+
+tightened Goal Contract → older broader Goal Contract authority
+
+newer security policy generation → older weaker generation
+
+newer Worker trust restriction → older broader authority
+
+newer revocation epoch → older epoch
+
+newer Controller TCB generation → stale verification generation
+```
+
+特别是：
+
+```text
+revocation
+consumption
+scope tightening
+```
+
+一旦 durable commit：
+
+不能因为 State Revision rollback 被撤销。
+
+---
+
+## Canonical State Recovery 最终顺序
+
+必须：
+
+```text
+recover latest known-good Canonical State
+↓
+scan Effect WAL
+↓
+scan AUTHORITY_COMMIT_JOURNAL
+for authority events newer than recovered snapshot
+↓
+replay/reconstruct latest durable authority state
+↓
+verify:
+
+  authorization generation
+  revocation epoch
+  consumed authorization capacity
+  Goal Contract security-relevant generation
+  security policy generation
+  Worker trust generation
+  Controller TCB verification generation
+
+↓
+reconcile unresolved Effect WAL attempts
+↓
+commit recovered coherent Canonical State revision
+↓
+only then permit new production effects
+```
+
+---
+
+## Authority Recovery Failure
+
+若：
+
+```text
+AUTHORITY_COMMIT_JOURNAL
+```
+
+无法可靠恢复最新 authority state：
+
+```text
+AUTHORITY_STATE_UNCERTAIN
+```
+
+必须：
+
+```text
+FAIL CLOSED
+
+DO NOT START NEW EXTERNAL EFFECT
+```
+
+直到：
+
+```text
+authority state integrity
+and
+latest generations
+```
+
+被可靠恢复。
+
+不得猜测。
+
+---
+
+## Revocation Special Rule
+
+一旦 revocation 已 durable commit：
+
+任何后续 Canonical State rollback 都不得使对应：
+
+```text
+authorization
+reservation
+execution fence
+```
+
+重新有效。
+
+所有旧 fence：
+
+必须依据最新 durable：
+
+```text
+revocation_epoch
+authorization_generation
+```
+
+重新判 stale。
+
+---
+
+## Authorization Consumption Special Rule
+
+one-shot / quota Authorization 的 consumption：
+
+一旦 durable commit：
+
+不得由于 rollback 重新增加：
+
+```text
+remaining_effect_count
+```
+
+Authority Journal replay 后的 consumed count：
+
+必须至少保持最新 durable consumption。
+
+---
+
+## Goal Contract Tightening Special Rule
+
+如果 Goal Contract 新版本：
+
+```text
+缩小 network permission
+缩小 data egress
+撤销 provider
+撤销 external side effect
+收紧 resource scope
+```
+
+已经 durable authority commit：
+
+即使承载其完整 logical snapshot 的 Canonical State Revision 后来损坏，
+
+也不能自动使用 older broader Goal Contract 作为 production effect authority。
+
+系统必须：
+
+```text
+recover latest durable security-relevant Goal authority
+
+OR
+
+AUTHORITY_STATE_UNCERTAIN
+→ fail closed
+```
+
+---
+
+## Trust Root
+
+AUTHORITY_COMMIT_JOURNAL 必须属于：
+
+```text
+CONTROL_PLANE_TRUST_ROOT
+```
+
+普通：
+
+```text
+Brain
+Worker
+Web
+Repo
+Downloaded Code
+```
+
+不得直接写 authoritative event。
+
+---
+
+## Storage Durability
+
+如果 Authority Commit Journal：
+
+```text
+disk write
+transaction commit
+flush/fsync equivalent
+integrity verification
+```
+
+不能确认：
+
+对应 security authority update 不得被假定 durable。
+
+对于可能依赖该 authority 的新 external effect：
+
+```text
+STORAGE_DURABILITY_UNAVAILABLE
+or
+AUTHORITY_STATE_UNCERTAIN
+→ DO NOT EXECUTE
+```
+
+---
+
+# 28. WAL Entry 归档
+
+只有：
+
+```text
+external outcome determined
+ACTION_COMMITTED
+incorporated into committed Canonical State
+required evidence durable
+```
+
+以后才 archive。
+
+---
+
+# 29. EFFECT MODEL
+
+```text
+retry_semantics:
+SAFE_RETRY
+IDEMPOTENT
+RECONCILE_REQUIRED
+NEVER_AUTO_RETRY
+
+impact:
+LOW
+MEDIUM
+HIGH
+
+reversibility:
+REVERSIBLE
+PARTIALLY_REVERSIBLE
+IRREVERSIBLE
+
+effect_scope:
+LOCAL
+EXTERNAL
+```
+
+---
+
+# 30. Effect Examples
+
+网页读取：
+
+```text
+SAFE_RETRY
+LOW
+REVERSIBLE
+```
+
+网页 AI message：
+
+```text
+RECONCILE_REQUIRED
+LOW/MEDIUM
+EXTERNAL
+```
+
+公开发布：
+
+```text
+RECONCILE_REQUIRED
+HIGH
+EXTERNAL
+```
+
+付款：
+
+```text
+NEVER_AUTO_RETRY
+HIGH
+IRREVERSIBLE
+EXTERNAL
+```
+
+---
+
+# 31. UNIFIED EFFECT EXECUTION GATE
+
+所有 side effect 执行前统一验证：
+
+```text
+1. latest durable authorization exists
+
+2. scope matches
+
+3. latest durable Goal Contract authority matches
+
+4. current Canonical State Revision valid
+
+5. originating result fresh
+
+6. Context Fence current
+
+7. Resource Preconditions current
+
+8. caller capability permits effect
+
+9. Data Egress permits it
+
+10. locks/lease held
+
+11. Effect WAL durable
+
+12. reservation durable
+
+13. no active revocation
+
+14. effect not terminal
+
+15. logical_effect_id established
+
+16. effect_intent_hash validated
+
+17. no unresolved/in-flight same logical effect
+
+18. authorization capacity atomically reserved
+
+19. controller lease/fence current
+
+20. execution_fence_token current
+
+21. latest Authority Commit Journal recovery state verified
+
+22. authorization_generation == latest durable generation
+
+23. revocation_epoch == latest durable epoch
+
+24. no older/broader authority resurrected by Canonical rollback
+
+25. Controller TCB VERIFIED
+```
+
+任何失败：
+
+```text
+DO NOT EXECUTE EFFECT
+```
+
+---
+
+# 32. TOCTOU
+
+high-impact / non-idempotent / external effect：
+
+Gate 与执行之间尽量短。
+
+跨 external boundary 前：
+
+```text
+EFFECT_START_COMMITTED
+```
+
+重新确认安全条件。
+
+---
+
+# 33. RESOURCE PRECONDITIONS
+
+例如：
+
+```text
+resource_id
+resource_type
+lease_id
+observed_version
+material_state_hash
+file_hash
+git_head
+working_tree_fingerprint
+browser_url
+page_identity
+element_state
+remote_object_version/etag
+captured_at
+```
+
+---
+
+# 34. MATERIAL FRESHNESS
+
+只看 materially relevant state。
+
+无关时钟变化不 stale。
+
+目标元素、Git HEAD、目标 conversation、attachment 等改变：
+
+必须 stale。
+
+---
+
+# 35. STALE RESULT SAFETY
+
+ingest/effect 前检查：
+
+```text
+Canonical State freshness
+Goal Contract freshness
+Authority generation freshness
+Context Fence freshness
+Resource Preconditions
+Invocation source
+```
+
+旧结果：
+
+```text
+STALE_RESULT
+```
+
+不得直接 effect。
+
+---
+
+# 36. WORKER CAPABILITY ENFORCEMENT
+
+Worker Registry：
+
+```text
+execution_trust_class
+```
+
+至少：
+
+```text
+BROKERED
+SANDBOXED
+PRIVILEGED_UNBROKERED
+```
+
+---
+
+# 37. BROKERED
+
+Worker 只提交：
+
+```text
+ACTION_PROPOSAL
+```
+
+Control Plane Broker 真执行副作用。
+
+---
+
+# 38. SANDBOXED
+
+真实技术边界限制：
+
+```text
+allowed_roots
+allowed_commands
+allowed_network_scope
+allowed_effect_scope
+```
+
+---
+
+# 39. PRIVILEGED_UNBROKERED
+
+默认不得直接执行任何依赖 Effect Gate 的：
+
+```text
+PRODUCTION EXTERNAL WRITE
+```
+
+无论 LOW/MEDIUM/HIGH。
+
+只能 proposal → Controller Broker。
+
+---
+
+# 40. 不造 OS Kernel
+
+优先：
+
+```text
+worktree
+ACL
+workspace
+process environment
+wrapper CLI
+network/broker boundary
+container/sandbox
+```
+
+---
+
+# 41. WORKER RESULT MACHINE ENVELOPE
+
+至少：
+
+```json
+{
+  "schema_version": 1,
+  "invocation_id": "...",
+  "request_nonce": "...",
+  "task_id": "...",
+  "goal_contract_version": 1,
+  "request_state_revision": 12,
+  "request_context_fence": "...",
+  "status": "DONE",
+  "artifact_paths": [],
+  "artifact_hashes": {},
+  "evidence": [],
+  "unresolved_issues": [],
+  "action_proposals": [],
+  "escalation_needed": false,
+  "human_readable_notes": ""
+}
+```
+
+Controller：
+
+```text
+schema validate
+semantic validate
+invocation source validate
+state/fence validate
+artifact/hash validate
+evidence validate
+ingest
+```
+
+---
+
+# 42. BRAIN RESULT ENVELOPE
+
+至少：
+
+```text
+invocation_id
+request_nonce
+task_id
+brain_id
+role
+goal_contract_version
+request_state_revision
+request_context_fence
+decision/proposal
+assumptions
+required_resources
+findings
+recommended_actions
+human_readable_content
+```
+
+---
+
+# 43. DEFAULT PRIMARY BRAIN
+
+```text
+DEFAULT_PRIMARY_BRAIN = ChatGPT
+```
+
+---
+
+# 44. MULTIPLE CHATGPT CONVERSATIONS
+
+支持：
+
+```text
+MAIN
+PROJECT_BRAIN
+REVIEWER
+CRITIC
+WRITER
+ANALYST
+TEMP
+```
+
+不得锁死单 URL。
+
+---
+
+# 45. Brain Registry
+
+至少：
+
+```text
+brain_id
+provider
+account_profile
+role
+conversation_id/url
+task/project
+busy
+health
+cooldown
+rate_limit
+context_age
+context_epoch
+last_capsule_version
+last_capsule_hash
+continuity_status
+canonical_browser_resource
+last_used
+```
+
+---
+
+# 46. OTHER BRAINS
+
+允许：
+
+```text
+DeepSeek Web
+其他现有 Web AI
+未来 provider
+```
+
+ChatGPT 仍默认主脑。
+
+---
+
+# 47. BRAIN ROUTER
+
+考虑：
+
+```text
+difficulty
+role
+context relevance
+model ability
+vision
+writing
+code
+speed
+availability
+cooldown
+budget
+```
+
+---
+
+# 48. BRAIN PARALLEL
+
+独立 Brain 结果不得串线。
+
+---
+
+# 49. MESSAGE SUBMISSION ≠ RESPONSE COMPLETION
+
+两个独立 external transitions。
+
+---
+
+# 50. MESSAGE SUBMISSION
+
+Outgoing marker：
+
+```text
+===CP_REQUEST:<logical_effect_id>:<nonce>===
+```
+
+状态：
+
+```text
+MESSAGE_PREPARED
+SEND_ATTEMPT_STARTED
+USER_TURN_OBSERVED
+MESSAGE_SUBMISSION_COMMITTED
+```
+
+---
+
+# 51. SEND CRASH
+
+若 outgoing nonce 已存在：
+
+```text
+DO NOT RESEND
+```
+
+继续等 response。
+
+---
+
+# 52. RESPONSE COMPLETION
+
+```text
+===CHATGPT_DONE:<task_id>:<response_nonce>===
+```
+
+只接受当前 assistant turn exact marker。
+
+---
+
+# 53. 禁止
+
+```text
+DONE marker absent
+→ assume request not sent
+→ resend
+```
+
+---
+
+# 54. ChatGPT Adapter
+
+复用已验证资产但重新确认当前生产代码真实具备：
+
+```text
+upload
+WAIT/DONE
+capture cleanup
+reconnect
+ProseMirror send
+tab dedup
+```
+
+---
+
+# 55. Browser 历史资产
+
+已知：
+
+```text
+E:\WB\tools\bsk-file-bridge\
+E:\WB\tools\bsk-file-bridge\repo\target\release\bsk.exe
+C:\Users\17838\.local\bin\bsk.exe
+```
+
+不得依赖 PATH 随机命中。
+
+---
+
+# 56. UNIVERSAL BROWSER RUNTIME
+
+```text
+GENERAL BROWSER AUTOMATION LAYER
+```
+
+---
+
+# 57. Browser Capabilities
+
+至少：
+
+```text
+navigate
+back
+forward
+reload
+click
+double click
+hover
+mouse
+keyboard
+input
+select
+checkbox
+radio
+scroll
+drag/drop
+clipboard
+contenteditable
+rich editor
+iframe
+popup
+tabs
+windows
+file upload
+file download
+SPA
+dynamic UI
+infinite scroll
+video detect/play/pause/seek/mute/state
+DOM
+Accessibility
+Screenshot
+Visual fallback
+```
+
+---
+
+# 58. Browser Layers
+
+优先：
+
+```text
+Accessibility / Semantic DOM
+↓
+stable locator
+↓
+Vision/Screenshot + Mouse/Keyboard
+```
+
+---
+
+# 59. Mature Browser Collision Check
+
+联网比较当前成熟方案：
+
+```text
+Playwright
+CDP
+Chrome DevTools MCP
+browser-use class
+existing bsk/BrowserSkill
+```
+
+真实选择：
+
+```text
+PRIMARY_BROWSER_BACKEND
+FALLBACK_BROWSER_BACKEND
+BSK_FINAL_ROLE
+```
+
+不要盲补 bsk，也不要无理由推翻已验证资产。
+
+---
+
+# 60. Dedicated Automation Profile
+
+优先：
+
+```text
+DEDICATED_PERSISTENT_AUTOMATION_PROFILE
+```
+
+但若实际登录态只存在现有 profile，可受控复用，不要求用户重新登录所有账户。
+
+---
+
+# 61. Browser Resource Owner
+
+active tab 一次一个 writer owner。
+
+---
+
+# 62. Canonical Tab
+
+```text
+0 → acquire/create
+1 → reuse
+>1 → inspect
+```
+
+存在未提交/生成中/unknown state 的 duplicate tab：
+
+不得盲关。
+
+---
+
+# 63. Browser Capability Lab
+
+至少 fixture：
+
+```text
+static
+form
+delayed button
+stateful input
+contenteditable
+ProseMirror-like editor
+upload
+download
+iframe
+popup
+multi-tab
+drag/drop
+infinite scroll
+DOM replacement
+slow network
+video
+clipboard
+canvas/visual mock
+auth expired
+UI changed
+prompt injection
+```
+
+---
+
+# 64. Representative Real Sites
+
+安全测试：
+
+```text
+Search
+GitHub
+Video site
+ChatGPT
+Second AI Web if available
+real upload
+real download
+```
+
+不购买、不付款、不危险发布、不删账号。
+
+---
+
+# 65. ACCEPTANCE TARGET CONTRACT
+
+外部真实网站测试前冻结：
+
+```text
+case_id
+target
+account/profile
+fixture
+preconditions
+proof_requirements
+expected_evidence
+safety_constraints
+```
+
+覆盖：
+
+```text
+A03
+A04
+A05
+A06
+A07
+A08
+A09
+A11
+```
+
+---
+
+# 66. SYNTHETIC PUBLIC DATA FIRST
+
+测试上传/Web Brain：
+
+优先 synthetic public fixtures。
+
+---
+
+# 67. DATA EGRESS POLICY
+
+```text
+PUBLIC
+INTERNAL
+PRIVATE_LOCAL
+SENSITIVE
+SECRET
+UNKNOWN
+```
+
+```text
+UNKNOWN → PRIVATE_LOCAL
+```
+
+---
+
+# 68. Egress Decision
+
+依据：
+
+```text
+classification
+destination
+provider
+purpose
+Goal Contract
+Human Authorization
+```
+
+Provider A ≠ Provider B。
+
+---
+
+# 69. Derived Classification
+
+PRIVATE_LOCAL source 派生的：
+
+```text
+summary
+snippet
+screenshot
+DOM
+log
+trace
+capsule
+prompt
+evidence
+archive
+```
+
+默认不自动降级。
+
+---
+
+# 70. Context Capsule 不绕过 Egress
+
+允许：
+
+```text
+LOCAL_FULL_CAPSULE
+EXTERNAL_REDACTED_CAPSULE
+```
+
+---
+
+# 71. Web / Repo = Untrusted
+
+```text
+UNTRUSTED_DATA
+UNTRUSTED_CODE
+```
+
+不得提升自身权限。
+
+---
+
+# 72. LOCAL EXECUTION RUNTIME
+
+支持：
+
+```text
+PowerShell
+Shell
+Python
+Node
+Git
+Docker
+files
+archive
+transcoding
+tests
+services
+process lifecycle
+```
+
+原则：
+
+```text
+CLI/API > GUI
+```
+
+---
+
+# 73. WORKER POOL
+
+统一：
+
+```text
+WorkBuddy
+Codex CLI
+DeepSeek
+Hy3
+其他 AI
+```
+
+---
+
+# 74. Worker Registry
+
+至少：
+
+```text
+worker_id
+type
+invocation
+capabilities
+speed_class
+quality_class
+cost_class
+availability
+execution_trust_class
+allowed_roots
+allowed_effects
+network_scope
+policy_constraints
+workspace_mode
+concurrency
+```
+
+---
+
+# 75. WorkBuddy
+
+```text
+WORKBUDDY_ROLE = WORKER_TOOL_HOST
+```
+
+不是 core controller。
+
+---
+
+# 76. WorkBuddy 快速检查
+
+只检查真实生产必要项：
+
+```text
+SOUL
+IDENTITY
+USER
+Memory
+customPrompt
+Expert
+Skills
+templates
+provider constraints
+```
+
+禁止重复哲学审计。
+
+---
+
+# 77. A16 PASS
+
+WorkBuddy 被正确：
+
+```text
+discover
+invoke
+measure
+classify
+route
+degrade
+```
+
+即可。
+
+---
+
+# 78. CONTEXT CONTINUITY
+
+所有 AI context：
+
+```text
+EPHEMERAL_CONTEXT_CACHE
+```
+
+---
+
+# 79. 核心公理
+
+```text
+AI 可以忘
+系统不能忘
+```
+
+---
+
+# 80. CONTEXT CAPSULE
+
+机械生成：
+
+```text
+capsule_version
+capsule_hash
+mission_id
+task_id
+goal_contract_version/hash
+state_revision
+checkpoint
+current_objective
+completed_work
+current_work
+next_required_steps
+active_constraints
+non_goals
+critical_decisions
+failed approaches
+open issues
+blocking issues
+uncertain external effects
+active action ids
+relevant artifacts/hashes
+current brain role
+worker state
+last verified state
+created_at
+```
+
+---
+
+# 81. DECISION LEDGER
+
+```text
+decision_id
+decision
+reason
+evidence
+goal_contract_version
+supersedes
+status
+```
+
+---
+
+# 82. FAILED APPROACH LEDGER
+
+```text
+approach
+why_failed
+evidence
+component/version
+do_not_retry_unless
+```
+
+---
+
+# 83. CONTEXT GATE
+
+触发：
+
+```text
+Worker cold start
+new Brain
+rollover
+compression
+process recovery
+Goal Contract change
+stale Brain
+high-impact action
+external effect
+final review
+```
+
+---
+
+# 84. Continuity Status
+
+```text
+CURRENT
+SUSPECTED_STALE
+STALE
+REHYDRATING
+```
+
+---
+
+# 85. Rehydration Receipt
+
+```text
+brain_or_worker_id
+task_id
+capsule_version/hash
+goal_contract_version
+state_revision
+rehydrated_at
+continuity_status
+```
+
+---
+
+# 86. Context Fence
+
+绑定：
+
+```text
+task_id
+state_revision
+goal_contract_hash
+checkpoint
+capsule_hash
+```
+
+---
+
+# 87. Context Fence ≠ Resource Freshness
+
+分别处理。
+
+---
+
+# 88. RESOURCE LOCKS
+
+至少：
+
+```text
+task
+action
+logical effect
+browser tab
+browser profile/account
+workspace
+artifact write
+release candidate
+```
+
+锁记录：
+
+```text
+controller_instance_id
+owner
+PID
+process_start_identity
+boot_session_id
+created_at
+heartbeat
+resource_id
+lease_id
+```
+
+---
+
+# 89. Multi Worker
+
+代码 Worker：
+
+优先 worktree / isolated workspace。
+
+---
+
+# 90. Dependency Scheduler
+
+记录：
+
+```text
+depends_on
+resource needs
+```
+
+---
+
+# 91. PERFORMANCE
+
+速度是一级目标之一。
+
+---
+
+# 92. Measure
+
+至少：
+
+```text
+control startup
+worker startup
+browser acquire
+tab acquire
+navigation
+locate
+input
+click
+upload
+download
+Brain RTT
+capture
+reconnect
+review cycle
+full wall time
+```
+
+---
+
+# 93. Fixed Sleep Audit
+
+生产路径搜索：
+
+```text
+sleep
+timeout
+poll
+wait
+```
+
+事件驱动优先。
+
+---
+
+# 94. Speed Principles
+
+减少重复：
+
+```text
+startup
+login
+tab
+upload
+download
+large-context read
+refresh
+Brain calls
+serial work
+```
+
+---
+
+# 95. Priority
+
+```text
+Correctness
+>
+Completeness
+>
+Stability
+>
+Speed
+>
+Cost
+```
+
+---
+
+# 96. RESOURCE BUDGET
+
+可记录：
+
+```text
+max_external_brain_calls
+max_review_cycles
+max_worker_retries
+max_browser_retries
+max_paid_cost_if_metered
+reserve_for_final_review
+```
+
+---
+
+# 97. Provider Health
+
+```text
+AVAILABLE
+BUSY
+COOLDOWN
+LIMITED
+UNAVAILABLE
+```
+
+---
+
+# 98. Circuit Breaker
+
+连续失败 cooldown。
+
+禁止无限 retry/refresh/new conversation。
+
+---
+
+# 99. No Progress
+
+同方案重复失败不算新进展。
+
+耗尽：
+
+```text
+FAILED_INTERNAL
+or
+EXTERNAL_BLOCKED
+```
+
+---
+
+# 100. QUALITY GATE
+
+```text
+EXECUTE
+TEST
+REVIEW
+ISSUE LEDGER
+REWORK
+RETEST
+REREVIEW
+RELEASE GATE
+```
+
+---
+
+# 101. Reviewer Roles
+
+重要成果至少两个不同 review 视角。
+
+---
+
+# 102. Issue Ledger
+
+```text
+issue_id
+severity
+source
+description
+artifact
+status
+fix_evidence
+retest_evidence
+```
+
+---
+
+# 103. CANONICAL RELEASE GATE
+
+进入：
+
+```text
+READY_FOR_USER_ACCEPTANCE
+```
+
+必须：
+
+```text
+all REQUIRED A01-A65 PASS
+all applicable CONDITIONAL PASS
+
+KNOWN_BLOCKING_DEFECTS = 0
+KNOWN_CORE_PATH_DEFECTS = 0
+
+no unresolved uncertain HIGH-impact effect
+
+no stale authorization
+
+no resurrected stale authority
+
+Authority Commit Journal recovery/integrity PASS
+
+no un-reconciled forbidden external effect
+
+no manual relay
+
+independent critical reviews clean
+
+Trust Root PASS
+
+Controller TCB VERIFIED
+
+credentials/account boundary PASS
+
+command/path boundary PASS
+
+privileged external-write boundary PASS
+
+logical effect/atomic reservation PASS
+
+result source authenticity PASS
+
+required test authenticity PASS
+
+storage durability PASS
+
+release candidate integrity PASS
+
+all tests/reviews same digest
+
+delivered digest == candidate digest
+```
+
+---
+
+# 104. Limitation 必须真实
+
+允许真实说明：
+
+```text
+CAPTCHA
+provider limitations
+UI drift
+builder host boundary
+same-user enforcement limitation
+unknown external outcome
+```
+
+不得将 core defect 改名 limitation。
+
+---
+
+# 105. Human Gate 不计人工中转
+
+合法：
+
+```text
+CAPTCHA
+2FA
+login authorization
+irreversible approval
+high-impact choice
+```
+
+---
+
+# 106. Acceptance Manifest
+
+```text
+acceptance_manifest.json
+```
+
+至少：
+
+```text
+case_id
+requirement_class
+result
+acceptance_target_contract
+test_command/execution_definition
+test_execution_id
+started_at
+finished_at
+exit_code/result
+evidence_paths
+evidence_hashes
+tested_artifact_digest
+component_versions
+execution_authority
+controller_observed
+independent_verification
+```
+
+---
+
+# 107. Acceptance Classification
+
+```text
+REQUIRED
+CONDITIONAL
+ADVISORY
+```
+
+结果：
+
+```text
+PASS
+FAIL
+EXTERNAL_BLOCKED
+SKIPPED_CONDITION_NOT_MET
+```
+
+---
+
+# 108. Required Failure
+
+```text
+REQUIRED FAIL
+→ FAILED_INTERNAL
+
+REQUIRED EXTERNAL_BLOCKED
+→ EXTERNAL_BLOCKED
+```
+
+---
+
+# 109. ACCEPTANCE MATRIX
+
+最终范围：
+
+```text
+A01-A65
+```
+
+## A01 Doctor
+REQUIRED
+
+## A02 Browser Capability Lab
+REQUIRED
+
+## A03 Search
+REQUIRED
+
+## A04 GitHub
+REQUIRED
+
+## A05 Video
+REQUIRED
+
+验证：
+
+```text
+detect
+play
+pause
+seek
+playback state
+```
+
+## A06 Upload
+REQUIRED
+
+Synthetic public fixture。
+
+证明真实服务/UI 接受 attachment。
+
+## A07 Download
+REQUIRED
+
+证明：
+
+```text
+event
+completion
+path
+size
+SHA256
+```
+
+## A08 ChatGPT Default Primary Brain
+REQUIRED
+
+真实调用。
+
+## A09 Independent ChatGPT Session
+REQUIRED
+
+## A10 Brain Rollover
+REQUIRED
+
+## A11 Second Web Brain
+CONDITIONAL
+
+## A12 Brain Parallel
+REQUIRED
+
+## A13 Fresh Worker Cold Start
+REQUIRED
+
+只给：
+
+```text
+NEW_WORKER_START_HERE.md
+task_id
+```
+
+## A14 Local Worker
+REQUIRED
+
+## A15 Multi Worker
+CONDITIONAL
+
+## A16 WorkBuddy Classification
+REQUIRED
+
+## A17 No Self Recursion
+REQUIRED
+
+## A18 Full Goal
+REQUIRED
+
+```text
+Goal
+→ Contract
+→ ChatGPT
+→ Worker
+→ Browser
+→ Local
+→ Artifact
+→ Test
+→ Review
+→ Rework/Pass
+→ Retest
+→ Final
+```
+
+## A19 Goal Contract Staleness
+REQUIRED
+
+## A20 Authorization Canonicalization
+REQUIRED
+
+## A21 Revocation Fence
+REQUIRED
+
+## A22 Review Enforcement
+REQUIRED
+
+## A23 Browser Control Reconnect
+REQUIRED
+
+## A24 Process Crash
+REQUIRED
+
+只 crash child runtime。
+
+## A25 Effect WAL Rollback
+REQUIRED
+
+## A26 Send Submission Crash Window
+REQUIRED
+
+## A27 Double Resume
+REQUIRED
+
+## A28 Slow Response
+REQUIRED
+
+## A29 Duplicate Tab
+REQUIRED
+
+## A30 Provider Failure
+REQUIRED
+
+## A31 Auth Expired
+REQUIRED
+
+## A32 UI Changed
+REQUIRED
+
+## A33 Prompt Injection
+REQUIRED
+
+## A34 Data Egress Unknown
+REQUIRED
+
+## A35 Derived Data Classification
+REQUIRED
+
+## A36 Destination-specific Egress
+REQUIRED
+
+## A37 Large Output
+REQUIRED
+
+## A38 Unicode / Space Paths
+REQUIRED
+
+## A39 Resource Locks
+REQUIRED
+
+## A40 No Progress
+REQUIRED
+
+## A41 Context Compression / Silent Memory Loss
+REQUIRED
+
+## A42 Canonical State + Authority Recovery
+REQUIRED
+
+必须测试原 Canonical State recovery：
+
+```text
+latest revision corrupt
+↓
+recover known-good
+↓
+preserve Effect WAL
+↓
+consistent recovery
+```
+
+并增加最终 authority rollback case：
+
+```text
+Authorization ACTIVE
+↓
+Goal Contract security scope tightened
+↓
+Authorization REVOKED
+↓
+revocation / new generation durable in Authority Commit Journal
+↓
+commit newer Canonical State revision
+↓
+corrupt latest Canonical State revision
+↓
+rollback previous known-good revision
+```
+
+PASS 必须证明：
+
+```text
+newer durable Goal security authority recovered
+
+REVOKED authorization remains REVOKED
+
+CONSUMED authorization remains CONSUMED where applicable
+
+revocation epoch does not decrease
+
+authorization generation does not decrease
+
+security generation does not decrease
+
+old broader permission does not become executable
+
+old execution fence remains invalid
+
+Effect Gate rejects resurrected stale authority
+
+Authority Journal events newer than recovered snapshot
+are replayed/reconciled before any new external effect
+```
+
+若 Authority Journal 无法可靠恢复：
+
+```text
+AUTHORITY_STATE_UNCERTAIN
+→ FAIL CLOSED
+→ NO NEW EXTERNAL EFFECT
+```
+
+不得以恢复到旧 ACTIVE 状态算 PASS。
+
+## A43 Stale Result
+REQUIRED
+
+## A44 Resource Staleness
+REQUIRED
+
+## A45 Worker Capability Enforcement
+REQUIRED
+
+## A46 Machine Result Envelope
+REQUIRED
+
+## A47 Schema Migration Recovery
+REQUIRED
+
+## A48 Performance
+REQUIRED
+
+before/after。
+
+## A49 Selftest
+REQUIRED
+
+## A50 Control Plane Trust Root
+REQUIRED
+
+Worker 不得改：
+
+```text
+Canonical State
+Authorization
+Policy
+Effect WAL
+Authority Commit Journal
+Acceptance
+```
+
+网页/Repo 不能伪造 Human Gate。
+
+## A51 Human Authorization Forgery / Replay / Rollback Resurrection
+REQUIRED
+
+测试：
+
+```text
+fake decision nonce
+expired nonce
+wrong task nonce
+wrong scope
+consumed one-shot authorization
+revoked authorization
+```
+
+并必须额外验证：
+
+```text
+revoked authorization
+remains revoked
+across Canonical State rollback
+
+consumed authorization
+remains consumed
+across Canonical State rollback
+
+revocation epoch
+does not decrease
+
+authorization generation
+does not decrease
+
+older broader permission
+cannot resurrect
+after snapshot recovery
+```
+
+合法：
+
+```text
+current
+scoped
+unconsumed
+unexpired
+unrevoked
+latest durable authority generation
+```
+
+才能通过 Effect Gate。
+
+## A52 Credential Leakage + Wrong Account
+REQUIRED
+
+## A53 Command Injection / Path Escape
+REQUIRED
+
+## A54 Untrusted Code Execution
+REQUIRED
+
+## A55 Unknown External Outcome
+REQUIRED
+
+```text
+OUTCOME_UNKNOWN
+→ NO AUTO RETRY
+```
+
+## A56 Process Containment / Cancellation
+REQUIRED
+
+## A57 Storage Durability Failure + Authority Journal Durability
+REQUIRED
+
+fault injection：
+
+```text
+disk full
+Effect WAL write failure
+Canonical State commit failure
+flush failure
+Authority Commit Journal write failure
+Authority Commit Journal transaction failure
+Authority Journal integrity failure
+```
+
+必须证明：
+
+如果：
+
+```text
+Effect WAL
+Reservation
+ATTEMPT
+AUTHORITY_COMMIT_JOURNAL
+```
+
+任何必要 durable commit 无法确认：
+
+```text
+external effect DOES NOT START
+```
+
+特别是：
+
+```text
+Authority Commit Journal durability cannot be confirmed
+→ authority state cannot be trusted for widening/continuing effect authority
+→ FAIL CLOSED
+→ NO NEW EXTERNAL EFFECT
+```
+
+恢复后必须检查：
+
+```text
+Canonical State
+Effect WAL
+Authority Commit Journal
+latest authority generations
+unresolved effects
+```
+
+禁止真实写爆用户磁盘。
+
+## A58 Evidence Privacy
+REQUIRED
+
+## A59 Windows Reboot / Boot-session Recovery Contract
+REQUIRED
+
+模拟，不真实重启。
+
+恢复需：
+
+```text
+Canonical State
+Effect WAL
+Authority Commit Journal
+latest durable authority generations
+locks
+unresolved actions
+```
+
+## A60 Logical Effect Identity / Atomic Reservation
+REQUIRED
+
+包括：
+
+```text
+replan duplicate
+one-shot authorization race
+stale controller fence
+revocation race
+```
+
+## A61 Result Source Authenticity
+REQUIRED
+
+## A62 Release Candidate Integrity
+REQUIRED
+
+## A63 Controller TCB Integrity
+REQUIRED
+
+## A64 Privileged Worker External-Effect Bypass
+REQUIRED
+
+## A65 Required Test Execution Authenticity
+REQUIRED
+
+Fake Worker PASS 不得使 REQUIRED case PASS。
+
+---
+
+# 110. Builder Continuity
+
+不杀当前 Codex。
+
+通过最小 context simulation 验证：
+
+```text
+Build Mission Journal
+Context Capsule
+Decision/Defect/Test state
+```
+
+足以恢复当前 builder 工作认知。
+
+---
+
+# 111. REAL FULL-GOAL TEST
+
+至少一个完整 demo：
+
+```text
+goal
+→ requirements
+→ contract
+→ ChatGPT
+→ local Worker
+→ Browser
+→ Local Runtime
+→ artifact
+→ controller-observed test
+→ review
+→ rework or explicit PASS
+→ quality gate
+→ release candidate
+→ delivered digest verification
+```
+
+---
+
+# 112. Evidence
+
+失败按需：
+
+```text
+screenshot
+URL
+safe DOM/accessibility
+console/network summary
+task/action/version
+```
+
+成功路径最小化 evidence。
+
+---
+
+# 113. Artifact Provenance
+
+最终必须知道：
+
+```text
+谁做
+哪个 Brain
+哪个 Worker
+什么版本
+哪些文件
+什么测试
+谁 Review
+什么 finding
+怎么修
+tested digest
+release digest
+delivered digest
+```
+
+---
+
+# 114. 生产目录
+
+根据现状选择稳定路径，例如：
+
+```text
+E:\WB\tools\ai-production-control\
+E:\WB\state\ai-production-control\
+E:\WB\outputs\ai-production-control\
+E:\WB\docs\
+```
+
+---
+
+# 115. Stable Production Path
+
+禁止 production 依赖 timestamp 临时 workspace。
+
+---
+
+# 116. 用户文件保护
+
+修改前：
+
+```text
+git status
+```
+
+关键非 Git 文件备份。
+
+不得覆盖用户未提交工作。
+
+---
+
+# 117. 不删除旧资产
+
+标：
+
+```text
+LEGACY
+DEPRECATED
+NON_PRODUCTION
+```
+
+优先，不乱删。
+
+---
+
+# 118. HIGH IMPACT HUMAN GATE
+
+没有 scoped durable authorization：
+
+必须 Gate：
+
+```text
+大规模删除
+重要卸载
+付款
+公开发布
+重要账号修改
+不可恢复凭据
+高风险不可逆动作
+```
+
+---
+
+# 119. Doctor
+
+检查：
+
+```text
+Canonical State
+STATE_HEAD
+Effect WAL
+Authority Commit Journal
+authority generations
+logical effects
+locks
+Browser
+Brains
+Workers
+production entry
+Controller TCB
+config
+security/egress
+credential refs
+release area
+version
+```
+
+---
+
+# 120. Selftest
+
+至少：
+
+```text
+State
+WAL
+Authority Journal
+Authority rollback safety
+Effect Gate
+Logical Effect Dedup
+Atomic Reservation
+Authorization/Revocation
+Controller TCB
+Browser Lab smoke
+Brain smoke
+Worker smoke
+Result Authenticity
+Required Test Authenticity
+Context continuity
+Release Integrity
+```
+
+---
+
+# 121. VERSION DRIFT
+
+记录：
+
+```text
+Chrome
+Browser backend
+bsk
+Node
+Python
+WorkBuddy
+adapters
+Controller security-critical dependencies
+```
+
+关键变化：
+
+```text
+UNVERIFIED_AFTER_UPGRADE
+```
+
+TCB 变化：
+
+```text
+UNVERIFIED_AFTER_CONTROLLER_CHANGE
+```
+
+---
+
+# 122. External Final Brain Review
+
+实现测试完成后使用独立 high-quality Brain 检查：
+
+```text
+architecture
+Effect Gate
+Effect WAL
+Authority Commit Journal
+authority rollback safety
+logical effect/reservation
+Trust Root
+Controller TCB
+result authenticity
+acceptance
+context
+security
+release integrity
+performance
+known limits
+```
+
+Blocking/core finding：
+
+继续修。
+
+不得扔给用户搬。
+
+---
+
+# 123. Review 不无限重复
+
+只做信息增益或 finding 复验。
+
+---
+
+# 124. ZERO DEFECT DIRECTION
+
+目标：
+
+```text
+KNOWN_BLOCKING_DEFECTS = 0
+KNOWN_CORE_PATH_DEFECTS = 0
+```
+
+---
+
+# 125. FINAL DEFECT HUNT
+
+主动攻击至少：
+
+```text
+double send
+send/response ambiguity
+
+WAL/state rollback
+
+authority rollback
+stale permission resurrection
+revoked authorization resurrection
+consumed authorization resurrection
+Goal Contract tightening rollback
+
+authorization stale
+authorization forgery
+authorization replay
+revocation race
+
+new action_id same logical effect
+one-shot concurrent consumption
+stale execution fence
+
+worker bypass
+privileged direct external write
+
+resource stale
+context stale
+
+duplicate tab
+stale lock
+crash resume
+double resume
+
+provider failure
+UI changed
+auth expired
+prompt injection
+
+egress bypass
+credential leak
+wrong account
+
+shell injection
+PowerShell injection
+Windows path escape
+junction/reparse escape
+
+malicious package/repository
+
+unknown external outcome
+
+orphan process
+process tree escape
+
+disk full
+WAL write fail
+state write fail
+Authority Journal write fail
+Authority Journal integrity fail
+
+fake Worker identity
+unknown result injection
+old replay
+wrong channel
+
+fake test PASS
+test not executed
+wrong artifact tested
+
+migration crash
+concurrent writes
+
+controller TCB tampering
+
+release mutation
+late rework
+missing dependency
+tested != delivered digest
+
+secret in screenshot
+trace
+capsule
+```
+
+---
+
+# 126. BUILD ORDER
+
+```text
+1. Build Mission Journal
+
+2. Fast Inventory
+
+3. Mature Solution Collision Check
+
+4. Canonical State
+   Goal Contract
+   Authorization
+   Authority Commit Journal
+
+5. Action Ledger
+   Effect WAL
+   Effect Gate
+   Logical Effect Identity
+   Atomic Reservation
+
+6. Context Continuity
+   Decision / Approach Ledger
+
+7. Universal Browser Runtime
+
+8. Local Runtime
+
+9. Brain Runtime
+
+10. Worker Runtime
+    Capability Enforcement
+    Invocation/Result Binding
+
+11. Unique Production CLI
+
+12. Locks / Concurrency
+
+13. Data Egress / Credential / Security
+
+14. Controller TCB Boundary
+
+15. Quality Gate
+    Required Test Authenticity
+    Release Integrity
+
+16. Capability Lab
+
+17. Acceptance A01-A65
+
+18. Fault Injection
+    child runtime only
+
+19. Fix defects
+
+20. Performance optimization
+
+21. Independent Brain Review
+
+22. Final Regression
+
+23. Docs / Delivery
+```
+
+---
+
+# 127. 不得因阶段完成中断
+
+所有阶段连续执行。
+
+---
+
+# 128. 额度效率 HARD RULE
+
+不要烧额度在：
+
+```text
+重复历史审计
+长阶段报告
+架构争论
+重复造轮子
+几十次同类测试
+美化
+dashboard
+无关重构
+```
+
+优先：
+
+```text
+实现
+真实测试
+bug
+修复
+关键 Review
+E2E
+```
+
+---
+
+# 129. 不得主动省事退出
+
+禁止：
+
+```text
+任务太大分两轮
+先完成 P0 以后再说
+下一次继续
+```
+
+---
+
+# 130. Required / Optional
+
+核心必须本轮完成。
+
+Optional 只能是：
+
+```text
+漂亮 Dashboard
+大型统计 UI
+无必要插件系统
+企业微服务
+无价值重构
+```
+
+---
+
+# 131. 不过度工程
+
+禁止：
+
+```text
+Kubernetes
+Kafka
+复杂分布式系统
+大微服务集群
+无必要 Agent Framework
+大型 DB infrastructure
+大型 PKI
+```
+
+---
+
+# 132. 最终必须生成
+
+至少：
+
+```text
+AI_PRODUCTION_CONTROL_HANDOFF.md
+
+NEW_WORKER_START_HERE.md
+
+WORKER_CONTRACT.md
+
+USER_WORKER_POLICY.md
+
+DATA_EGRESS_POLICY.md
+
+production config
+
+acceptance_manifest.json
+
+performance evidence
+
+rollback record
+
+Build Mission Journal
+
+Decision Ledger / Failed Approach state
+
+doctor/selftest
+
+Release Candidate Manifest
+
+artifact manifest
+
+Authority Commit Journal implementation + recovery evidence
+```
+
+---
+
+# 133. NEW_WORKER_START_HERE
+
+必须短。
+
+新 AI 只需要：
+
+```text
+NEW_WORKER_START_HERE.md
+task_id / user goal
+```
+
+不需要学习 bsk、ports、selectors。
+
+---
+
+# 134. FINAL REPORT
+
+最终只报告：
+
+## ROOT_CAUSE
+
+一句话。
+
+## SYSTEM
+
+实际建成什么。
+
+## OFFICIAL_PRODUCTION_COMMAND
+
+唯一正式入口。
+
+## DEFAULT_PRIMARY_BRAIN
+
+```text
+ChatGPT
+```
+
+## VERIFIED_PRIMARY_BRAIN
+
+实际。
+
+## FALLBACK_BRAINS
+
+实际。
+
+## WORKER_POOL
+
+实际。
+
+## WORKER_TRUST_CLASSES
+
+实际。
+
+## WORKBUDDY_ROLE
+
+实际。
+
+## BROWSER_RUNTIME
+
+```text
+PRIMARY
+FALLBACK
+BSK_ROLE
+PROFILE
+```
+
+## CONTROL_PLANE_TRUST_ROOT
+
+```text
+controller identity
+protected paths
+enforcement
+same-user limitation
+```
+
+## CONTROLLER_TCB
+
+```text
+scope
+integrity/update mechanism
+verification
+```
+
+## CANONICAL_STATE
+
+实际实现。
+
+## AUTHORITY_ROLLBACK_SAFETY
+
+必须报告：
+
+```text
+Authority Commit Journal backend
+
+durability mechanism
+
+authority event types
+
+revocation epoch model
+
+authorization generation model
+
+Goal Contract security-generation handling
+
+rollback recovery sequence
+
+AUTHORITY_STATE_UNCERTAIN fail-closed behavior
+
+A42/A51/A57 evidence
+```
+
+## LOGICAL_EFFECT_SAFETY
+
+```text
+logical_effect_id
+intent hash
+slot
+atomic reservation
+authorization consumption
+execution fence
+provider idempotency
+```
+
+## EFFECT_SAFETY
+
+```text
+Action Ledger
+Effect WAL
+Effect Gate
+```
+
+## CREDENTIAL_BOUNDARY
+
+实际。
+
+## ACCOUNT_IDENTITY
+
+实际。
+
+## COMMAND_EXECUTION
+
+实际。
+
+## WINDOWS_PATH_BOUNDARY
+
+实际。
+
+## UNTRUSTED_CODE
+
+实际。
+
+## PROCESS_CONTAINMENT
+
+实际。
+
+## RESULT_SOURCE_AUTHENTICITY
+
+实际。
+
+## REQUIRED_TEST_AUTHENTICITY
+
+实际。
+
+## CONTEXT_CONTINUITY
+
+实际。
+
+## STORAGE_DURABILITY
+
+实际。
+
+## EVIDENCE_PRIVACY
+
+实际。
+
+## RELEASE_INTEGRITY
+
+实际。
+
+## EXTERNAL_EFFECT_SEMANTICS
+
+真实报告：
+
+```text
+reconcilable effects
+provider-idempotent effects
+UNKNOWN outcome boundaries
+```
+
+不得说所有互联网 effect 绝对 exactly-once。
+
+## ACCEPTANCE
+
+A01-A65：
+
+```text
+class
+result
+evidence path
+```
+
+## KNOWN_BLOCKING_DEFECTS
+
+目标：
+
+```text
+0
+```
+
+## KNOWN_CORE_PATH_DEFECTS
+
+目标：
+
+```text
+0
+```
+
+## KNOWN_NON_CORE_LIMITATIONS
+
+真实。
+
+## MANUAL_COPY_PASTE_COUNT
+
+目标：
+
+```text
+0
+```
+
+## MANUAL_RELAY_COUNT
+
+目标：
+
+```text
+0
+```
+
+## USER_INFRASTRUCTURE_OPERATION_COUNT
+
+目标：
+
+```text
+0
+```
+
+合法 Human Gate 除外。
+
+## PERFORMANCE
+
+before / after。
+
+## ROLLBACK
+
+位置。
+
+## EXTERNAL_BOUNDARIES
+
+真实。
+
+## FINAL_STATUS
+
+只能：
+
+```text
+READY_FOR_USER_ACCEPTANCE
+EXTERNAL_BLOCKED
+FAILED_INTERNAL
+```
+
+---
+
+# 135. READY_FOR_USER_ACCEPTANCE
+
+只有满足完整 Release Gate 才进入。
+
+---
+
+# 136. FROZEN_PASS
+
+用户最终验收后才：
+
+```text
+AI_PRODUCTION_STATUS = FROZEN_PASS
+```
+
+---
+
+# 137. FREEZE POLICY
+
+FROZEN 后仅因：
+
+```text
+真实生产 bug
+security issue
+critical dependency deprecation
+major browser/provider drift
+selftest regression
+```
+
+重新打开基础设施。
+
+---
+
+# PART II — SECURITY / RUNTIME HARDENING
+
+以下规则全部强制。
+
+---
+
+# CONTROL PLANE TRUST ROOT
+
+Controller 独占 authoritative write：
+
+```text
+Canonical State
+STATE_HEAD
+Goal Contract
+Human Authorization
+Revocation
+Effect WAL
+Authority Commit Journal
+Action Ledger authority
+Policy
+Egress Policy
+Worker Registry authority
+Brain Registry authority
+Credential references
+Release/Acceptance records
+```
+
+Worker 只能提交 proposal/result/evidence。
+
+---
+
+# Human Gate Trust Root
+
+授权必须来自 Controller-issued：
+
+```text
+decision_nonce
+scope
+expires_at
+task
+Goal Contract
+```
+
+用户通过正式受控入口确认后：
+
+才能生成 Authorization。
+
+---
+
+# Authorization Replay Protection
+
+记录：
+
+```text
+authorization_id
+decision_nonce
+task_id
+goal_contract_version
+scope
+provider
+resource
+purpose
+effect_type
+max_effect_count
+consumed_effect_count
+generation
+granted_at
+expires_at
+revoked_at
+status
+```
+
+---
+
+# CREDENTIAL MATERIAL
+
+包括：
+
+```text
+password
+API key
+OAuth token
+cookies
+GitHub token
+private key
+authentication header
+session secret
+```
+
+不得进入普通 Brain prompt / Capsule / logs / evidence。
+
+优先使用：
+
+```text
+credential_ref
+```
+
+---
+
+# Browser Credential Boundary
+
+Browser profile credential 只由 Browser Runtime 消费。
+
+普通 Worker 不读 cookie/token dump。
+
+---
+
+# Account Identity
+
+external write 时验证 expected account identity。
+
+Mismatch：
+
+```text
+DO NOT EXECUTE
+```
+
+---
+
+# STRUCTURED COMMAND EXECUTION
+
+默认：
+
+```json
+{
+  "executable": "...",
+  "argv": [],
+  "cwd": "...",
+  "env": {},
+  "timeout": 0
+}
+```
+
+禁止未经严格处理的 AI 文本直接进入：
+
+```text
+powershell -Command
+cmd /c
+bash -c
+python -c
+node -e
+shell=True
+```
+
+复杂 shell：
+
+显式 higher capability。
+
+---
+
+# WINDOWS PATH BOUNDARY
+
+必须防：
+
+```text
+..
+relative escape
+symlink
+junction
+reparse
+UNC
+device path
+slash/case confusion
+8.3 alias where relevant
+```
+
+最终 resolved target 必须 inside allowed root。
+
+不确定：
+
+```text
+DENY
+```
+
+---
+
+# UNTRUSTED CODE EXECUTION
+
+新 Repo/package/script/install：
+
+默认无：
+
+```text
+production credential
+Browser production profile
+Control Plane write
+Sensitive files
+unrestricted network
+privileged OS
+```
+
+首次 isolated execution。
+
+安装 hook 视为 code execution。
+
+---
+
+# PROCESS CONTAINMENT
+
+长期 child process 登记：
+
+```text
+process_id
+start identity
+controller_instance
+task
+action
+logical effect
+parent
+job/process group
+lifetime
+effect class
+```
+
+Windows Job Object 等成熟方案优先。
+
+cancel：
+
+停止受控 tree。
+
+external boundary 后不能假装 kill = revoke。
+
+---
+
+# STORAGE DURABILITY
+
+若：
+
+```text
+disk full
+write error
+DB error
+flush fail
+journal fail
+authority journal fail
+integrity fail
+```
+
+无法确认 durable：
+
+```text
+NO EXTERNAL EFFECT
+```
+
+---
+
+# EVIDENCE PRIVACY
+
+所有：
+
+```text
+log
+trace
+screenshot
+DOM
+network
+capsule
+acceptance evidence
+```
+
+分类并 redaction。
+
+Secret 不落普通 evidence。
+
+---
+
+# BOOT RECOVERY
+
+Windows reboot 不在本次真实执行中主动发生。
+
+Production resume：
+
+```text
+Canonical State
+Effect WAL
+Authority Commit Journal
+authority generations
+locks
+unresolved effects
+```
+
+全部重新恢复/验证。
+
+---
+
+# INSTALLATION PERMISSION
+
+本任务授权必要低风险依赖安装：
+
+```text
+official/trusted source
+pinned version
+reversible
+no reboot
+no driver/kernel
+no destructive software replacement
+```
+
+高风险安装才 Human Gate。
+
+---
+
+# PART III — LOGICAL EFFECT / RESULT AUTHENTICITY / RELEASE
+
+---
+
+# LOGICAL EFFECT IDENTITY
+
+```text
+action_id
+logical_effect_id
+attempt_id
+effect_intent_hash
+logical_effect_slot
+```
+
+action_id 不是 external-effect dedup authority。
+
+---
+
+# Effect Intent Hash
+
+绑定 materially relevant：
+
+```text
+operation
+provider
+destination
+expected account
+resource
+payload hash
+critical params
+purpose
+authorization
+Goal Contract
+logical effect slot
+```
+
+---
+
+# Atomic Reservation
+
+使用 serialized transaction/CAS。
+
+必须 atomic：
+
+```text
+controller lease
+Canonical State
+latest durable authority generation
+Authorization
+revocation epoch
+quota
+Context Fence
+Resource Preconditions
+capability
+egress
+locks
+logical effect dedup
+Effect WAL
+attempt
+execution fence
+```
+
+---
+
+# EFFECT_START_COMMITTED
+
+真正跨不可撤回 boundary 前再次 atomic check：
+
+```text
+same fence
+same lease
+no revocation
+latest authority generation
+same Goal
+resource fresh
+```
+
+之后 crash：
+
+按 possibly completed。
+
+---
+
+# INVOCATION RECEIPT
+
+Controller 调 Brain/Worker 前持久：
+
+```text
+invocation_id
+request_nonce
+expected_actor_id
+actor_type
+task
+Goal Contract
+state revision
+context fence
+trust class
+capability
+result channel
+process/session identity
+created_at
+expires_at
+status
+```
+
+Envelope 自报 worker_id 不具 authority。
+
+---
+
+# Local Source Binding
+
+绑定：
+
+```text
+process id
+process start identity
+controlled stdout/IPC/path
+invocation id
+nonce
+```
+
+---
+
+# Browser Brain Binding
+
+绑定：
+
+```text
+provider
+account/profile
+conversation
+canonical tab/session
+outgoing nonce
+assistant response turn
+```
+
+---
+
+# RELEASE CANDIDATE
+
+Manifest 至少：
+
+```text
+release_candidate_id
+task
+Goal Contract
+state revision
+artifact kind
+artifact id/path
+artifact digest
+size
+tree manifest
+test evidence ids/hashes
+review evidence ids/hashes
+acceptance manifest hash
+created_at
+status
+```
+
+Artifact Kind：
+
+```text
+FILE
+DIRECTORY_TREE
+GIT_COMMIT
+MULTI_ARTIFACT_BUNDLE
+```
+
+Tests / Reviews：
+
+必须绑定相同 digest。
+
+Candidate 进入 Controller-owned release area。
+
+普通 Worker 不能改。
+
+变化：
+
+```text
+INVALIDATE
+→ new candidate
+→ affected retest/review
+```
+
+交付前：
+
+```text
+delivered digest == candidate digest
+```
+
+---
+
+# PART IV — CONTROLLER TCB / PRIVILEGED WORKER / TEST AUTHENTICITY
+
+---
+
+# CONTROLLER TCB
+
+至少：
+
+```text
+Controller source/executable
+official entrypoint
+Effect Gate
+authorization enforcement
+WAL/state/authority journal enforcement
+Worker trust enforcement
+result verification
+release gate
+security config
+startup scripts
+security-critical dependencies
+```
+
+BROKERED/SANDBOXED Worker：
+
+不得写 TCB。
+
+合法安全修改：
+
+```text
+update
+→ UNVERIFIED_AFTER_CONTROLLER_CHANGE
+→ regression
+→ VERIFIED
+```
+
+---
+
+# PRIVILEGED_UNBROKERED
+
+```text
+MUST NOT DIRECTLY EXECUTE
+PRODUCTION EXTERNAL WRITE
+```
+
+只能：
+
+```text
+ACTION_PROPOSAL
+→ Controller
+→ Authorization
+→ Logical Effect
+→ Atomic Reservation
+→ WAL
+→ Effect Gate
+→ controlled adapter
+```
+
+同用户 OS 无法完全阻断网络：
+
+必须如实报告。
+
+通过 withholding/routing 降低权限。
+
+---
+
+# REQUIRED TEST EXECUTION AUTHENTICITY
+
+Worker self-report：
+
+不能单独使 REQUIRED PASS。
+
+必须：
+
+```text
+Controller-owned execution
+OR
+Controller-owned Browser observation
+OR
+Controller-independent verification of evidence
+```
+
+Test execution record：
+
+```text
+test_execution_id
+case_id
+definition version
+task
+Goal Contract
+state revision
+tested artifact digest
+controller instance
+process/browser identity
+invocation
+timestamps
+exit/observed result
+evidence
+hashes
+verification status
+```
+
+最终：
+
+```text
+TEST REALLY EXECUTED
+
+AND
+
+TESTED DIGEST
+=
+REVIEWED DIGEST
+=
+RELEASE DIGEST
+=
+DELIVERED DIGEST
+```
+
+---
+
+# FINAL EXECUTION DIRECTIVE
+
+现在规格审计已经结束。
+
+当前结论：
+
+```text
+STRUCTURAL_P0_COUNT = 0
+
+NO_NEW_STRUCTURAL_P0
+
+PROMPT_ARCHITECTURE = FROZEN
+```
+
+你现在不是 Reviewer。
+
+你是：
+
+```text
+SOLE BUILD OWNER
+```
+
+不要输出：
+
+```text
+V15
+V16
+V17
+Patch 4
+新的架构审计
+新的提示词建议
+Phase 2 建议
+是否继续
+阶段性交接
+```
+
+收到本 Prompt 后：
+
+立即：
+
+```text
+BUILD_MISSION_JOURNAL
+↓
+FAST INVENTORY
+↓
+MATURE SOLUTION COLLISION CHECK
+↓
+BUILD
+↓
+RUN
+↓
+TEST
+↓
+ATTACK
+↓
+FIX
+↓
+RETEST
+↓
+REVIEW
+↓
+FIX
+↓
+PERFORMANCE OPTIMIZE
+↓
+FINAL REGRESSION
+↓
+A01-A65
+↓
+RELEASE CANDIDATE
+↓
+DIGEST VERIFY
+↓
+FINAL REPORT
+```
+
+除真正：
+
+```text
+HUMAN_GATE
+EXTERNAL_BLOCKED
+```
+
+外：
+
+不要中断当前 logical mission。
+
+不要杀当前唯一 Codex build owner。
+
+不要重启当前 Codex。
+
+不要重启 Windows。
+
+不要让用户搬：
+
+```text
+Prompt
+Context
+Result
+URL
+Path
+Port
+Review Finding
+Conversation
+Worker State
+```
+
+不要为了测试 Recovery 杀自己。
+
+所有 crash / lease / controller replacement / storage / reboot / TCB mutation：
+
+使用：
+
+```text
+child runtime
+fixture
+simulation
+fault injection
+temporary test controller
+isolated process
+```
+
+---
+
+# AUTHORITY SAFETY FINAL RULE
+
+必须永久记住两条对称恢复链：
+
+```text
+Effect WAL
+→ 防止已经/可能发生过的副作用
+   被 State rollback 遗忘
+
+Authority Commit Journal
+→ 防止已经撤销/消费/收紧的权限
+   被 State rollback 复活
+```
+
+Canonical State 可以回退 known-good snapshot。
+
+但是：
+
+```text
+durable security authority
+MUST NOT ROLL BACK
+```
+
+如果最新 authority 无法恢复：
+
+```text
+AUTHORITY_STATE_UNCERTAIN
+→ FAIL CLOSED
+→ NO NEW EXTERNAL EFFECT
+```
+
+---
+
+# FINAL SIX QUESTIONS
+
+系统最终必须回答：
+
+```text
+1.
+这是谁授权的？
+
+2.
+这个现实副作用到底是哪一个？
+
+3.
+它有没有可能已经发生？
+
+4.
+这个结果到底是谁返回的？
+
+5.
+这个 REQUIRED 测试是否真的被执行/观察/独立验证？
+
+6.
+最终交付是不是测试和 Review 过的同一个 Artifact？
+```
+
+以及：
+
+```text
+执行这些规则的 Controller
+有没有被 Worker 偷偷改掉？
+```
+
+再增加最后一个 authority-recovery 问题：
+
+```text
+一次已经 durable commit 的撤销、消费或权限收紧，
+有没有可能因为 Canonical State rollback
+重新变成有效权限？
+```
+
+正确答案必须是：
+
+```text
+NO
+```
+
+如果无法证明：
+
+```text
+BLOCK
+RECONCILE
+REVERIFY
+FAIL CLOSED
+```
+
+不得猜。
+
+---
+
+# FINAL STATUS RULE
+
+只有完整 Release Gate 满足：
+
+```text
+FINAL_STATUS =
+READY_FOR_USER_ACCEPTANCE
+```
+
+真实外部硬约束阻止：
+
+```text
+FINAL_STATUS =
+EXTERNAL_BLOCKED
+```
+
+内部实现未完成/Required failure：
+
+```text
+FINAL_STATUS =
+FAILED_INTERNAL
+```
+
+不得 Fake PASS。
+
+---
+
+# FINAL COMMAND
+
+```text
+STOP PROMPT ARCHITECTURE AUDIT
+
+BUILD
+TEST
+ATTACK
+FIX
+VERIFY
+DELIVER
+```
+
+现在立即开始执行。
+
+不要再设计下一版。
+
+不要先向用户解释计划。
+
+不要要求重复确认已经确定的事项。
+
+不要阶段性退出。
+
+一直执行到：
+
+```text
+READY_FOR_USER_ACCEPTANCE
+
+or
+
+a genuine HUMAN_GATE / EXTERNAL_BLOCKED / FAILED_INTERNAL boundary
+```
+
+然后只输出一次最终交付报告。
+
+**规格冻结。开始建设。**

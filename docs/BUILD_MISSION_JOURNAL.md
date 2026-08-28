@@ -22,3 +22,12 @@
 - resume_information: `read this journal + V14-FROZEN spec at prompt_source path; TCB gen6 is current; git HEAD = baseline; acceptance manifest lands in E:\WB\outputs\ai-production-control`
 - latest_context_capsule_version: `capsule-via-acceptance runner pending`
 - updated_at: `2026-08-17T20:10:00+08:00`
+
+## V0.9 CLOSE 施工检查点（Builder，actor=Builder；裁决来源 = 用户 2026-08-28 裁决 + 主脑规格 V09_CLOSE_BUILD_SPEC + 裁决书 R1/R2、R18、R3/R4）
+
+- 2026-08-28 T0 checkpoint：施工线 `v0.9-b1/authority-effect-core`，base SHA `50cf8bd1d1d36b4ebe8518b35a62a68204c4e39f`。本条随 T0 提交入库，故其自身 SHA = 本提交（记于下一检查点）。
+  - 入库：`docs/specs/V14-FROZEN-EXECUTION-SPEC.txt`（sha256 `6fe3bb79…154df6`，逐字节）、`docs/SPEC_ANCHOR_REPORT.md`、`docs/RED_ADJUDICATION_MATRIX.md`、6 个治理文件（源 f74d48e，blob 级逐字节一致）、冻结测量件 2 件（夹具仅 +1 行 `spec_anchor`）。
+  - `PROJECT_STATE.spec_registry` 登记 1 条，status=`COMMITTED`；孪生 `PROJECT_STATE.md` 同步。
+  - 适配运行器 `runtime/test_v09_attack_matrix_on_b1_core.py`（AD-1..AD-5）首测：36 例 matched=25 / red=11，R34 忠实探针 MISMATCH（未知类型端到端 ALLOW）。
+  - `python scripts/state_doctor.py` = `DRIFT_FREE`（exit 0），残留 WARN 仅 journal staleness（裁决书 §2 预告合法）。
+  - `RELEASE_STATUS` 维持 `PRODUCT_NOT_READY`；TCB 处于 `UNVERIFIED_AFTER_CONTROLLER_CHANGE`（代码任务尚未开始，T0 未触碰 `src/`）。

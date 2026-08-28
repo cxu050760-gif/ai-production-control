@@ -1,0 +1,336 @@
+{
+  "schema": "v0.9-authority-effect-attack-matrix",
+  "version": "V0.9-FORMAL",
+  "attack_matrix_version": "V09-AUTHORITY-EFFECT-ATTACK-MATRIX-1",
+  "attack_case_count": 36,
+  "protocol": "V09_ATTACK_RESULT_JSONL_1",
+  "offline_only": true,
+  "spec_anchor": "sha256:6fe3bb7996a1f78a7d6584d08311c3ebc1aa2d9ffc56c27fc61e8d599e154df6",
+  "cases": [
+    {
+      "id": "V09-R01",
+      "theme": "no_authorization",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "no_authorization"
+    },
+    {
+      "id": "V09-R02",
+      "theme": "provider_mismatch",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "provider_mismatch"
+    },
+    {
+      "id": "V09-R03",
+      "theme": "purpose_mismatch",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "purpose_mismatch"
+    },
+    {
+      "id": "V09-R04",
+      "theme": "resource_mismatch",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "resource_mismatch"
+    },
+    {
+      "id": "V09-R05",
+      "theme": "task_run_identity_mismatch",
+      "category": "identity",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "task_run_identity_mismatch"
+    },
+    {
+      "id": "V09-R06",
+      "theme": "worker_role_mismatch",
+      "category": "identity",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "worker_role_mismatch"
+    },
+    {
+      "id": "V09-R07",
+      "theme": "stale_generation",
+      "category": "fencing",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "stale_generation"
+    },
+    {
+      "id": "V09-R08",
+      "theme": "stale_fence",
+      "category": "fencing",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "stale_fence"
+    },
+    {
+      "id": "V09-R09",
+      "theme": "stale_state_revision",
+      "category": "fencing",
+      "expected_outcome": "DENY_OR_REVALIDATE",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "stale_state_revision"
+    },
+    {
+      "id": "V09-R10",
+      "theme": "revoked_authorization",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "revoked_authorization"
+    },
+    {
+      "id": "V09-R11",
+      "theme": "expired_authorization",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "expired_authorization"
+    },
+    {
+      "id": "V09-R12",
+      "theme": "exhausted_count",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "exhausted_count"
+    },
+    {
+      "id": "V09-R13",
+      "theme": "executor_self_grant",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "executor_self_grant"
+    },
+    {
+      "id": "V09-R14",
+      "theme": "execute_without_durable_intent",
+      "category": "wal",
+      "expected_outcome": "NO_EXECUTE",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "execute_without_durable_intent"
+    },
+    {
+      "id": "V09-R15",
+      "theme": "crash_after_intent_before_execute",
+      "category": "wal",
+      "expected_outcome": "NO_DUPLICATE",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "crash_after_intent_before_execute"
+    },
+    {
+      "id": "V09-R16",
+      "theme": "duplicate_logical_effect",
+      "category": "idempotency",
+      "expected_outcome": "EXACTLY_ONCE",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "duplicate_logical_effect"
+    },
+    {
+      "id": "V09-R17",
+      "theme": "same_slot_same_payload_replay",
+      "category": "idempotency",
+      "expected_outcome": "DEDUPLICATE",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "same_slot_same_payload_replay"
+    },
+    {
+      "id": "V09-R18",
+      "theme": "same_slot_different_payload",
+      "category": "idempotency",
+      "expected_outcome": "CONFLICT_OR_DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "same_slot_different_payload"
+    },
+    {
+      "id": "V09-R19",
+      "theme": "execute_success_response_lost",
+      "category": "crown",
+      "expected_outcome": "OUTCOME_UNKNOWN",
+      "crown": true,
+      "owner": "B1",
+      "owner_case": "execute_success_response_lost"
+    },
+    {
+      "id": "V09-R20",
+      "theme": "unknown_ordinary_retry",
+      "category": "crown",
+      "expected_outcome": "DENY",
+      "crown": true,
+      "owner": "B1",
+      "owner_case": "unknown_ordinary_retry"
+    },
+    {
+      "id": "V09-R21",
+      "theme": "restart_while_unknown",
+      "category": "crown",
+      "expected_outcome": "RECONCILE_FIRST",
+      "crown": true,
+      "owner": "B1",
+      "owner_case": "restart_while_unknown"
+    },
+    {
+      "id": "V09-R22",
+      "theme": "reconcile_already_succeeded",
+      "category": "crown",
+      "expected_outcome": "COMMIT_SUCCESS_NO_EXECUTE",
+      "crown": true,
+      "owner": "B1",
+      "owner_case": "reconcile_already_succeeded"
+    },
+    {
+      "id": "V09-R23",
+      "theme": "reconcile_definitely_not_occurred",
+      "category": "crown",
+      "expected_outcome": "CONTROLLED_RETRY_ONLY",
+      "crown": true,
+      "owner": "B1",
+      "owner_case": "reconcile_definitely_not_occurred"
+    },
+    {
+      "id": "V09-R24",
+      "theme": "reality_indeterminate",
+      "category": "crown",
+      "expected_outcome": "STAY_UNKNOWN_OR_HUMAN_GATE",
+      "crown": true,
+      "owner": "B1",
+      "owner_case": "reality_indeterminate"
+    },
+    {
+      "id": "V09-R25",
+      "theme": "revoke_reserve_execute",
+      "category": "authority",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "revoke_reserve_execute"
+    },
+    {
+      "id": "V09-R26",
+      "theme": "generation_changes_before_execute",
+      "category": "fencing",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "generation_changes_before_execute"
+    },
+    {
+      "id": "V09-R27",
+      "theme": "secret_egress",
+      "category": "egress",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "secret_egress"
+    },
+    {
+      "id": "V09-R28",
+      "theme": "unknown_classification_egress",
+      "category": "egress",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "unknown_classification_egress"
+    },
+    {
+      "id": "V09-R29",
+      "theme": "provider_destination_purpose_authority_reuse",
+      "category": "egress",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "provider_destination_purpose_authority_reuse"
+    },
+    {
+      "id": "V09-R30",
+      "theme": "credential_leak",
+      "category": "credential",
+      "expected_outcome": "DENY_OR_REDACT",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "credential_leak"
+    },
+    {
+      "id": "V09-R31",
+      "theme": "invalid_tcb_supply_chain",
+      "category": "tcb",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "invalid_tcb_supply_chain"
+    },
+    {
+      "id": "V09-R32",
+      "theme": "high_risk_without_human_gate",
+      "category": "human_gate",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "high_risk_without_human_gate"
+    },
+    {
+      "id": "V09-R33",
+      "theme": "missing_effect_classification",
+      "category": "classification",
+      "expected_outcome": "FAIL_CLOSED",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "missing_effect_classification"
+    },
+    {
+      "id": "V09-R34",
+      "theme": "unknown_effect_type",
+      "category": "classification",
+      "expected_outcome": "FAIL_CLOSED",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "unknown_effect_type"
+    },
+    {
+      "id": "V09-R35",
+      "theme": "bypass_official_outbound_gate",
+      "category": "composition",
+      "expected_outcome": "NO_BYPASS",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "bypass_official_outbound_gate"
+    },
+    {
+      "id": "V09-R36",
+      "theme": "stale_process_after_generation_takeover",
+      "category": "fencing",
+      "expected_outcome": "DENY",
+      "crown": false,
+      "owner": "B1",
+      "owner_case": "stale_process_after_generation_takeover"
+    }
+  ],
+  "accepted_v08_base_sha": "e8c53d4a2d6d6ce1d57a34472170c01577e15d6c"
+}
