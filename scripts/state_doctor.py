@@ -38,6 +38,18 @@ REGISTRY = ROOT / "state" / "branch_registry.json"
 JOURNAL = ROOT / "docs" / "BUILD_MISSION_JOURNAL.md"
 STALENESS_DAYS = 7
 
+# State-only / governance-only paths. A leading commit that touches ONLY these
+# is a governance meta-commit (e.g. a Phase 0 seal) and is allowed to sit ahead
+# of CURRENT_DEVELOPMENT_HEAD. Any other path = a real code/development change.
+GOVERNANCE_PATHS = frozenset({
+    "PROJECT_STATE.json",
+    "PROJECT_STATE.md",
+    "state/branch_registry.json",
+    "scripts/state_doctor.py",
+    "scripts/test_state_doctor_classification.py",
+    "docs/PHASE0_PACK_README.md",
+})
+
 drifts: list[str] = []
 warns: list[str] = []
 
@@ -140,6 +152,64 @@ def _ref_to_branch(ref: str) -> str | None:
     return None
 
 
+def _unregistered_branches(actual_names, registered_names):
+    """Branches present on disk but absent from the registry: SPECULATIVE.
+    Empty means no unregistered branch (CASE 4 PASS)."""
+    return sorted(set(actual_names) - set(registered_names))
+
+
+def _all_in(given, allowed) -> bool:
+    """True iff every element of `given` is in `allowed` and `given` is non-empty.
+    An empty change set is NOT governance-only (fail closed)."""
+    return bool(given) and all(p in allowed for p in given)
+
+
+def _commit_is_governance_only(commit: str) -> bool:
+    """A leading commit is governance-only iff every path it changes is in
+    GOVERNANCE_PATHS. Driven by verifiable tree diff (path metadata), never by
+    matching commit-message strings."""
+    changed = (git("diff-tree", "--no-commit-id", "--name-only", "-r", commit) or "").splitlines()
+    return _all_in(changed, GOVERNANCE_PATHS)
+
+
+def _classify_dev_head(recorded, physical, is_ancestor, ahead_commits, is_governance_commit):
+    """Decision core for CURRENT_DEVELOPMENT_HEAD.
+
+    Returns (is_clean, detail). Governing rule (Phase 0 Seal ruling A / user
+    2026-08-28):
+      - development_head == physical_head                 -> clean (CASE 1)
+      - physical ahead, all leading commits governance-   -> clean (CASE 2)
+      - physical ahead, any leading commit is a real      -> DRIFT (CASE 3)
+        code/development change
+      - recorded development_head does not resolve         -> DRIFT (CASE 5)
+      - physical diverged / not descendant                -> DRIFT
+    """
+    if recorded is None:
+        return False, "development head recorded sha does not resolve to a commit"
+    if recorded == physical:
+        return True, "development head == physical head"
+    if not is_ancestor(recorded, physical):
+        return False, (f"development head is not an ancestor of physical head: "
+                       f"recorded={recorded[:8]} physical={physical[:8]}")
+    for commit in ahead_commits:
+        if not is_governance_commit(commit):
+            return False, f"non-governance commit ahead of development head: {commit}"
+    return True, "ahead commits are state-only/governance"
+
+
+def _check_dev_head(name: str, want_short: str, physical_full: str) -> None:
+    recorded = git("rev-parse", "--verify", "--quiet", f"{want_short}^{{commit}}")
+
+    def is_ancestor(a: str, b: str) -> bool:
+        return git("merge-base", "--is-ancestor", a, b) is not None
+
+    ahead = [] if recorded is None else (git("rev-list", f"{recorded}..{physical_full}") or "").splitlines()
+    ok, detail = _classify_dev_head(recorded, physical_full, is_ancestor,
+                                    ahead, _commit_is_governance_only)
+    if not ok:
+        drift("development head drift", f"{name}@governance-only-ahead", detail)
+
+
 def check_registry(ps: dict) -> None:
     reg = load_json(REGISTRY, "state/branch_registry.json")
     if reg is None:
@@ -155,7 +225,7 @@ def check_registry(ps: dict) -> None:
             drift("CANDIDATE_RED registered as TRUNK", "red candidate not promotable", name)
     # R5/R6: actual branches vs registry
     actual: dict[str, str] = {}
-    for line in (git("for-each-ref", "--format=%(refname) %(objectname:short)",
+    for line in (git("for-each-ref", "--format=%(refname) %(objectname)",
                      "refs/heads/", "refs/remotes/") or "").splitlines():
         parts = line.split()
         if len(parts) != 2:
@@ -166,14 +236,23 @@ def check_registry(ps: dict) -> None:
             # symbolic HEAD, bare '<remote>' leaf, or non-branch ref: ignore.
             continue
         actual[name] = sha
-    for name in sorted(set(actual) - set(entries)):
+    # R5: unregistered branches are SPECULATIVE (fail-closed) -> DRIFT.
+    for name in _unregistered_branches(set(actual), set(entries)):
         drift("unregistered branch (fail-closed: SPECULATIVE)", "registered in branch_registry", name)
+    dev_branch = (ps.get("baselines", {}).get("current_development_head") or {}).get("branch")
     for name, b in entries.items():
-        if name in actual:
-            want = str(b.get("head", ""))
-            got = actual[name]
-            if want and not got.startswith(want) and not want.startswith(got):
-                drift("registered head mismatch", f"{name}@{want}", f"{name}@{got}")
+        if name not in actual:
+            continue
+        got_full = actual[name]
+        want = str(b.get("head", ""))
+        if not want:
+            continue
+        if name == dev_branch:
+            # Phase 0 Seal ruling A: physical HEAD may be ahead of the recorded
+            # development head by governance-only commits. Anything else drifts.
+            _check_dev_head(name, want, got_full)
+        elif not got_full.startswith(want) and not want.startswith(got_full):
+            drift("registered head mismatch", f"{name}@{want}", f"{name}@{got_full[:8]}")
     for name in sorted(set(entries) - set(actual)):
         warn("registered branch not present in this clone", f"{name} (fetch it before trusting registry)")
 
