@@ -31,6 +31,7 @@ if str(SRC) not in sys.path:
 
 from aicontrol.security import (  # noqa: E402
     authority_scope_allowed,
+    egress_allowed,
     human_gate_allowed,
     normalized_classification,
     require_credential_isolation,
@@ -667,20 +668,66 @@ def record_effect(
     )
 
 
-def _runtime_preconditions(state: dict[str, Any]) -> dict[str, Any]:
+def _runtime_egress_permitted(
+    state: dict[str, Any],
+    *,
+    destination: str,
+    provider: str,
+    purpose: str,
+    classification: str,
+) -> bool:
+    """T11b: open the egress gate only from the Goal Contract's own permission.
+
+    The decision is made entirely by the canonical ``security.egress_allowed``
+    predicate (anchored by matrix R27-R29); this function only supplies its
+    inputs. Every missing or inconsistent input denies, so a pre-T11b state file
+    loads and stays blocked instead of crashing or defaulting open. Passing no
+    authorization scope keeps SECRET, UNKNOWN, PRIVATE_LOCAL and SENSITIVE denied.
+    """
+    projection = state.get("egress_policy_projection")
+    if not isinstance(projection, dict):
+        return False
+    stored_hash = str(state.get("goal_contract_hash") or "")
+    if not stored_hash or str(projection.get("source_contract_hash") or "") != stored_hash:
+        return False
+    policy = projection.get("data_egress_policy")
+    if not isinstance(policy, dict) or not policy:
+        return False
+    if not (destination and provider and purpose):
+        return False
+    return egress_allowed(
+        classification=classification,
+        destination=destination,
+        provider=provider,
+        purpose=purpose,
+        goal_contract={"data_egress_policy": policy},
+        authorization_scope=None,
+    )
+
+
+def _runtime_preconditions(
+    state: dict[str, Any],
+    *,
+    destination: str = "",
+    provider: str = "",
+    purpose: str = "",
+) -> dict[str, Any]:
     tcb_verified = bool(
         state.get("effect_tcb_verified") is True
         or state.get("tcb_status") == "VERIFIED"
         or state.get("controller_tcb_status") == "VERIFIED"
     )
+    classification = str(state.get("effect_data_classification") or "INTERNAL")
     return {
         "capability_permitted": bool(state.get("effect_capability_permitted", True)),
-        "egress_permitted": bool(state.get("effect_egress_permitted", False)),
+        "egress_permitted": _runtime_egress_permitted(
+            state, destination=destination, provider=provider,
+            purpose=purpose, classification=classification),
         "resource_fresh": bool(state.get("effect_resource_fresh", True)),
         "tcb_verified": tcb_verified,
         "human_gate_required": bool(state.get("effect_human_gate_required", False)),
         "human_gate_reference": state.get("effect_human_gate_reference"),
-        "classification": str(state.get("effect_data_classification") or "INTERNAL"),
+        "classification": classification,
     }
 
 
@@ -697,7 +744,8 @@ def _prepare_runtime_send(
     provider = str(state.get("effect_provider") or "chatgpt-web")
     identity = str(state.get("effect_executor_identity") or "runtime-v1")
     resource = str(state.get("effect_resource") or destination)
-    checks = _runtime_preconditions(state)
+    checks = _runtime_preconditions(
+        state, destination=destination, provider=provider, purpose=purpose)
     return prepare_effect(
         rt,
         state,
@@ -720,7 +768,12 @@ def _prepare_runtime_send(
 
 
 def _begin_runtime_send(rt, state: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
-    checks = _runtime_preconditions(state)
+    checks = _runtime_preconditions(
+        state,
+        destination=str(record.get("destination") or ""),
+        provider=str(record.get("provider") or ""),
+        purpose=str(record.get("purpose") or ""),
+    )
     return begin_effect(
         rt,
         state,

@@ -72,7 +72,8 @@ def _contract_core(goal: str, acceptance: list[str], constraints: list[str]) -> 
 
 
 def build_contract(goal: str, acceptance: list[str] | None = None,
-                   constraints: list[str] | None = None, *, revision: int = 1) -> dict[str, Any]:
+                   constraints: list[str] | None = None, *, revision: int = 1,
+                   data_egress_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     acceptance_values = _normalize_list(acceptance)
     if not acceptance_values:
         acceptance_values = list(DEFAULT_ACCEPTANCE)
@@ -84,6 +85,11 @@ def build_contract(goal: str, acceptance: list[str] | None = None,
         "schema_version": CONTRACT_SCHEMA_VERSION,
         "contract_revision": int(revision),
         **core,
+        # T11b: the contract is the authority for outbound egress. An empty policy
+        # means "nothing is permitted", so the default stays fail-closed. It is
+        # deliberately NOT part of the hashed core: contract identity remains
+        # sha256(goal, acceptance_criteria, constraints) and is unaffected.
+        "data_egress_policy": dict(data_egress_policy or {}),
         "contract_hash": digest,
         "identity_semantics": "sha256(canonical_json(goal,acceptance_criteria,constraints))",
     }
@@ -115,6 +121,15 @@ def persist_contract(rt, state: dict[str, Any], contract: dict[str, Any], *, eve
     state["goal_contract_hash"] = digest
     state["goal_contract_revision"] = revision
     state["goal_contract_path"] = str(path)
+    # T11b: minimal permission projection derived from the contract just persisted.
+    # Only this runtime code path writes it (no worker or model output channel does).
+    # Additive field: pre-existing state files simply have no projection, and the
+    # consumer must deny when it is absent or when source_contract_hash no longer
+    # matches goal_contract_hash.
+    state["egress_policy_projection"] = {
+        "data_egress_policy": dict(contract.get("data_egress_policy") or {}),
+        "source_contract_hash": digest,
+    }
     rt.save_state(state)
     rt.journal(
         state["run_id"], event,
@@ -204,16 +219,30 @@ def _parse_list_file(path: str | None) -> list[str] | None:
     return [line.strip() for line in text.splitlines() if line.strip()]
 
 
+def _parse_policy_file(path: str | None) -> dict[str, Any] | None:
+    if not path:
+        return None
+    p = Path(path)
+    if not p.is_file():
+        raise GoalContractError(f"contract input file missing: {path}")
+    value = json.loads(p.read_text(encoding="utf-8", errors="strict") or "{}")
+    if not isinstance(value, dict):
+        raise GoalContractError(f"egress policy file must be a JSON object: {path}")
+    return value
+
+
 def _extract_contract_options(argv: list[str]) -> tuple[list[str], dict[str, Any]]:
     cleaned: list[str] = []
     acceptance: list[str] = []
     constraints: list[str] = []
     acceptance_file = None
     constraints_file = None
+    egress_policy_file = None
     i = 0
     while i < len(argv):
         token = argv[i]
-        if token in ("--acceptance", "--constraint", "--acceptance-file", "--constraints-file"):
+        if token in ("--acceptance", "--constraint", "--acceptance-file", "--constraints-file",
+                     "--egress-policy-file"):
             if i + 1 >= len(argv):
                 raise GoalContractError(f"{token} requires a value")
             value = argv[i + 1]
@@ -223,19 +252,23 @@ def _extract_contract_options(argv: list[str]) -> tuple[list[str], dict[str, Any
                 constraints.append(value)
             elif token == "--acceptance-file":
                 acceptance_file = value
-            else:
+            elif token == "--constraints-file":
                 constraints_file = value
+            else:
+                egress_policy_file = value
             i += 2
             continue
         cleaned.append(token)
         i += 1
     file_acceptance = _parse_list_file(acceptance_file)
     file_constraints = _parse_list_file(constraints_file)
+    file_policy = _parse_policy_file(egress_policy_file)
     if file_acceptance is not None:
         acceptance.extend(file_acceptance)
     if file_constraints is not None:
         constraints.extend(file_constraints)
-    return cleaned, {"acceptance": acceptance, "constraints": constraints}
+    return cleaned, {"acceptance": acceptance, "constraints": constraints,
+                     "data_egress_policy": file_policy or {}}
 
 
 def install(rt, contract_options: dict[str, Any]) -> None:
@@ -257,6 +290,7 @@ def install(rt, contract_options: dict[str, Any]) -> None:
             contract_options.get("acceptance") or None,
             contract_options.get("constraints") or None,
             revision=1,
+            data_egress_policy=contract_options.get("data_egress_policy") or None,
         )
         persist_contract(rt, state, contract, event="GOAL_CONTRACT_CREATED")
         return state

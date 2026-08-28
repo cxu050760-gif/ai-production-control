@@ -108,3 +108,27 @@
 - 请求: 开设 T11b（授权 runtime state schema 变更 + 单列回归面：state 恢复兼容性、
   j4 跨进程一致性、Slice A AC-1..AC-11 冻结契约）。
 - status: OPEN
+
+## D013 — T11b 出站许可机制落地；发现第二道 TCB 前置构成 §5 停止条件（actor=Builder）
+
+- decision: 交付方案 B 的许可机制（契约派生 + 最小投影 + 哈希绑定 + fail-closed），
+  不在本批改动 9 例验收件；就第二道阻塞触发 §5 上报。
+- 实现（全部落在 §2 授权文件内）：
+  - `goal_contract_lite.build_contract` 新增 `data_egress_policy` 字段，**不进入哈希核**
+    （identity 仍为 sha256(goal,acceptance,constraints) → 既有契约哈希与 Slice A 冻结契约零影响）；
+  - `persist_contract` 写入最小投影 `egress_policy_projection = {data_egress_policy, source_contract_hash}`，
+    为**唯一写入者**（§3.6：Worker/模型输出通道不触达）；
+  - `_extract_contract_options` 增加 `--egress-policy-file`（沿用 `--acceptance-file` 同款选项形态，
+    非新增策略词汇；非 JSON object 直接拒绝）；
+  - `effect_safety_lite._runtime_egress_permitted` 判定 **100% 委托** `security.egress_allowed`
+    （零平行逻辑），投影缺失/哈希不匹配/策略空/要素缺失一律拒（§3.5 旧 state 兼容：可加载且表现为拒）。
+- 实测（子进程端到端，同一 R_URL/purpose/provider）：
+  无投影→rc=6 拒；空策略 {}→拒；`{"default":["PUBLIC","INTERNAL"]}`→egress 放行但被**第二道**
+  前置拦截；`{"default":[...,"SECRET"]}` 仍拒（SECRET 由 egress_allowed 内部硬拒）；
+  仅其它 destination 的策略→拒（目的地特定性成立）。投影 `hashbound=True` 全场景成立。
+- 发现的阻塞：egress 打开后发送路径随即被 **TCB 未封印** 前置拒绝
+  （`tcb_verified` 要求 state 携 `effect_tcb_verified` 或 `tcb_status==VERIFIED`）。
+  这与收口清单第 1 项（封印由发布负责人执行、且推迟到独立审查之后）形成**先后环依赖**：
+  若 9 例须在未封印状态下转绿，只能由测试场景声明 TCB 已验证——那属于 §3.4 AD-8 的
+  "场景构造"还是"为翻绿放宽前置"，需主脑裁定；若是前者，请明确 AD-8 是否涵盖 tcb 声明。
+- status: OPEN（§5(a)/(b) 待裁）
