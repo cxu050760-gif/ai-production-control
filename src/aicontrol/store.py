@@ -1359,6 +1359,16 @@ class ControlStore:
             (task_id, logical_effect_id),
         ).fetchone()
         if existing:
+            if existing["status"] in ("OUTCOME_UNKNOWN", "RECONCILING"):
+                recorded = self.connection.execute(
+                    "SELECT controller_instance_id FROM reservations WHERE logical_effect_id=?",
+                    (logical_effect_id,),
+                ).fetchone()
+                if recorded and recorded["controller_instance_id"] == controller_instance_id:
+                    raise GateDenied(
+                        "ordinary retry denied: the same logical effect has an unresolved "
+                        "OUTCOME_UNKNOWN/RECONCILING action; reconciliation is required first"
+                    )
             return Reservation(
                 action_id=existing["action_id"],
                 logical_effect_id=logical_effect_id,
@@ -1387,6 +1397,16 @@ class ControlStore:
                 (task_id, logical_effect_id),
             ).fetchone()
             if existing:
+                if existing["status"] in ("OUTCOME_UNKNOWN", "RECONCILING"):
+                    recorded = conn.execute(
+                        "SELECT controller_instance_id FROM reservations WHERE logical_effect_id=?",
+                        (logical_effect_id,),
+                    ).fetchone()
+                    if recorded and recorded["controller_instance_id"] == controller_instance_id:
+                        raise GateDenied(
+                            "ordinary retry denied: the same logical effect has an unresolved "
+                            "OUTCOME_UNKNOWN/RECONCILING action; reconciliation is required first"
+                        )
                 return Reservation(
                     action_id=existing["action_id"],
                     logical_effect_id=logical_effect_id,

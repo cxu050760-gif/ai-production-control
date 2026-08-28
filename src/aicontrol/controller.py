@@ -380,6 +380,17 @@ class Controller:
                 resource_fresh=resource_fresh,
             )
             if reservation.deduplicated:
+                if reservation.status in ("OUTCOME_UNKNOWN", "RECONCILING"):
+                    # Same-instance ordinary retries are denied inside reserve_effect, so an
+                    # unresolved dedup hit can only be a replay from a different controller
+                    # instance (restart/recovery). Never present it as a settled dedup.
+                    return {
+                        "reservation": reservation,
+                        "deduplicated": True,
+                        "reconciliation_required": True,
+                        "executed": False,
+                        "adapter_result": None,
+                    }
                 return {"reservation": reservation, "deduplicated": True, "adapter_result": None}
             self.store.start_effect(
                 reservation,
