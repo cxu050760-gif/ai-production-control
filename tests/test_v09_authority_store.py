@@ -215,6 +215,9 @@ class V09ControllerAuthoritySeparationTests(unittest.TestCase):
             "effect_type": effect_type,
             "data_classes": ["INTERNAL"],
             "identity": identity,
+            # V09-R06: execute_workbuddy_fallback declares critical_params.role
+            # "FALLBACK", so the external authority must bind that role explicitly.
+            "roles": ["FALLBACK"],
         }
         nonce = self.store.issue_decision_nonce(
             self.task_id,

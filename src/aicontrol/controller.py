@@ -43,6 +43,7 @@ class IndependentReviewAdapter:
 from .security import (
     authority_scope_allowed,
     browser_profile_identity,
+    caller_role_allowed,
     egress_allowed,
     human_gate_allowed,
     known_effect_type_allowed,
@@ -381,6 +382,14 @@ class Controller:
                 required=True, reference=str(intent.get("human_gate_reference") or "")
             ):
                 raise GateDenied("high-impact effect requires an explicit Human Gate reference")
+        critical_params = intent.get("critical_params")
+        if isinstance(critical_params, dict) and "role" in critical_params:
+            scope_row = self.store.connection.execute(
+                "SELECT scope_json FROM authorizations WHERE authorization_id=?", (authorization_id,)
+            ).fetchone()
+            authorized_roles = json.loads(scope_row["scope_json"]).get("roles") if scope_row else None
+            if not caller_role_allowed(declared_role=critical_params["role"], allowed_roles=authorized_roles):
+                raise GateDenied("caller role is not permitted by the authorization scope")
         expected_account = str(intent.get("expected_account", ""))
         if expected_account.startswith("profile-sha256:"):
             if observed_account_identity != expected_account.removeprefix("profile-sha256:"):

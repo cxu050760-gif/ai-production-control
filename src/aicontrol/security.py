@@ -171,6 +171,22 @@ def known_effect_type_allowed(*, effect_type: Any, known_effect_types: Iterable[
     return isinstance(effect_type, str) and effect_type.strip().upper() in allowed
 
 
+def caller_role_allowed(*, declared_role: Any, allowed_roles: Iterable[str] | None) -> bool:
+    """Whether an effect's declared caller role is permitted by the authorization.
+
+    V09-R06 / V14-FROZEN §31 check 8 ("caller capability permits effect") and §A64.
+    Deliberately minimal: this is not a trust classification system, only the
+    closed loop that binds a declared role to an explicitly authorized one.
+    """
+    if declared_role is None or not str(declared_role).strip():
+        return True
+    if allowed_roles is None:
+        # A role was declared but the authorization carries no role binding.
+        return False
+    allowed = {str(role).strip().upper() for role in allowed_roles if str(role).strip()}
+    return str(declared_role).strip().upper() in allowed
+
+
 def egress_allowed(
     *,
     classification: str,

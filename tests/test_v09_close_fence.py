@@ -60,13 +60,15 @@ class Harness:
 
     def grant(self, *, provider: str = "provider-a", destination: str = "destination-a",
               purpose: str = "v09-test", effect_type: str = "AI_MESSAGE",
-              max_effect_count: int = 4) -> dict[str, Any]:
+              max_effect_count: int = 4, roles: list[str] | None = None) -> dict[str, Any]:
         resource = "resource-a"
         scope = {
             "provider": provider, "destination": destination, "resource": resource,
             "purpose": purpose, "effect_type": effect_type, "data_classes": ["PUBLIC"],
             "identity": self.controller.controller_instance_id,
         }
+        if roles is not None:
+            scope["roles"] = list(roles)
         nonce = self.controller.store.issue_decision_nonce(
             self.task_id, scope, user_decision_reference="external-authority:v09-close-unit")
         return self.controller.store.grant_authorization(
