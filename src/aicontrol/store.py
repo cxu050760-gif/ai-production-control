@@ -1653,6 +1653,65 @@ class ControlStore:
             )
         self.durable_barrier()
 
+    def reconcile_effect_outcome(
+        self,
+        reservation: Reservation,
+        *,
+        evidence: dict[str, Any],
+        occurred: bool,
+    ) -> str:
+        """Advance a reconciled action along the §23 ledger chain. Never executes anything.
+
+        ``occurred=True`` walks OUTCOME_UNKNOWN -> OUTCOME_OBSERVED -> ACTION_COMMITTED.
+        ``occurred=False`` records the observation and leaves the action unresolved:
+        a negative observation grants no replay authority (V14 §26 NEVER_AUTO_RETRY).
+        """
+        with self.transaction() as conn:
+            row = conn.execute("SELECT status FROM actions WHERE action_id=?", (reservation.action_id,)).fetchone()
+            if not row or row["status"] != "OUTCOME_UNKNOWN":
+                raise GateDenied("reconciliation requires an OUTCOME_UNKNOWN action")
+            now = utc_now()
+            if not occurred:
+                self._append_wal(
+                    conn,
+                    action_id=reservation.action_id,
+                    logical_effect_id=reservation.logical_effect_id,
+                    status="OUTCOME_UNKNOWN",
+                    record={
+                        "reconciliation_evidence": evidence,
+                        "reconciliation_result": "NOT_OCCURRED_CONTROLLED_RETRY_ONLY",
+                        "ordinary_retry_permitted": False,
+                        "executed": False,
+                    },
+                )
+                status = "OUTCOME_UNKNOWN"
+            else:
+                status = "ACTION_COMMITTED"
+                for ledger_status in ("OUTCOME_OBSERVED", "ACTION_COMMITTED"):
+                    conn.execute(
+                        "UPDATE actions SET status=?,updated_at=?,outcome_json=? WHERE action_id=?",
+                        (ledger_status, now, canonical_json({"reconciliation_evidence": evidence}),
+                         reservation.action_id),
+                    )
+                    conn.execute(
+                        "UPDATE reservations SET status=?,updated_at=? WHERE logical_effect_id=?",
+                        (ledger_status, now, reservation.logical_effect_id),
+                    )
+                    self._append_wal(
+                        conn,
+                        action_id=reservation.action_id,
+                        logical_effect_id=reservation.logical_effect_id,
+                        status=ledger_status,
+                        record={
+                            "reconciliation_evidence": evidence,
+                            "reconciliation_result": "COMMITTED_NO_EXECUTE",
+                            "ordinary_retry_permitted": False,
+                            "executed": False,
+                        },
+                    )
+        self.durable_barrier()
+        return status
+
     def record_invocation(self, record: dict[str, Any]) -> None:
         with self.transaction() as conn:
             conn.execute(

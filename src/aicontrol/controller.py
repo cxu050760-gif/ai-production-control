@@ -423,6 +423,79 @@ class Controller:
         finally:
             self.store.release_lock(resource_id, self.controller_instance_id)
 
+    def reconcile_effect(
+        self,
+        *,
+        reservation,
+        probe=None,
+        evidence: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Reconcile an unresolved action against observed external reality.
+
+        V09-R22 / V09-R23 / V09-R24. The conservative rules are inherited from the
+        existing ``runtime/effect_safety_lite.reconcile_effect``: only an
+        OUTCOME_UNKNOWN action may be reconciled, evidence is mandatory, ordinary
+        retry is never permitted, and a negative observation is not replay
+        authority. Nothing here ever executes an effect.
+        """
+        row = self.store.connection.execute(
+            "SELECT status FROM actions WHERE action_id=?", (reservation.action_id,)
+        ).fetchone()
+        if not row or row["status"] != "OUTCOME_UNKNOWN":
+            raise GateDenied("reconciliation requires an OUTCOME_UNKNOWN action")
+        if evidence is not None and (not isinstance(evidence, dict) or not evidence):
+            raise GateDenied("reconciliation evidence must be a non-empty object")
+        observed = probe(reservation) if callable(probe) else (evidence or {}).get("observed_state")
+        if observed is None or not str(observed).strip():
+            raise GateDenied("reconciliation evidence missing: external reality was not observed")
+        state = str(observed).strip().upper()
+
+        if state not in ("SUCCEEDED", "NOT_OCCURRED"):
+            # Indeterminate reality: stay unresolved and escalate. No new lawful
+            # status is invented and no execution is upgraded (V14 §105/§118, §31 check 17).
+            return {
+                "status": "OUTCOME_UNKNOWN",
+                "reconciliation": "INDETERMINATE_HUMAN_GATE_REQUIRED",
+                "human_gate_required": True,
+                "executed": False,
+                "auto_retry_permitted": False,
+                "ordinary_retry_permitted": False,
+                "observed_state": state,
+                "detail": (
+                    "external reality is indeterminate; the action stays OUTCOME_UNKNOWN "
+                    "and requires a Human Gate decision before any further effect"
+                ),
+            }
+
+        occurred = state == "SUCCEEDED"
+        record = dict(evidence or {})
+        record.setdefault("observed_state", state)
+        record.setdefault("reconciled_by", self.controller_instance_id)
+        status = self.store.reconcile_effect_outcome(reservation, evidence=record, occurred=occurred)
+        if occurred:
+            return {
+                "status": status,
+                "reconciliation": "COMMITTED_NO_EXECUTE",
+                "executed": False,
+                "auto_retry_permitted": False,
+                "ordinary_retry_permitted": False,
+                "observed_state": state,
+                "evidence": record,
+            }
+        return {
+            "status": status,
+            "reconciliation": "NOT_OCCURRED_CONTROLLED_RETRY_ONLY",
+            "executed": False,
+            "auto_retry_permitted": False,
+            "ordinary_retry_permitted": False,
+            "observed_state": state,
+            "evidence": record,
+            "detail": (
+                "negative observation grants no replay authority; any retry requires a "
+                "new explicit authorization and a new attempt"
+            ),
+        }
+
     def execute_workbuddy_fallback(
         self,
         *,
