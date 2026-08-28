@@ -66,3 +66,11 @@
 - reason: 既有封印机制的目标根为 `E:\WB\tools\ai-production-control` + `E:\WB\state\ai-production-control`（config 明列，本机实测均存在且为在产状态）。从本 worktree 运行会（1）写入活的 Controller 状态，（2）产出的 manifest 描述的代码树并非本候选，二者均使证据失真。
 - evidence: `config/production.json` code_root/state_root；`ls E:/WB/state/ai-production-control` 含 acceptance-fixtures/browser-auth-profile-* 等在产物；全新 store 的 `meta('tcb_status')` = `UNVERIFIED_AFTER_CONTROLLER_CHANGE`。
 - status: ACTIVE —— 待发布负责人在权威配对上重封，判定权在独立审查者与用户（R1/R2 裁决书 §3.5）。
+
+## D010 — Tier 2(b) 9 例 egress：判定为缺陷并 HARD STOP（未改测试）
+
+- decision: actor=Builder（依 BUILDER_RULING_R3_R4 §2(b) 末段与 BUILDER_RULING_TIER2 §5）。不修订这 9 例期望，按缺陷上报。
+- reason: `effect_safety_lite.py:678` 以 `state.get("effect_egress_permitted", False)` 取值，而全仓**无任何生产者**写入该 key（`runtime/runtime.py` 内 `egress` 0 命中）→ 真实发送路径的 egress 许可恒假。V14 §31 第 9 条与 `DATA_EGRESS_POLICY.md` 要求的是一条"可被许可打开"的闸门，故无法给出"新行为正确、旧期望过时"的规范支撑。
+- evidence: `docs/evidence/v09-close/TIER2-b-egress-defect-HARD-STOP.md`（含检索命令、拒绝点行号、9 例清单，以及 canonical 侧 egress 已正确接线的对照：V09 矩阵 egress/scope 例全绿）。
+- 范围: 该路径对全部 CLOSE 任务为 FORBIDDEN_FILES（且规格 §0.3 禁改 runtime.py）；9 例先于基线 50cf8bd1 即红，非本施工引入。
+- status: OPEN —— 待裁决为缺陷修复（需独立授权任务）或登记为已知红 + V0.10 待办。

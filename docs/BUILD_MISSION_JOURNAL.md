@@ -41,3 +41,9 @@
   故封印推迟到由发布负责人在权威 code_root/state_root 配对上执行；
   本线 TCB 状态如实维持 `UNVERIFIED_AFTER_CONTROLLER_CHANGE`（AGENTS.md 要求），
   且"封印是否成立"不属 Builder 判定（裁决书 §3.5）。
+- 2026-08-28 Tier 2 checkpoint（commit 042c9aca + 本条）：
+  (c) 已归因并闭环——e8c53d4 只读对照 5/5 绿、b1 红，但根因是夹具缺 b1 必需绑定
+      （intent 缺 effect_type/data_classification、scope 缺 identity；探针实测 action rows=0），
+      属 AD-6 测试适配，产品代码未动（动它即破 V09-R33）。裁决书 §5(c) 的"能力回归"假设已被推翻。
+  (a) 已闭环——7 个 self-grant 测试方法（8 实例）经 AD-6 转绿；`tests/` 全量 137 ran / 0 fail / 0 error。
+  (b) HARD STOP——9 例 egress 判定为缺陷（egress 许可 key 无生产者），未改测试、未改期望，见 D010。
