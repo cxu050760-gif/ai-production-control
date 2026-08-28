@@ -1552,24 +1552,35 @@ class ControlStore:
                 raise GateDenied("authority or Controller TCB is not verified")
             self.verify_authority_chain(faults=faults)
             row = conn.execute(
-                "SELECT r.*,a.status AS action_status FROM reservations r JOIN actions a ON a.action_id=r.action_id WHERE r.logical_effect_id=?",
+                "SELECT r.*,a.status AS action_status,a.execution_fence_token AS durable_fence"
+                " FROM reservations r JOIN actions a ON a.action_id=r.action_id WHERE r.logical_effect_id=?",
                 (reservation.logical_effect_id,),
             ).fetchone()
             if not row or row["status"] != "RESERVATION_COMMITTED":
                 raise GateDenied("reservation not executable")
+            if row["durable_fence"] != reservation.execution_fence_token:
+                raise GateDenied("execution fence token does not match the durable reservation")
             if not resource_fresh:
                 raise GateDenied("resource became stale before external boundary")
             auth = conn.execute("SELECT * FROM authorizations WHERE authorization_id=?", (row["authorization_id"],)).fetchone()
             reconstructed = self.reconstruct_authority(row["task_id"])["authorizations"].get(row["authorization_id"])
             epoch_row = conn.execute("SELECT epoch FROM revocation_epochs WHERE task_id=?", (row["task_id"],)).fetchone()
             latest_epoch = int(epoch_row["epoch"]) if epoch_row else 0
+            head_row = conn.execute("SELECT revision FROM state_head WHERE singleton=1").fetchone()
             goal = self.latest_goal(row["task_id"])
             if not auth or not reconstructed or auth["status"] != "ACTIVE" or reconstructed["status"] != "ACTIVE":
                 raise GateDenied("authorization revoked before effect start")
+            if head_row is None or int(row["state_revision"]) != int(head_row["revision"]):
+                raise GateDenied("canonical state revision is no longer current")
             if int(row["revocation_epoch"]) != latest_epoch:
                 raise GateDenied("stale execution fence after revocation")
             if int(row["authorization_generation"]) != int(auth["generation"]):
                 raise GateDenied("stale execution fence after authority generation change")
+            latest_generation = conn.execute(
+                "SELECT MAX(generation) AS value FROM authorizations WHERE task_id=?", (row["task_id"],)
+            ).fetchone()["value"]
+            if latest_generation is not None and int(row["authorization_generation"]) != int(latest_generation):
+                raise GateDenied("authorization generation is not the latest durable task generation")
             if row["goal_contract_hash"] != goal["contract_hash"]:
                 raise GateDenied("Goal Contract changed before effect start")
             if row["controller_instance_id"] != controller_instance_id or row["lease_id"] != controller_lease_id:
