@@ -1,0 +1,689 @@
+{
+  "schema": "v0.8-adapter-attack-matrix",
+  "version": "V0.8",
+  "attack_matrix_version": "V08-ATTACK-MATRIX-2",
+  "accepted_base_sha": "a184e2bd1f42d62bae6d195814fe4bf5ac30be4e",
+  "attack_case_count": 97,
+  "protocol": "V08_ATTACK_RESULT_JSONL_1",
+  "cases": [
+    {
+      "id": "A01",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "accepted_base_mismatch",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A02",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_sha_missing",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A03",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_not_descendant",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A04",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "source_commit_missing",
+      "expected_outcome": "NOT_READY"
+    },
+    {
+      "id": "A05",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "source_not_from_base",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A06",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "builder_out_of_ownership",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A07",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_extra_13th_path",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A08",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_missing_expected_path",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A09",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_touches_v07_strategic",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A10",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_touches_runtime_py",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A11",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_touches_src_aicontrol",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A12",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_touches_old_tests",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A13",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "source_owned_file_modified_after_merge",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A14",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_rename_copy_status",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "A15",
+      "category": "scope_git",
+      "owner": "B3",
+      "owner_case": "candidate_duplicate_name_status_path",
+      "expected_outcome": "HARD_FAIL"
+    },
+    {
+      "id": "B01",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "registry_missing",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B02",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "malformed_registry_root",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B03",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "wrong_schema_version",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B04",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "duplicate_provider_id",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B05",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "duplicate_reviewer_id",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B06",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "duplicate_worker_id",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B07",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "empty_provider_id",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B08",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "missing_provider_kind",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B09",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "invalid_provider_kind",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B10",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "reviewer_missing_provider",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B11",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "worker_missing_provider",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B12",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "worker_missing_contract",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B13",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "registry_generation_rollback",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B14",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "schema_version_rollback",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B15",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "credential_like_secret_field",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B16",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "transport_internal_leakage",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B17",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "api_model_web_session_confusion",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B18",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "unknown_unexpected_field",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B19",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "provider_kind_wrong_type",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "B20",
+      "category": "registry",
+      "owner": "B2",
+      "owner_case": "malformed_inner_object_correct_outer",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C01",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "malformed_task_capsule",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C02",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "task_capsule_missing_required",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C03",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "task_capsule_wrong_type",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C04",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "bool_masquerading_as_int",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C05",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "oversized_string",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C06",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "oversized_list",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C07",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "malformed_capability_metadata",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C08",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "malformed_worker_result",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C09",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "missing_source_binding",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C10",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "wrong_worker_id_binding",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C11",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "wrong_invocation_binding",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C12",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "wrong_task_binding",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C13",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "wrong_context_binding",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C14",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "unknown_outcome",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C15",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "timeout_outcome",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C16",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "unexpected_success_envelope",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C17",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "valid_outer_missing_inner_required",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C18",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "valid_outer_wrong_inner_type",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C19",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "valid_outer_illegal_inner_value",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "C20",
+      "category": "adapter_contract",
+      "owner": "B1",
+      "owner_case": "intermediate_exception_fail_closed",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D01",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "digest_map_missing",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D02",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "digest_map_empty",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D03",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "missing_one_digest",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D04",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "extra_undeclared_digest",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D05",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "wrong_digest",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D06",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "artifact_changed_after_result",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D07",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "artifact_outside_workspace",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D08",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "path_traversal",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D09",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "duplicate_artifact_path",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D10",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "declared_artifact_missing_file",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D11",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "extra_undeclared_artifact",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "D12",
+      "category": "artifact",
+      "owner": "B1",
+      "owner_case": "digest_key_path_alias_confusion",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "E01",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "fixture_alpha_single_worker",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E02",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "fixture_beta_single_worker",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E03",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "same_adapter_core_path",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E04",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "selection_only_changes_registry_worker_id",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E05",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "no_core_code_change_for_replacement",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E06",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "source_worker_id_differs",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E07",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "artifacts_may_differ",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E08",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "per_artifact_digest_independent",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E09",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "never_multi_worker_scheduler",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "E10",
+      "category": "worker_replacement",
+      "owner": "B1",
+      "owner_case": "one_invocation_one_worker",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "F01",
+      "category": "provider_separation",
+      "owner": "B1",
+      "owner_case": "web_session_as_api_model",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "F02",
+      "category": "provider_separation",
+      "owner": "B1",
+      "owner_case": "api_model_as_web_session",
+      "expected_outcome": "FAIL_CLOSED"
+    },
+    {
+      "id": "F03",
+      "category": "provider_separation",
+      "owner": "B3",
+      "owner_case": "provider_id_special_case_branch",
+      "expected_outcome": "DETECTED"
+    },
+    {
+      "id": "F04",
+      "category": "provider_separation",
+      "owner": "B3",
+      "owner_case": "worker_id_special_case_branch",
+      "expected_outcome": "DETECTED"
+    },
+    {
+      "id": "F05",
+      "category": "provider_separation",
+      "owner": "B3",
+      "owner_case": "chatgpt_name_hardcoded_branch",
+      "expected_outcome": "DETECTED"
+    },
+    {
+      "id": "F06",
+      "category": "provider_separation",
+      "owner": "B3",
+      "owner_case": "workbuddy_name_hardcoded_branch",
+      "expected_outcome": "DETECTED"
+    },
+    {
+      "id": "F07",
+      "category": "provider_separation",
+      "owner": "B3",
+      "owner_case": "codex_name_hardcoded_branch",
+      "expected_outcome": "DETECTED"
+    },
+    {
+      "id": "F08",
+      "category": "provider_separation",
+      "owner": "B1",
+      "owner_case": "provider_kind_separation_positive",
+      "expected_outcome": "PROVE"
+    },
+    {
+      "id": "F09",
+      "category": "provider_separation",
+      "owner": "B3",
+      "owner_case": "identity_branch_ast_scan",
+      "expected_outcome": "DETECTED"
+    },
+    {
+      "id": "G01",
+      "category": "authority_isolation",
+      "owner": "B3",
+      "owner_case": "grant_authority",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "G02",
+      "category": "authority_isolation",
+      "owner": "B3",
+      "owner_case": "revoke_authority",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "G03",
+      "category": "authority_isolation",
+      "owner": "B3",
+      "owner_case": "produce_reviewer_pass",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "G04",
+      "category": "authority_isolation",
+      "owner": "B3",
+      "owner_case": "promote_milestone",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "G05",
+      "category": "authority_isolation",
+      "owner": "B3",
+      "owner_case": "crown_candidate",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "G06",
+      "category": "authority_isolation",
+      "owner": "B3",
+      "owner_case": "mutate_canonical_authority_state",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "H01",
+      "category": "effect_isolation",
+      "owner": "B3",
+      "owner_case": "effect_reservation",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "H02",
+      "category": "effect_isolation",
+      "owner": "B3",
+      "owner_case": "effect_wal_commit",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "H03",
+      "category": "effect_isolation",
+      "owner": "B3",
+      "owner_case": "external_side_effect_authorization",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "H04",
+      "category": "effect_isolation",
+      "owner": "B3",
+      "owner_case": "external_effect_execution_permission",
+      "expected_outcome": "FORBIDDEN"
+    },
+    {
+      "id": "H05",
+      "category": "effect_isolation",
+      "owner": "B3",
+      "owner_case": "new_effect_transport_path",
+      "expected_outcome": "FORBIDDEN"
+    }
+  ]
+}
