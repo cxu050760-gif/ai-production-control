@@ -5,6 +5,7 @@
   "project_root": "E:\\WB\\tools\\ai-production-control",
   "runtime_entry": "E:\\WB\\tools\\ai-production-control\\runtime\\run.cmd",
   "weak_worker_contract": "E:\\WB\\tools\\ai-production-control\\runtime\\WEAK_WORKER_START_HERE.md",
+  "adapter_registry": "runtime/v08_adapter_registry.json",
   "state_root": "E:\\WB\\state\\ai-production-control\\runtime-v1",
   "runs_root": "E:\\WB\\state\\ai-production-control\\runtime-v1\\runs",
   "baseline_docs": {
