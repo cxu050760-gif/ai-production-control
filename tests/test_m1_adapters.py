@@ -71,6 +71,22 @@ class M1Fixture(unittest.TestCase):
         self.controller.close()
         self.temporary.cleanup()
 
+    def preauthorize_primary_brain(self) -> None:
+        """AD-6 (R13): run_goal may not mint its own authority, so the external
+        controlled entry pre-issues exactly the scope run_goal resolves, bound to
+        this controller instance and carrying the MAIN role its intent declares."""
+        scope = {
+            "provider": "ChatGPT", "destination": "chatgpt.com", "resource": "new-chat-session",
+            "purpose": "goal-planning", "effect_type": "AI_MESSAGE", "data_classes": ["PUBLIC"],
+            "identity": self.controller.controller_instance_id, "roles": ["MAIN"],
+        }
+        nonce = self.controller.store.issue_decision_nonce(
+            self.task_id, scope, user_decision_reference="external-authority:m1")
+        self.controller.store.grant_authorization(
+            self.task_id, nonce["decision_nonce"], scope, provider="ChatGPT",
+            resource="new-chat-session", purpose="goal-planning",
+            effect_type="AI_MESSAGE", max_effect_count=1)
+
     def register_fixture_worker(self, worker_id: str, variant: str) -> None:
         self.controller.store.upsert_registry(
             "worker_registry",
@@ -93,14 +109,18 @@ class M1Fixture(unittest.TestCase):
 
     def test_primary_timeout_unknown_status_never_falls_back(self) -> None:
         # ORIGIN: M0.5 Reviewer conformance item #1. The primary Brain is invoked
-        # through the real run_goal path; each run creates a fresh task. A primary
-        # that EXPLICITLY returns TIMEOUT/UNKNOWN (not an exception) must end as
+        # through the real run_goal path. Under AD-6 the authority is pre-issued by
+        # the external controlled entry for this fixture's task, and each probe uses
+        # its own goal so the two effects stay logically distinct. A primary that
+        # EXPLICITLY returns TIMEOUT/UNKNOWN (not an exception) must end as
         # OUTCOME_UNKNOWN and never trigger the WorkBuddy fallback.
         for status in ("TIMEOUT", "UNKNOWN"):
             with self.subTest(status=status):
+                self.preauthorize_primary_brain()
                 with (
                     mock.patch("aicontrol.controller.verify_tcb", return_value={"status": "VERIFIED"}),
                     mock.patch("aicontrol.controller.browser_profile_identity", return_value="cft-profile-hash"),
+                    mock.patch.object(self.controller, "bootstrap_task", return_value=self.task),
                     mock.patch.object(
                         self.controller.runtime,
                         "invoke_browser",
@@ -109,7 +129,7 @@ class M1Fixture(unittest.TestCase):
                     mock.patch.object(self.controller.runtime, "invoke_workbuddy_brain") as fallback,
                 ):
                     with self.assertRaises(AuthorityStateUncertain):
-                        self.controller.run_goal("M1 no-fallback probe", data_classification="PUBLIC")
+                        self.controller.run_goal(f"M1 no-fallback probe {status}", data_classification="PUBLIC")
                 fallback.assert_not_called()
                 row = self.controller.store.connection.execute(
                     "SELECT status FROM actions WHERE provider='ChatGPT' ORDER BY created_at DESC LIMIT 1"

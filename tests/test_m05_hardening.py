@@ -53,16 +53,50 @@ class M05ControllerFixture(unittest.TestCase):
         self.temporary.cleanup()
 
     def authorization(self, *, provider: str = "test-provider", purpose: str = "unit-effect") -> dict:
-        return self.controller.scoped_authorization(
-            task_id=self.task_id,
+        # AD-6 (R13 permanent constraint): Controller self-grant is forbidden, so the
+        # same authorization is pre-issued through the external controlled entry, bound
+        # to the resource this fixture's intent declares and to this controller instance.
+        resource = "test"
+        scope = {
+            "provider": provider,
+            "destination": provider,
+            "resource": resource,
+            "purpose": purpose,
+            "effect_type": "AI_MESSAGE",
+            "data_classes": ["PUBLIC"],
+            "identity": self.controller.controller_instance_id,
+        }
+        nonce = self.controller.store.issue_decision_nonce(
+            self.task_id, scope, user_decision_reference="m05-unit")
+        return self.controller.store.grant_authorization(
+            self.task_id,
+            nonce["decision_nonce"],
+            scope,
             provider=provider,
-            destination=provider,
+            resource=resource,
             purpose=purpose,
             effect_type="AI_MESSAGE",
-            data_classes=["PUBLIC"],
             max_effect_count=1,
-            user_decision_reference="m05-unit",
         )
+
+    def preauthorize(self, *, provider: str, destination: str, resource: str, purpose: str,
+                     data_classes: list[str], roles: list[str]) -> dict:
+        """AD-6: pre-issue authority for a Controller-internal effect through the
+        external controlled entry. R13 forbids the Controller from minting its own;
+        ``roles`` carries the role those paths declare (V09-R06/A64 binding).
+        """
+        scope = {
+            "provider": provider, "destination": destination, "resource": resource,
+            "purpose": purpose, "effect_type": "AI_MESSAGE",
+            "data_classes": list(data_classes),
+            "identity": self.controller.controller_instance_id,
+            "roles": list(roles),
+        }
+        nonce = self.controller.store.issue_decision_nonce(
+            self.task_id, scope, user_decision_reference="external-authority:m05")
+        return self.controller.store.grant_authorization(
+            self.task_id, nonce["decision_nonce"], scope, provider=provider,
+            resource=resource, purpose=purpose, effect_type="AI_MESSAGE", max_effect_count=1)
 
     def intent(self, *, provider: str = "test-provider", slot: str = "M05_TEST") -> dict:
         return {
@@ -80,6 +114,10 @@ class M05ControllerFixture(unittest.TestCase):
             "impact": "LOW",
             "reversibility": "REVERSIBLE",
             "effect_scope": "EXTERNAL",
+            # AD-6: b1 requires these two intent bindings (V09-R33 expects FAIL_CLOSED
+            # when absent); PUBLIC matches the authorization scope above.
+            "effect_type": "AI_MESSAGE",
+            "data_classification": "PUBLIC",
         }
 
     def acceptance_manifest(self, *, cases: list[dict] | None = None, task_id: str | None = None) -> tuple[Path, str]:
@@ -426,6 +464,9 @@ class M05ControllerFixture(unittest.TestCase):
 
     def test_workbuddy_fallback_has_own_authorization_and_effect_wal(self) -> None:
         lease = self.controller.acquire_lease()
+        self.preauthorize(provider="WorkBuddy", destination="WorkBuddy",
+                          resource="fresh-workbuddy-session", purpose="goal-planning",
+                          data_classes=["PUBLIC"], roles=["FALLBACK"])
         with mock.patch.object(
             self.controller.runtime,
             "invoke_workbuddy_brain",
@@ -457,8 +498,12 @@ class M05ControllerFixture(unittest.TestCase):
         self.assertGreaterEqual(wal, 3)
 
     def test_primary_exception_does_not_invoke_fallback(self) -> None:
+        self.preauthorize(provider="ChatGPT", destination="chatgpt.com",
+                          resource="new-chat-session", purpose="goal-planning",
+                          data_classes=["PUBLIC"], roles=["MAIN"])
         with (
             mock.patch("aicontrol.controller.verify_tcb", return_value={"status": "VERIFIED"}),
+            mock.patch.object(self.controller, "bootstrap_task", return_value=self.task),
             mock.patch.object(self.controller.runtime, "register_defaults"),
             mock.patch.object(self.controller.runtime, "invoke_browser", side_effect=RuntimeFailure("primary failed")),
             mock.patch.object(self.controller.runtime, "invoke_workbuddy_brain") as fallback,
