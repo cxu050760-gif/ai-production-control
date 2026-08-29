@@ -168,3 +168,22 @@
 - 验证（全量，2026-08-29）：矩阵 36/36 red=0 + R34/R34-FAITHFUL FAIL_CLOSED；tests/ 19 文件全绿；CLOSE 40 全绿；runtime 25/26 exit 0——唯一例外 test_harness_verify_offline.py 因宿主环境变量 ACC_PRODUCT_CONFIG_V3（515KB > Windows 32767 上限）致 mock 恢复 ValueError，进程内剔除后 11/11 OK，纯环境噪声零代码问题；doctor 零新增漂移（仅 §7.8 豁免项 registry b1-head 滞后 + 已知 journal WARN）。
 - 冻结件：runtime/test_v09_attack_matrix_offline.py 未动（blob 对 a0ce691 IDENTICAL 保持），未运行入判据（§4.2 单独口径）。
 - status: CLOSED —— 最终批出口判据达成（§4.3"真正全绿"首次达成）；推送 v0.9-b1 后待团内独立审查与封印记录（机械执行，不宣告有效性）。
+
+## D017 — 恢复控制会话：中继恢复 + Brain/Capsule 非侵入激活（actor=DeepSeek-V4-Flash-20260829，业主全权授权）
+
+- decision 1（中继）：construction-relay 从 8-27 停摆恢复运行（watcher PID 17360 + guard 5864），陈旧 relay.lock 移入 stale-locks（不删），V07-INTEGRATE-2（授权过期 3 天、里程碑历史化）移入 quarantine。
+- reason：定义 §14「Agent 可以停，任务不能因为 Agent 停而停」；恢复生产循环是业主最初提示词的第一目标。
+- evidence：relay.ndjson `RELAY_STARTED`、watcher-heartbeat.json 持续刷新、quarantine/V07-INTEGRATE-2.QUARANTINED-20260829.json。
+
+- decision 2（Brain 激活）：写 brain_bridge.py 复用 strategic_brain_contract.build_proposal（V0.7 Brain，90 测试绿），Goal→Task Graph 自动拆解；非侵入（冻结 runtime.py 零改动），任务 inert（authority=NONE）。
+- reason：定义 §7 Brain 需可自动拆 Goal；KEEP > REPAIR，复用已有 90 测试绿模块而非重写。
+- evidence：commit b274b4f，brain_bridge 10 测试绿，真实 Goal 拆解出 proposal + Task Graph + human_view。
+
+- decision 3（Capsule 接入）：写 capsule_bridge.py，RUN state.json→机械 Context Capsule（facts + resume instruction），复用 M2 Context Capsule 设计（机械投影、non_authority、§24 记忆不是 Truth）。
+- reason：定义 §27 新 AI 接管应机械续跑；M2 只完成模块未接端到端，本会话补上接线。
+- evidence：commit 6aeebe3，capsule_bridge 9 测试绿，真实 RUN 演示 DONE 续跑指引。
+
+- decision 4（V1.0 判定）：工程判据（§74 中机器验证/Evidence/R PASS/绑定）达成；FINAL DONE 按定义须业主裁决（§74 末条 + 章程 §10），本会话不擅自宣布完成。
+- reason：定义明文「任何单一角色声称完成均无效」；防自封是系统灵魂。
+- evidence：docs/evidence/V1.0-CLOSE-OUT-REPORT-20260830.md、V1.0-CLOSE-OUT-NOTES-BILINGUAL.md。
+- status: ACTIVE（V1.0 收束待业主裁决 E1-E4）

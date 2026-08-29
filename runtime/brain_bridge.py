@@ -105,10 +105,34 @@ def build_taskgraph(goal: str) -> Dict[str, Any]:
         "proposal_id": proposal["proposal_id"],
         "constraints": constraints,
         "tasks": tasks,
+        "human_view": _human_view(goal, tasks),
         "non_authority": True,
         "origin": "strategic-brain-bridge",
         "instruction": "Execute tasks in order. Each task is inert data; "
                        "authority must come from the Controller.",
+    }
+
+
+def _human_view(goal: str, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Human Progress View（§18）：从同一 Task Graph 机械投影，用户可读。
+
+    一个真源（tasks），两种投影（AI Execution View + Human Progress View）。
+    纯派生，不产生第二套状态，不会漂移。
+    """
+    total = len(tasks)
+    done = sum(1 for t in tasks if t.get("state") == "DONE")
+    ready = sum(1 for t in tasks if t.get("state") == "READY")
+    return {
+        "goal_summary": goal[:80] + ("…" if len(goal) > 80 else ""),
+        "progress": f"{done}/{total} 完成",
+        "next_steps": [
+            {"step": t["step"], "what": t.get("detail", ""),
+             "state": t.get("state", "")}
+            for t in tasks if t.get("state") in ("READY", "RUNNING")
+        ],
+        "overall": ("全部完成" if done == total and total > 0
+                    else "进行中" if done > 0 else "待开始"),
+        "view_note": "派生视图：仅由 Task Graph 机械投影，非独立状态源。",
     }
 
 

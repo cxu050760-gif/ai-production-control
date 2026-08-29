@@ -84,12 +84,45 @@ def build_capsule(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def verify_state_integrity(state: Dict[str, Any]) -> Dict[str, Any]:
+    """§29/§31 轻量验证：RUN state 的 revision 版本化 + 可恢复性检查。
+
+    检查：必需字段齐全、revision 存在且 >=0、关键字段类型正确。
+    返回结构化的 PASS/FAIL，供机器验证（§44）。
+    """
+    required = ("run_id", "status", "revision")
+    missing = [f for f in required if f not in state]
+    if missing:
+        return {"valid": False, "error": "MISSING_FIELDS",
+                "missing": missing, "revision_ok": False,
+                "recoverable": False}
+    revision = state.get("revision")
+    revision_ok = isinstance(revision, int) and revision >= 0
+    status = state.get("status", "")
+    # 可恢复性：DONE/PASS 为终态；RUNNING/REWORK 可通过 Capsule 续跑（§15/§27）
+    recoverable = status in ("DONE", "RUNNING", "WAITING") or \
+        state.get("last_r_verdict") == "REWORK"
+    return {
+        "valid": revision_ok and recoverable,
+        "error": None,
+        "run_id": state.get("run_id"),
+        "status": status,
+        "revision": revision,
+        "revision_ok": revision_ok,
+        "recoverable": recoverable,
+        "note": ("Canonical State Revision: state.json carries revision counter; "
+                 "recovery authority is the RUN state file (§29/§31)."),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Capsule Bridge: RUN state -> mechanical Context Capsule")
     ap.add_argument("--run-id", required=True, help="RUN id (e.g. RUN-20260830-000149-41b4)")
     ap.add_argument("--state-root", default="", help="optional state root override")
     ap.add_argument("--out", default="", help="optional output JSON path")
+    ap.add_argument("--verify", action="store_true",
+                    help="verify RUN state integrity (revision/recoverability)")
     args = ap.parse_args()
 
     try:
@@ -99,6 +132,10 @@ def main() -> int:
                           "error": "STATE_NOT_FOUND", "detail": str(e)},
                          ensure_ascii=False))
         return 1
+    if args.verify:
+        result = verify_state_integrity(state)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result.get("valid") else 2
     capsule = build_capsule(state)
     if args.out:
         Path(args.out).write_text(

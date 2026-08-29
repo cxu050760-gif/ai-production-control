@@ -13,6 +13,7 @@ cb = import_module("capsule_bridge")
 def _sample_state(status="DONE", verdict="PASS"):
     return {
         "run_id": "RUN-TEST-0001",
+        "revision": 4,
         "status": status,
         "goal": "产出一份测试报告",
         "worker_identity": "test-worker",
@@ -63,6 +64,27 @@ class TestBuildCapsule(unittest.TestCase):
     def test_fence_note_present(self):
         c = cb.build_capsule(_sample_state())
         self.assertIn("Mechanical projection", c["fence_note"])
+
+
+
+    def test_verify_integrity_ok(self):
+        r = cb.verify_state_integrity(_sample_state())
+        self.assertTrue(r["valid"])
+        self.assertTrue(r["revision_ok"])
+        self.assertTrue(r["recoverable"])
+
+    def test_verify_missing_fields(self):
+        r = cb.verify_state_integrity({"run_id": "R"})
+        self.assertFalse(r["valid"])
+        self.assertEqual(r["error"], "MISSING_FIELDS")
+
+    def test_verify_bad_revision(self):
+        r = cb.verify_state_integrity({"run_id": "R", "status": "RUNNING", "revision": -1})
+        self.assertFalse(r["valid"])
+
+    def test_verify_rework_recoverable(self):
+        r = cb.verify_state_integrity(_sample_state("RUNNING", "REWORK"))
+        self.assertTrue(r["recoverable"])
 
 
 class TestLoadRunState(unittest.TestCase):

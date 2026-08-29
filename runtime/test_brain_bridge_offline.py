@@ -42,6 +42,21 @@ class TestBuildTaskgraph(unittest.TestCase):
         for t in g["tasks"]:
             self.assertEqual(t["authority"], "NONE")
 
+    def test_human_view_present(self):
+        g = bb.build_taskgraph("产出一份《报告》，整理 5 个选项")
+        hv = g.get("human_view", {})
+        self.assertIn("goal_summary", hv)
+        self.assertIn("progress", hv)
+        self.assertIn("next_steps", hv)
+        self.assertEqual(hv["view_note"].count("派生"), 1)
+
+    def test_human_view_derived_not_independent(self):
+        # §18：Human View 必须由 Task Graph 派生，不能是独立状态源
+        g = bb.build_taskgraph("整理 AI 资源清单")
+        expected = len([t for t in g["tasks"]
+                        if t["state"] in ("READY", "RUNNING")]) or 1
+        self.assertEqual(len(g["human_view"]["next_steps"]), expected)
+
     def test_invalid_goal_rejected(self):
         g = bb.build_taskgraph("")
         self.assertFalse(g["valid"])
