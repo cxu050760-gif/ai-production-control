@@ -1,0 +1,14 @@
+1) CLASS COUNTS:
+38
+18
+9
+2) SPOT PATHS:
+E:/WB/tools/catpaw-longcat-proxy
+E:/AI_Projects/ChatGPT_Codex_Bridge
+E:/DeepSeekHarness
+3) INDEX COUNT:
+34
+4) FUSION F-IDs:
+13
+5) DOCTOR:
+DRIFT_COUNT=1
