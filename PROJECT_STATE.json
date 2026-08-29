@@ -108,6 +108,28 @@
       "search_result_note": "No standalone V0.9-only spec exists on disk after exhaustive search (.codex attachments x7, E:\\WB, E:\\AI_Projects, .workbuddy). V14-FROZEN is the sole governing authority; the V0.9 attack matrix expectations are its testable projection.",
       "committed_by": "Builder T0 under BUILDER_RULING_R1_R2 §3.1 / R3_R4 §1.2",
       "committed_at": "2026-08-28"
+    },
+    {
+      "spec_id": "FINAL-CANONICAL",
+      "title": "执衡·最终定义（FINAL CANONICAL，宪法零修改锁死层）",
+      "path": "docs/canon/ZHIHENG_FINAL_DEFINITION_FINAL_CANONICAL.md",
+      "sha256": "4c05a21fab1543a209cafd70fee48752e996cf3a77df2987f316dde243f4a9a4",
+      "size_bytes": 37366,
+      "source_provenance": "D:\\下载\\chatgpt原始会话内容\\执衡_最终定义_FINAL_CANONICAL.md (byte-exact copy, hash-verified by Stream Zero Z4)",
+      "status": "COMMITTED",
+      "committed_by": "Stream Zero Z4 (Builder under Charter v4.4)",
+      "committed_at": "2026-08-29"
+    },
+    {
+      "spec_id": "CONSTRUCTION-ROUTE-V2",
+      "title": "执衡·最终版本迭代方案 v2（纯净版，历史基准）",
+      "path": "docs/canon/ZHIHENG_CONSTRUCTION_ROUTE_V2.md",
+      "sha256": "995b1c9679a96b51f4e884aaa8fd8d69e959b27bac6db11afe0ab23583b1ddbe",
+      "size_bytes": 18179,
+      "source_provenance": "D:\\下载\\chatgpt原始会话内容\\执衡_最终版本迭代方案_v2_纯净版.md (byte-exact copy, hash-verified by Stream Zero Z4)",
+      "status": "COMMITTED",
+      "committed_by": "Stream Zero Z4 (Builder under Charter v4.4)",
+      "committed_at": "2026-08-29"
     }
   ],
   "evidence_registry": [],

@@ -43,6 +43,8 @@
 | spec_id | path | sha256 | status |
 |---|---|---|---|
 | `V14-FROZEN` | `docs/specs/V14-FROZEN-EXECUTION-SPEC.txt` | `6fe3bb7996a1f78a7d6584d08311c3ebc1aa2d9ffc56c27fc61e8d599e154df6` | COMMITTED |
+| `FINAL-CANONICAL` | `docs/canon/ZHIHENG_FINAL_DEFINITION_FINAL_CANONICAL.md` | `4c05a21fab1543a209cafd70fee48752e996cf3a77df2987f316dde243f4a9a4` | COMMITTED |
+| `CONSTRUCTION-ROUTE-V2` | `docs/canon/ZHIHENG_CONSTRUCTION_ROUTE_V2.md` | `995b1c9679a96b51f4e884aaa8fd8d69e959b27bac6db11afe0ab23583b1ddbe` | COMMITTED |
 
 登记依据：`docs/SPEC_ANCHOR_REPORT.md` §2/§3；条目内容 = `spec-anchor-pack/spec_registry.json`，status 由 `STAGED_NOT_COMMITTED` 置为 `COMMITTED`（T0 已入库）。交叉验证：与 `docs/BUILD_MISSION_JOURNAL.md` 的 `prompt_hash: sha256:6fe3bb79...` 同值。
 
