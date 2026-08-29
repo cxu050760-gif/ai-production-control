@@ -132,7 +132,21 @@
       "committed_at": "2026-08-29"
     }
   ],
-  "evidence_registry": [],
+  "evidence_registry": [
+    {
+      "entry_id": "V09-CLOSE-FINAL-BATCH",
+      "date": "2026-08-29",
+      "branch": "v0.9-b1/authority-effect-core",
+      "commit": "c464190fae2d5a5e166bb5c7380a6f642359b14b",
+      "summary": "V0.9 CLOSE final batch: 8 start sites three-gate scenario construction + 11-case egress wiring suite; matrix 36/36 red=0, tests 19 files green, CLOSE 40 green, runtime 25/26 (sole exception env-noise harness_verify verified clean 11/11), doctor zero new drift",
+      "artifacts": [
+        "docs/evidence/v09-close/AD8-REGISTRY-final-batch.md",
+        "docs/DECISION_LEDGER.md D016 CLOSED"
+      ],
+      "release_status": "PRODUCT_NOT_READY (unchanged)",
+      "review": "round-1 independent review PASS"
+    }
+  ],
   "roadmap": {
     "approved": "2026-08-28 by user",
     "sequence": ["PHASE_0", "V0.9_CLOSE", "V0.10_REAL_GOAL", "V0.11_REWORK_RECOVERY", "V1.0_HARDENING"],

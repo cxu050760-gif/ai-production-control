@@ -16,17 +16,18 @@
 ## 2. 逐点位登记（8 处 start-like 调用）
 
 > 计数口径说明：HANDOFF（c0ed87e 时点）列 7 处；实际适配点位 8 处 = send_guard 2（start + router-start，router-start 为 HANDOFF 未单列处）+ ec_gate 2 + ec_telemetry 4。FINALBATCH "7 处"系 HANDOFF 口径，本册以实际 8 处为准并附差异说明。
+> 行号基准：HEAD `c464190`（2026-08-29 第 1 轮独立审查实测值；此前版本曾登记 c0ed87e 基准旧行号，已按审查意见修正）。
 
-| # | 文件:行号（当前） | 调用形态 | egress 策略 | TCB 声明 | 授权签发 | 期望未改 |
+| # | 文件:行号（HEAD c464190） | 调用形态 | egress 策略 | TCB 声明 | 授权签发 | 期望未改 |
 |---|---|---|---|---|---|---|
-| 1 | test_send_guard_offline.py:120 | ADAPTER `start` | ✅ :20/:91/:103 | ✅ :53 | ✅ :63 | ✅ |
-| 2 | test_send_guard_offline.py:167 | ADAPTER `router-start` | ✅ :20/:91/:103 | ✅ :53 | ✅ :63 | ✅ |
-| 3 | test_ec_gate_offline.py:102 | RUNTIME `start` | ✅ :27/:262/:274 | ✅ :61 | ✅ :71 | ✅ |
-| 4 | test_ec_gate_offline.py:221 | ADAPTER `start` | ✅ 同上 | ✅ :61 | ✅ :71 | ✅ |
-| 5 | test_ec_telemetry_offline.py:89 | RUNTIME `start` | ✅ :29/:114/:126 | ✅ :64 | ✅ :74 | ✅ |
-| 6 | test_ec_telemetry_offline.py:122 | GC `start` | ✅ 同上（GC 经 --egress-policy-file） | ✅ :64 | ✅ :74 | ✅ |
-| 7 | test_ec_telemetry_offline.py:144 | ADAPTER `start` | ✅ :29/:188 | ✅ :64 | ✅ :74 | ✅ |
-| 8 | test_ec_telemetry_offline.py:157 | ADAPTER `start` | ✅ :29/:217 | ✅ :64 | ✅ :74 | ✅ |
+| 1 | test_send_guard_offline.py:205 | ADAPTER `start` | ✅ :20/:91/:103 | ✅ :53 | ✅ :63 | ✅ |
+| 2 | test_send_guard_offline.py:254 | ADAPTER `router-start` | ✅ :20/:91/:103 | ✅ :53 | ✅ :63 | ✅ |
+| 3 | test_ec_gate_offline.py:155 | RUNTIME `start` | ✅ :27/:262/:274 | ✅ :61 | ✅ :71 | ✅ |
+| 4 | test_ec_gate_offline.py:286 | ADAPTER `start` | ✅ 同上 | ✅ :61 | ✅ :71 | ✅ |
+| 5 | test_ec_telemetry_offline.py:150 | RUNTIME `start` | ✅ :29/:114/:126 | ✅ :64 | ✅ :74 | ✅ |
+| 6 | test_ec_telemetry_offline.py:190 | GC `start` | ✅ 同上（GC 经 --egress-policy-file） | ✅ :64 | ✅ :74 | ✅ |
+| 7 | test_ec_telemetry_offline.py:219 | ADAPTER `start` | ✅ :29/:188 | ✅ :64 | ✅ :74 | ✅ |
+| 8 | test_ec_telemetry_offline.py:235 | ADAPTER `start` | ✅ :29/:217 | ✅ :64 | ✅ :74 | ✅ |
 
 （ec_router_telemetry_offline.py 亦含同配方场景构造 :25/:64/:65/:99/:124/:130，属既有套件适配延续，一并登记。）
 
