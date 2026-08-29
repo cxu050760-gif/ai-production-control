@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "run_id": "RUN-20260829-235240-ff88",
+  "revision": 4,
+  "created_at": "2026-08-29T15:52:40+00:00",
+  "updated_at": "2026-08-29T15:54:16+00:00",
+  "worker_identity": "prod-worker",
+  "goal": "GOAL: 对执衡（ai-production-control）系统做一次\"状态真源一致性\"只读核验并产出《TRUTH-CONSISTENCY-REPORT.md》：\n1. 核验 GitHub 远端 v0.9-b1/authority-effect-core 的 HEAD 与本地施工 worktree（C:\\Users\\17838\\Documents\\Qoder\\2026-08-28\\031cb4e3\\b1）一致（git fetch 后比对）；\n2. 核验 construction-relay 中继心跳（E:\\WB\\state\\ai-production-control\\construction-relay\\watcher-heartbeat.json）为 2026-08-29 23:46 之后的新鲜时间戳，且 relay 进程存活；\n3. 核验本仓库 PROJECT_STATE.md 记载的当前开发头与实测 git HEAD 一致；\n4. 输出报告文件（含 3 项各 PASS/FAIL + 证据），保存到 E:\\WB\\outputs\\ai-production-control\\stream-c2\\。\n只读任务：不修改任何代码、不提交、不推送、不删除。验收标准：3 项全部 PASS 且有可复算证据。",
+  "r_url": "https://chatgpt.com/c/6a8597a2-4b2c-83ee-bf75-9523dfaf785a",
+  "r_url_history": [],
+  "review_epoch": 1,
+  "status": "DONE",
+  "current_step": "work entry: bridge READY, GOAL recorded, awaiting execution",
+  "next_action": "RUN complete (R PASS). No further actions.",
+  "last_r_verdict": "PASS",
+  "last_r_next_action": "",
+  "last_reply_path": "E:\\WB\\state\\ai-production-control\\runtime-v1\\runs\\RUN-20260829-235240-ff88\\reply_epoch1_1788018781_6bc132.txt",
+  "last_reply_bytes": 75,
+  "paused": false,
+  "last_user_directive": null,
+  "user_override": null,
+  "checkpoint": null,
+  "scope_notes": [],
+  "session": {
+    "sid": "mwcs",
+    "epoch": 1
+  },
+  "evidence_ledger": {
+    "1": {}
+  },
+  "last_action_fingerprint": "45b0ff84e59492d7e94340b046ac1d01c9f1ebd7d4786f3a63c5259776665701",
+  "last_action_context": "1::work entry: bridge READY, GOAL recorded, awaiting execution",
+  "blocked_reason": null,
+  "metrics": {
+    "started_at": "2026-08-29T15:52:40+00:00",
+    "finished_at": "2026-08-29T15:54:16+00:00",
+    "r_roundtrips": 1,
+    "r_wait_time_sec": 75.1,
+    "bridge_retries": 0,
+    "session_recoveries": 0,
+    "upload_retries": 0,
+    "verdict_requeries_used": 0,
+    "duplicate_actions_blocked": 0,
+    "rework_count": 0,
+    "health_checks_skipped": 0,
+    "evidence_skipped_unchanged": 0
+  }
+}
