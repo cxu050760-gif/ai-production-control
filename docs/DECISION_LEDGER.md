@@ -160,3 +160,11 @@
 - evidence: `docs/evidence/v09-close/HANDOFF-T11b-final-batch.md`（含 7 处调用点位、
   探针复现步骤、`INVALID_R_URL` 前置、AD-8 登记册模板与出口判据）。
 - status: OPEN —— 9 例仍红；全量"真正全绿"未达成，§4.3 原文判据待最终批。
+
+## D016 — 最终批工单与第③门实证关闭；三门链 8 处落地（actor=主脑/BUILDER_RULING_FINALBATCH，Builder 转录）
+
+- decision（BUILDER_RULING_FINALBATCH §1，2026-08-28）：第③门（授权）**可纯场景构造满足**——运行时 `grant_authorization` 本就按 V14 Human Gate Trust Root 设计（签发者必须是权威角色且与执行者分离），测试场景由夹具扮演权威签发者，与 AD-1 canonical 侧裁定同构，走产品正门非旁路。主脑实测探针关闭该未决问题，无需任何产品改动。
+- 实现条目（actor=Builder 寇豆码，主理人齐活林接管验证收口）：8 处 start-like 调用配齐三门（send_guard 2 / ec_gate 2 / ec_telemetry 4，含 router-start）；新增 `runtime/test_v09_close_egress_wiring_offline.py`（11 例：egress 四向负例 + TCB 负例 + 授权缺失/自签/角色负例 + 正例 + 投影绑定 + 旧 state）；AD-8 登记册 `docs/evidence/v09-close/AD8-REGISTRY-final-batch.md`（逐点位，期望未改）。
+- 验证（全量，2026-08-29）：矩阵 36/36 red=0 + R34/R34-FAITHFUL FAIL_CLOSED；tests/ 19 文件全绿；CLOSE 40 全绿；runtime 25/26 exit 0——唯一例外 test_harness_verify_offline.py 因宿主环境变量 ACC_PRODUCT_CONFIG_V3（515KB > Windows 32767 上限）致 mock 恢复 ValueError，进程内剔除后 11/11 OK，纯环境噪声零代码问题；doctor 零新增漂移（仅 §7.8 豁免项 registry b1-head 滞后 + 已知 journal WARN）。
+- 冻结件：runtime/test_v09_attack_matrix_offline.py 未动（blob 对 a0ce691 IDENTICAL 保持），未运行入判据（§4.2 单独口径）。
+- status: CLOSED —— 最终批出口判据达成（§4.3"真正全绿"首次达成）；推送 v0.9-b1 后待团内独立审查与封印记录（机械执行，不宣告有效性）。

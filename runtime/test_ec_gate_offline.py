@@ -22,8 +22,61 @@ EC = HERE / "ec_lite.py"
 ADAPTER = HERE / "send_guard_lite.py"
 R1 = "https://chatgpt.com/c/1e1ebbbb-1111-2222-3333-000000000002"
 
+# AD-8 scenario policy: permits only the classifications the send path carries.
+# Deliberately not a blanket grant -- SECRET must still be denied.
+SCENARIO_EGRESS_POLICY = {"default": ["PUBLIC", "INTERNAL"]}
+
 sys.path.insert(0, str(HERE))
 import ec_lite as ecl  # noqa: E402
+
+
+def _load_rt():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("apc_runtime_core_ecgate", RUNTIME)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _declare_scenario_world(env, run_id, *, purpose="review transport",
+                            destination=None, resource=None):
+    """AD-8: declare the scenario world for a run (scenario construction only).
+
+    Gate 2 (TCB) is declared via the state key ``effect_tcb_verified`` (never
+    ``tcb_status``) and gate 3 (authority) via the product's own
+    ``grant_authorization`` API with an issuer role from AUTHORIZED_ISSUER_ROLES
+    and an issuer identity distinct from the holder. Gate 1 (egress) rides on the
+    contract via --egress-policy-file for adapter paths; direct RUNTIME/GC starts
+    have no egress gate wired, so the declaration is the equivalent uniform
+    scenario world. No expectation and no assertion is altered by this helper.
+    """
+    import effect_safety_lite as es
+
+    saved = {key: os.environ.get(key) for key in env
+             if key.startswith("APC_RUNTIME_")}
+    os.environ.update({key: value for key, value in env.items() if key.startswith("APC_RUNTIME_")})
+    try:
+        rt = _load_rt()
+        state = rt.load_state(run_id)
+        state["effect_tcb_verified"] = True
+        if destination is None:
+            destination = str(state.get("r_url") or "")
+        if resource is None:
+            resource = destination
+        scope = {
+            "provider": "chatgpt-web", "resource": resource, "purpose": purpose,
+            "identity": "runtime-v1", "destination": destination,
+            "data_classes": ["PUBLIC", "INTERNAL"],
+        }
+        return es.grant_authorization(
+            rt, state, issuer_role="HUMAN_AUTHORITY", issuer_identity="scenario-authority",
+            holder="runtime-v1", scope=scope, max_effect_count=4)
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def _msys(p):
@@ -104,6 +157,10 @@ class GateCliTests(unittest.TestCase):
                               self.env)
         self.assertEqual(code, 0, raw)
         self.rid = out["run_id"]
+        # AD-8 scenario world for this run (TCB declaration + authority grant;
+        # the bare RUNTIME path wires no egress gate, so gates 2+3 are the
+        # equivalent uniform injection).
+        _declare_scenario_world(self.env, self.rid)
 
     def tearDown(self):
         self.td.cleanup()
@@ -201,12 +258,20 @@ def _script_env(root, conversations):
     cfg = root / "script.json"
     cfg.write_text(json.dumps({"conversations": conversations, "log": str(log)},
                               ensure_ascii=False), encoding="utf-8")
+    egress = root / "egress_policy.json"
+    egress.write_text(json.dumps(SCENARIO_EGRESS_POLICY), encoding="utf-8")
     env = dict(os.environ)
     env["APC_RUNTIME_STATE_ROOT"] = str(root / "state")
     env["APC_RUNTIME_BRIDGE_WRAPPER"] = _ready_wrapper(root)
     env["APC_RUNTIME_INJECT_BRIDGE_FAIL"] = "SCRIPT"
     env["APC_RUNTIME_INJECT_SCRIPT_FILE"] = str(cfg)
+    env["APC_SCENARIO_EGRESS_POLICY"] = str(egress)
     return env
+
+
+def _egress_arg(env):
+    """AD-8: the contract-carried egress policy option for start-like commands."""
+    return ["--egress-policy-file", env["APC_SCENARIO_EGRESS_POLICY"]]
 
 
 class SendPathComposeTests(unittest.TestCase):
@@ -219,9 +284,12 @@ class SendPathComposeTests(unittest.TestCase):
         self.env = _script_env(self.root,
                                {R1: {"sid": "rsid-ec", "replies": ["===REVIEW_VERDICT=== PASS"]}})
         code, out, raw = _run(ADAPTER, ["start", "--goal", "Build X", "--r-url", R1,
-                                        "--acceptance", "A"], self.env)
+                                        "--acceptance", "A", *_egress_arg(self.env)], self.env)
         self.assertEqual(code, 0, raw)
         self.rid = out["run_id"]
+        # AD-8 scenario world (gates 2+3) so the gated send path can flow when
+        # the EC gate allows; gate 1 rides on the contract via --egress-policy-file.
+        _declare_scenario_world(self.env, self.rid)
         self.log = self.root / "transport_log.jsonl"
 
     def tearDown(self):

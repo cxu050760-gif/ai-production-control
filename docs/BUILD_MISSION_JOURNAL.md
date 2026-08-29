@@ -47,3 +47,5 @@
       属 AD-6 测试适配，产品代码未动（动它即破 V09-R33）。裁决书 §5(c) 的"能力回归"假设已被推翻。
   (a) 已闭环——7 个 self-grant 测试方法（8 实例）经 AD-6 转绿；`tests/` 全量 137 ran / 0 fail / 0 error。
   (b) HARD STOP——9 例 egress 判定为缺陷（egress 许可 key 无生产者），未改测试、未改期望，见 D010。
+
+- 2026-08-29 final-batch checkpoint（流 A 收口，actor=Builder 寇豆码 + 主理人齐活林接管）：8 处 start-like 调用三门场景构造落地（send_guard 2/ec_gate 2/ec_telemetry 4）+ 新增 test_v09_close_egress_wiring_offline.py 11 例（FINALBATCH §3.2 全项）。全量验证：矩阵 36/36 red=0 + R34 FAIL_CLOSED；tests/ 19 文件全绿；CLOSE 40 全绿；runtime 25/26 exit 0（唯一例外 harness_verify 环境变量超长噪声，剔除后 11/11 OK）；doctor 零新增漂移（仅 §7.8 豁免项）。AD-8 登记册 docs/evidence/v09-close/AD8-REGISTRY-final-batch.md；D016 CLOSED。release_status 维持 PRODUCT_NOT_READY；TCB 封印未执行（发布负责人职责，维持 UNVERIFIED_AFTER_CONTROLLER_CHANGE）。

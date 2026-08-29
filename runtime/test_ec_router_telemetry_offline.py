@@ -20,6 +20,84 @@ ADAPTER = HERE / "send_guard_lite.py"
 R1 = "https://chatgpt.com/c/1e1ebbbb-1111-2222-3333-000000000002"
 B1 = "https://chatgpt.com/c/b0b0aaaa-1111-2222-3333-000000000001"
 
+# AD-8 scenario policy: permits only the classifications the send path carries.
+# Deliberately not a blanket grant -- SECRET must still be denied.
+SCENARIO_EGRESS_POLICY = {"default": ["PUBLIC", "INTERNAL"]}
+
+# AD-8 scenario adapter for single-process router commands (router-run /
+# router-continue): the sends happen inside ONE process, so the scenario world
+# is declared per outbound router effect through the product's own API. This
+# fixture installs the exact production gate chain (goal_contract ->
+# effect_safety -> ec gate, identical to send_guard_lite); gate 2 (TCB) via the
+# state declaration effect_tcb_verified=True, gate 3 (authority) via
+# effect_safety_lite.grant_authorization with an issuer role from
+# AUTHORIZED_ISSUER_ROLES and an issuer identity distinct from the holder. Gate
+# 1 (egress) rides on the contract via --egress-policy-file. No gate logic,
+# product default, expectation or assertion is altered.
+SCENARIO_ROUTER_ADAPTER = '''#!/usr/bin/env python3
+"""AD-8 scenario adapter for single-process router commands (test fixture only)."""
+import sys
+from pathlib import Path
+
+RUNTIME_DIR = Path("__RUNTIME_DIR__")
+sys.path.insert(0, str(RUNTIME_DIR))
+
+import goal_contract_lite as gc
+import effect_safety_lite as es
+import ec_lite as ec
+
+
+def main() -> int:
+    argv = list(sys.argv[1:])
+    rt = gc._load_runtime()
+    cleaned, options = gc._extract_contract_options(argv)
+    gc.install(rt, options)
+    es.install(rt, {})
+    ec.install(rt)
+
+    gated_router_send = rt._router_send_to_role
+
+    def scenario_router_send(state, role, message, timeout):
+        destination = str((state.get("role_urls") or {}).get(role)
+                          or state.get("r_url") or "")
+        holder = "runtime-v1"
+        state["effect_tcb_verified"] = True
+        es.grant_authorization(
+            rt, state,
+            issuer_role="HUMAN_AUTHORITY",          # in AUTHORIZED_ISSUER_ROLES
+            issuer_identity="scenario-authority",   # distinct from holder
+            holder=holder,
+            scope={"provider": "chatgpt-web", "resource": destination,
+                   "purpose": "router transport", "identity": holder,
+                   "destination": destination,
+                   "data_classes": ["PUBLIC", "INTERNAL"]},
+            max_effect_count=2)
+        return gated_router_send(state, role, message, timeout)
+
+    rt._router_send_to_role = scenario_router_send
+    sys.argv = [str(RUNTIME_DIR / "runtime.py"), *cleaned]
+    return rt.main()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+def _scenario_router_adapter(root):
+    """Write the AD-8 scenario router adapter fixture and return its path."""
+    path = root / "scenario_router_adapter.py"
+    # forward slashes keep the generated literal free of backslash escapes
+    runtime_dir = str(HERE).replace("\\", "/")
+    path.write_text(SCENARIO_ROUTER_ADAPTER.replace("__RUNTIME_DIR__", runtime_dir),
+                    encoding="utf-8")
+    return path
+
+
+def _egress_arg(env):
+    """AD-8: the contract-carried egress policy option for start-like commands."""
+    return ["--egress-policy-file", env["APC_SCENARIO_EGRESS_POLICY"]]
+
 sys.path.insert(0, str(HERE))
 import goal_contract_lite as gc  # noqa: E402
 
@@ -42,11 +120,14 @@ def _script_env(root, conversations, seam: str = "SCRIPT"):
     cfg = root / "script.json"
     cfg.write_text(json.dumps({"conversations": conversations, "log": str(log)},
                               ensure_ascii=False), encoding="utf-8")
+    egress = root / "egress_policy.json"
+    egress.write_text(json.dumps(SCENARIO_EGRESS_POLICY), encoding="utf-8")
     env = dict(os.environ)
     env["APC_RUNTIME_STATE_ROOT"] = str(root / "state")
     env["APC_RUNTIME_BRIDGE_WRAPPER"] = _ready_wrapper(root)
     env["APC_RUNTIME_INJECT_BRIDGE_FAIL"] = seam
     env["APC_RUNTIME_INJECT_SCRIPT_FILE"] = str(cfg)
+    env["APC_SCENARIO_EGRESS_POLICY"] = str(egress)
     return env
 
 
@@ -80,9 +161,13 @@ class RouterTelemetryTests(unittest.TestCase):
                 "journal.jsonl").read_text(encoding="utf-8")
 
     def _router_run(self, env):
-        return _run(ADAPTER, ["router-run", "--goal-file", str(self.goal),
-                              "--b-url", B1, "--r-url", R1, "--acceptance", "A",
-                              "--max-rounds", "1", "--timeout", "30"], env)
+        # AD-8 scenario adapter: router-run creates and drives the RUN inside
+        # one process, so gates 2+3 are declared per outbound router effect by
+        # the fixture (gate 1 rides on the contract via --egress-policy-file).
+        return _run(_scenario_router_adapter(self.root),
+                    ["router-run", "--goal-file", str(self.goal),
+                     "--b-url", B1, "--r-url", R1, "--acceptance", "A",
+                     "--max-rounds", "1", "--timeout", "30", *_egress_arg(env)], env)
 
     def test_r1_router_pass_records_artifact(self):
         convs = {B1: {"sid": "bsid", "replies": [f"candidate v1\nGOAL_CONTRACT_HASH={self.h}"]},
@@ -169,7 +254,7 @@ class RouterTelemetryTests(unittest.TestCase):
         env = _script_env(self.root, convs)
         code, out, raw = _run(ADAPTER, ["router-start", "--goal-file", str(self.goal),
                                         "--b-url", B1, "--r-url", R1,
-                                        "--acceptance", "A"], env)
+                                        "--acceptance", "A", *_egress_arg(env)], env)
         self.assertEqual(code, 0, raw[-800:])
         rid = out["run_id"]
         # Inject Chinese (multi-byte UTF-8) text directly into journal
@@ -185,8 +270,9 @@ class RouterTelemetryTests(unittest.TestCase):
         convs2 = {B1: {"sid": "bsid", "replies": [f"candidate v2\nGOAL_CONTRACT_HASH={self.h}"]},
                   R1: {"sid": "rsid", "replies": ["===REVIEW_VERDICT=== PASS"]}}
         env2 = _script_env(self.root, convs2)
-        code2, out2, raw2 = _run(ADAPTER, ["router-continue", "--run-id", rid,
-                                           "--timeout", "30"], env2)
+        code2, out2, raw2 = _run(_scenario_router_adapter(self.root),
+                                 ["router-continue", "--run-id", rid,
+                                  "--timeout", "30"], env2)
         self.assertEqual(code2, 0, raw2[-800:])
         st2 = self._state(env2, rid)
         # Artifact count must be 1 (first artifact from PASS)
@@ -262,14 +348,15 @@ class RouterTelemetryTests(unittest.TestCase):
         env = _script_env(self.root, convs)
         code, out, raw = _run(ADAPTER, ["router-start", "--goal-file", str(self.goal),
                                         "--b-url", B1, "--r-url", R1,
-                                        "--acceptance", "A"], env)
+                                        "--acceptance", "A", *_egress_arg(env)], env)
         self.assertEqual(code, 0, raw[-800:])
         rid = out["run_id"]
         base_failures = self._state(env, rid).get("ec", {}).get("consecutive_failures", 0)
         # One drive command: REWORK with the token-as-data arrives first, then
         # the non-gate SEND_FAILED hard-blocks the command.
-        code2, out2, raw2 = _run(ADAPTER, ["router-continue", "--run-id", rid,
-                                           "--timeout", "30"], env)
+        code2, out2, raw2 = _run(_scenario_router_adapter(self.root),
+                                 ["router-continue", "--run-id", rid,
+                                  "--timeout", "30"], env)
         self.assertNotEqual(code2, 0, raw2[-800:])
         st2 = self._state(env, rid)
         self.assertEqual(st2["status"], "HARD_BLOCKED", str(st2.get("blocked_reason", ""))[:300])
