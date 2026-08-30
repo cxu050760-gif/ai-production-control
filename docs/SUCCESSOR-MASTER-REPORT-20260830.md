@@ -158,8 +158,8 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 |---|---|---|
 | S1：R1 守护层 + A1 自动调度接线 | `scripts/guard/`、relay 相关 | A1 依赖 R1 完成后才动手 |
 | S2：R2 能力注册表 + 资产接入 | `config/capability-registry.json`、`docs/ops/registry-*` | 纯数据/脚本 |
-| S3：R3 四动词补齐 + 一页卡 + §71 视图 | `runtime/` 新命令文件、`docs/ops/blackbox-card*` | 新增走独立模块+薄入口 |
-| S4：D3 Playwright+download + D4 测试套件 | `runtime/` 测试文件、`docs/evidence/reviews/` | 等 R1/R2 基础 |
+| S3：R3 四动词补齐 + 一页卡 + §71 视图 + **D3 的 download 命令/Playwright 适配器实现** | `runtime/` 新命令文件（**runtime/ 命令代码唯一写者**）、`docs/ops/blackbox-card*` | 新增走独立模块+薄入口；download/Playwright 实现也归 S3（S4 只写测试） |
+| S4：D3 的测试 + D4 测试套件 | `runtime/` **测试文件**（`test_*.py`，等 S3 命令完成后写）、`docs/evidence/reviews/` | S4 只写测试不写命令实现；与 S3 按 命令/测试 分隔，无 runtime/ 冲突 |
 
 **主会话职责**：用户指定一个会话为"主"，负责 `docs/DECISION_LEDGER.md`/`PROJECT_STATE.*`/`state/branch_registry.json`/本报告的合并与治理同步；其他会话只写自己文件域 + 自己的 `docs/evidence/HANDOFF-CP-<日期>-<序号>-<会话名>.md`。**并行 git 纪律（重申）**：开工 fetch、提交前 pull --rebase、push 串行（主会话协调）、禁 force、冲突先沟通。
 
