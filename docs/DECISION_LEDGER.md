@@ -187,3 +187,11 @@
 - reason：定义明文「任何单一角色声称完成均无效」；防自封是系统灵魂。
 - evidence：docs/evidence/V1.0-CLOSE-OUT-REPORT-20260830.md、V1.0-CLOSE-OUT-NOTES-BILINGUAL.md。
 - status: ACTIVE（V1.0 收束待业主裁决 E1-E4）
+
+## D018 — 主脑批量裁决 E1-E4 入仓与执行启动（actor=recovery-controller，依据=主脑裁决书 2026-08-30）
+
+- 裁决书：`docs/governance/rulings/v09-close/MAINBRAIN_RULING_E1-E4_BATCH.md`（SHA256 = 4a98499b4690dc79e0262afe1fd4b71190ba79430b0a8a2846d15758afcc33fc，入仓前记录，复制后逐字节 MATCH）
+- 裁决要点（E1-E4）：E1 TCB 封印维持后置（第二团审计通过+业主 §74 签字后）；E2 release_status 维持 PRODUCT_NOT_READY；E3 master 汇合原则批准、时点后移（第二团审计通过后按工单原子执行，本批不产生施工动作）；E4 累积清单逐项裁决（CR-1 确认、CR-2 无动作、CR-3 批准低优先级、CR-4 记台账、B-5 勘误、G-2 批准入仓、八vs九=8+GATE23、D-01~09 登记保持现状、F-08 不纳入、P0 备份批准优先、S-02/03/06 业主本人执行）
+- 本批执行范围（裁决书 §E）：B-5 勘误 / G-2 ROADMAP 入仓 / P0 备份 / C-1 沙箱破坏演练（禁碰生产状态根）/ C-3 矩阵 v3（§63/§65/§56 降级）/ W-1 只出方案 / 凭据类只出操作清单 / E1/E2/E3 不施工
+- 北极星（裁决书 §D）：**自动调度闭环**——至少 1 个真实任务由系统自身完成 提交→拆解→调度→执行→审查→REWORK/PASS→交付，全程无人手动敲 work/report；该目标达成前不得宣称"系统可自动生产"
+- status: ACTIVE（本批执行中，完成后出结果块等待第二团审计）
