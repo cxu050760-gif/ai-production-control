@@ -154,14 +154,14 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 
 | 阶段 | 内容 | 对应节 | 验收 |
 |---|---|---|---|
-| **R1 守护层** | **可执行规格**：①先查 Trae-Ralph 的中继启动入口（package.json scripts 或 relay start 命令——**先确认准确命令再写守护，不得猜**）；②写 `scripts/guard/guard_all.cmd`：a) 读 `construction-relay/watcher-heartbeat.json` 的 `at`，**超 300 秒**视为死 → `taskkill /F /T` 进程树 → 重启 watcher+guard（**不得接 tail/head 管道**，坑 4）；b) 查 52900 无监听 → 拉 bsk daemon；c) 查 Chrome 扩展连接 → 断则引导重连；d) 查 state.json 完整性 → 坏则 state-recover；e) 每动作追加 `construction-relay/guard-actions.ndjson` 记账；③注册计划任务 `schtasks /create /tn "ZhihengGuard" /tr "<guard_all.cmd 全路径>" /sc minute /mo 2 /f`（开机自启、与 AI 会话无关）；④验证：人为改旧心跳时间戳触发一次自愈（快速验证，不必等 72h），确认账本有记录 | §14/§61 | 触发式自愈实测 1 次成功；账本有记录；`schtasks /query /tn ZhihengGuard` 存在 |
+| **R1 守护层** | **可执行规格**：①先查 Trae-Ralph 的中继启动入口（package.json scripts 或 relay start 命令）；**兜底命令（已实测可用）**：watcher=`node src/review-relay.js watch --config "E:\WB\state\ai-production-control\construction-relay\relay.config.json"`；guard=`node src/relay/outer-guard.js watch --config <同 config>`（工作目录 `E:\WB\tools\Trae-Ralph`）；都不得接 tail/head 管道（坑 4）。查到官方入口优先，查不到用兜底——**不得因入口不明而停**；②写 `scripts/guard/guard_all.cmd`：a) 读 `construction-relay/watcher-heartbeat.json` 的 `at`，**超 300 秒**视为死 → `taskkill /F /T` 进程树 → 重启 watcher+guard（**不得接 tail/head 管道**，坑 4）；b) 查 52900 无监听 → 拉 bsk daemon；c) 查 Chrome 扩展连接 → 断则**记录+提示**（不自动开 Chrome，避免触发人工确认边界，见 §39），此项**不阻塞其他自愈动作**；d) 查 state.json 完整性 → 坏则 state-recover；e) 每动作追加 `construction-relay/guard-actions.ndjson` 记账；③注册计划任务 `schtasks /create /tn "ZhihengGuard" /tr "<guard_all.cmd 全路径>" /sc minute /mo 2 /f`（开机自启、与 AI 会话无关）；④验证：人为改旧心跳时间戳触发一次自愈（快速验证，不必等 72h），确认账本有记录 | §14/§61 | 触发式自愈实测 1 次成功；账本有记录；`schtasks /query /tn ZhihengGuard` 存在 |
 | **R2 注册表+资产接入** | §63 机器可读 capability registry（JSON：Brain/Worker/C/R/Browser/Tool/Provider×Cost/Quota/Reliability/Official|Experimental）+ catpaw/bsk 由 registry 驱动拉起 | §63/§20/§21 | registry 被运行时消费；桥自动拉起 |
 | **R3 黑箱 v1** | run.cmd 四动词补齐（补 RESULT/HUMAN_GATE）+ 一页操作卡（3-5 步）。⚠ **弱模型实测部分暂缓（需业主开弱模型会话）**——四动词/操作卡先做完，实测条件就绪即验 | §65/§71 | 代码+卡完成（机器验证）；弱模型实测留待业主 |
 | **D1 R-Adapter（最优先）** | LiteLLM 接入：安装+配置+适配层代码全部先做完（不需要 key 的部分：安装、config 骨架、健康探测代码、热切换逻辑、仲裁规则、测试用 mock Provider）。⚠ **真实 Provider 调用暂缓（需业主提供 API key）**；LiteLLM 兼容性 POC 用 mock 先行 | §5/§12/§73 | mock 全链测试绿；真实 Provider 实测留待业主给 key |
 | **D2 成本路由+熔断** | Expected Total Cost 路由 v1（registry Cost 字段驱动）；SAFE_HALT 真实触发 1 次 | §59/§61/§2/§19 | 路由可解释；熔断证据入仓 |
-| **D3 Reuse 门禁+Supply Chain** | 任务开工强制 Reuse Decision 工具化；pip-audit/检查清单接入；download 补齐评估 | §48-51/§20 | 无 Decision 不得 BUILD（系统强制） |
+| **D3 Reuse 门禁+Supply Chain** | 任务开工强制 Reuse Decision 工具化；pip-audit/检查清单接入；download 补齐评估。⚠ **pip 网络坑**：本机 pip 默认可能直连失败——安装依赖时若超时加 `--proxy http://127.0.0.1:7897` 或用清华镜像 `-i https://pypi.tuna.tsinghua.edu.cn/simple`；装不上就先跳过该工具（门禁脚本先做成，工具后补），**不得因网络问题停摆** | §48-51/§20 | 无 Decision 不得 BUILD（系统强制） |
 | **D4 并行+隔离+失效权** | 多 Worker 并行的调度/锁/隔离代码+测试套件先写好并跑机器验证（测试内模拟并行）；STOP→旧权失效端到端测试。⚠ 真实多 Worker 生产并行暂缓至机器验证全绿后 | §56/§57/§58/§16/§23/§41 | 测试套件全绿；真实并行实测视条件 |
-| **D5 自举+智能** | 自举 L1：Stable 执衡自动修复自身一个真实缺陷走完 §74 十二条；Task Graph 依赖图；Brain 选型；**缺陷→任务自动转换器**（doctor/测试失败输出 → 自动生成 goal 文件，接通"自我发现"闭环，R1 完成后可提前做——小脚本） | §68/§17/§7/§8/§11/§60/§70 | 全链证据入仓；转换器实测 1 次 |
+| **D5 自举+智能** | 自举 L1：Stable 执衡自动修复自身一个真实缺陷走完 §74 十二条（**首选候选缺陷**：`runtime/test_v09_attack_matrix_offline.py` 当前环境 FAILED——T0 既有实验文件、非审计权威矩阵，预置授权缺失是真实可修缺陷，且修复不影响 `_on_b1_core.py` 权威矩阵；备选：§38 真实断网对账场景补测）；Task Graph 依赖图；Brain 选型；**缺陷→任务自动转换器**（doctor/测试失败输出 → 自动生成 goal 文件，接通"自我发现"闭环，R1 完成后可提前做——小脚本） | §68/§17/§7/§8/§11/§60/§70 | 全链证据入仓；转换器实测 1 次 |
 | **D6 终验** | 矩阵 v4 全量复核（77/77 机器复核先行）+ **业主给一个真实目标走 §3 全自动（暂缓·需业主）** + 提请终裁（暂缓·需业主） | §3/§4/§74 | 机器复核 77/77 后即备妥，终验等人 |
 
 > 耗时纪律：**不做预先天数承诺**（前任多次估错）。每阶段完成后在修订记录报**实际耗时**，供后续阶段估算。弱模型实测每次消耗真实任务+R 审查额度，控制迭代轮数。
@@ -251,7 +251,8 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
   1. 红线触发（§12）→ SAFE_HALT + 升级块；
   2. 与定义/章程冲突或发现报告错误 → 升级块（写完继续不受阻的 READY 工作）；
   3. 需要业主/主脑裁决的事项（merge、新分支、凭据、高危效果、预算熔断）→ 升级块，**等待期间继续其他 READY 工作**（§16 精神：冻结的是 Candidate 不是 Builder）；
-  4. **上下文将尽** → 先落移交检查点到**独立文件** `docs/evidence/HANDOFF-CP-<日期>-<序号>.md`（含：完成项/进行中/下一步精确命令/踩坑/待确认），**主报告只追加修订记录一行**（避免每会话改主报告引发 drift 与冲突），新会话从检查点 + 本报告 §15 恢复——这是唯一"停了但不丢进度"的停止；
+  4. **上下文将尽** → 先落移交检查点到**独立文件** `docs/evidence/HANDOFF-CP-<日期>-<序号>.md`（含：完成项/进行中/下一步精确命令/踩坑/待确认），**主报告只追加修订记录一行**（避免每会话改主报告引发 drift 与冲突），新会话从检查点 + 本报告 §15 恢复——这是唯一"停了但不丢进度"的停止。
+- **上下文省用纪律（为通宵续航）**：a) 每刀开工前先想清"最小执行路径"，不读无关文件、不做无产物搜索（§19）；b) 命令批量执行（一次 Bash 完成多步），不碎调用；c) 大文件输出用 tail/grep 截取，不整读；d) 文档只在需要时读相关节，不整篇重读；e) 检查点文件精炼（<60 行），新会话 5 分钟可接续。
   5. 业主 STOP/PAUSE（最高优先，立即生效）。
 - **进度自证**：每刀完成 → 机器验证（测试/矩阵/doctor）→ 提交推送 → 本报告修订记录登记实际耗时与新状态。修订记录就是你持续推进的轨迹，任何会话断掉后接手者从它恢复。
 - **并行**：能开多会话就开（按 §8 目录分工），主会话负责合并与治理文件。
@@ -263,7 +264,8 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 - 审核内容：a) 机器验证亲跑复现（测试/矩阵/doctor）；b) 红线核查（§12 清单）；c) 对应定义节的证据是否真实充分；d) 是否夹带越权改动。
 - **关键阶段（R1 守护层 / R3 黑箱 / D1 R-Adapter / D6 终验）= ≥2 名审核者会签**，其余阶段 ≥1 名。
 - 审核结论落仓（docs/evidence/reviews/），REWORK 必须修复后复审；审核记录计入修订轨迹。
-- 审核者不可用（额度/429）→ 按章程阻塞绕行：先做不被阻塞的 READY 工作，审核排队补签，**不得未经审核就宣布阶段完成**。
+- 审核者不可用（额度/429）→ **实现推进不被审核阻塞**：继续做下一刀的实现与机器验证（测试/矩阵/doctor 照跑），审核在可用后排队补签；**只有"宣布阶段完成/进入 D6 终验"才必须等审核**——今晚 429 高发期也能持续干活。
+- **429 自我保护（重要）**：账户级 429 会阻止子会话/Agent 派发——触发后：a) 暂停派新 Agent；b) 主会话继续纯命令工作（bash/git/测试不受 429 影响）；c) 降低模型调用频率（避免连续快速调用）；d) 429 通常重置需数小时——按"先实现后补审"策略继续。
 
 ---
 
@@ -281,5 +283,6 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 | 2026-08-30 23:08 | 第三轮挑刺 7 处：R1 可执行规格、并行 git 互斥、检查点独立文件、§15b 弱 AI 精简卡、回滚指引、cwd/R-PROD 细节；报告版本 v1.1（正文冻结 + 三类可维护区） | 换角度攻击（使用者视角） |
 | 2026-08-30 23:12 | 机械验证抓到真缺陷：§15b 弱 AI 卡的 R 会话 URL 路径写错（应为 roles→R-PROD→url 三层嵌套，非顶层 R-PROD）；补 R-PROD last_verified=2026-08-19 陈旧风险 | 逐条命令实测（非主观攻击） |
 | 2026-08-30 23:15 | 修订记录重建为规范 10 行（修乱序、补缺失行、去嵌入换行） | 接手前收尾（DeepSeek V4 flash） |
+| 2026-08-30 23:33 | 通宵续航补丁 6 处：429 不阻塞实现推进+自我保护、上下文省用纪律、pip 代理/镜像兜底、Chrome 检查降级不阻塞、中继兜底命令、自举候选缺陷 | 业主指令：今晚不停顿推进 |
 
 、修乱序、补缺失行）；清理临时脚本 | 接手前收尾（DeepSeek V4 flash） |
