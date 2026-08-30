@@ -15,12 +15,12 @@
  "baselines": {
   "current_development_head": {
    "branch": "master",
-   "head": "6db7c2f8cdaad1d573ec0c8b85ac7ee4efcb6b9c",
+   "head": "9cf81361957ba905aa5a053651c4ab7e4782d98f",
    "verdict": "ENGINEERING_CLOSED",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "6db7c2f8cdaad1d573ec0c8b85ac7ee4efcb6b9c"
+    "value": "9cf81361957ba905aa5a053651c4ab7e4782d98f"
    }
   },
   "current_accepted_base": {
