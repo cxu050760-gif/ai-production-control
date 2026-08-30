@@ -62,10 +62,11 @@
 
 ## 3. 状态快照（2026-08-30 22:30 实测）
 
-- git：master=`0979c69`，本地=远端，工作树干净；doctor **DRIFT_FREE 零豁免**
+- git：master=`e52945c`（本报告提交；快照 22:30 时为 0979c69），本地=远端，工作树干净
 - 测试：runtime 6 模块 113 tests OK + tests 13 OK；矩阵 36/36（`test_v09_attack_matrix_on_b1_core.py`，**用这个**，不是 `_offline.py`）
 - 中继：**停**（最后心跳 8-30 01:42；历史 32 次启动、29 个崩溃锁——根因=进程生命周期绑 AI 会话，非 bug）
 - 桥/catpaw：**停**（52900/32177 无监听）
+- doctor：⚠ 本报告提交（non-governance）曾致 DRIFT——修复见修订记录 22:58：dev head 已同步至最新治理提交，复验 DRIFT_FREE
 - 封印：gen 1 VERIFIED（收口专用库，在产库未触碰）
 - release_status：`READY_FOR_USER_ACCEPTANCE`（边界：北极星自动调度闭环未达成，"可自动生产"宣称不成立）
 
@@ -81,10 +82,8 @@
 | §14 Lifecycle | 非 AI 独立守护缺失（guard 绑 AI 会话） | R1 |
 | §20 浏览器面 | download ❌；通用网页操作（非 ChatGPT 站）未开发 | R2/D3 |
 | §65 唯一入口 | 四动词不齐（无 RESULT/HUMAN_GATE 响应） | R3 |
-| §63 能力注册表 | **无机器可读注册表**（枢纽缺失） | R2 |
 | §48/49/50 Reuse 门禁 | 流程走过但无系统级强制 | D3 |
 | §5 Provider 独立 | Worker 有 Adapter；**R/Brain 无**（R 硬绑 ChatGPT） | D1 |
-| §59 成本路由 | 无实现 | D2 |
 | §61 Hard Fuse | 计数器在；SAFE_HALT 从未真实触发 | D2 |
 | §56 多 Worker | skill 在；真实并行 0 次 | D4 |
 | §57 Resource Lock | 锁在；多 Worker 冲突未实测 | D4 |
@@ -178,7 +177,7 @@
 
 ## 10. 中继病历（收口 R1 的输入）
 
-- 32 次 RELAY_STARTED；8-25 单日 15 个崩溃锁、8-26 单日 14 个；WATCHDOG 自救 14 次
+- RELAY_STARTED 32 次（按精确 type 计；QA 全文计数 35，差异疑含跨文件重复，口径待查）；8-25 单日 15 个崩溃锁、8-26 单日 14 个；WATCHDOG 自救 14 次
 - 应用层修复已完成（Trae-Ralph git 历史 15+ 条 fix：TRAE 风控中断/watcher 中断/verdict 恢复/幂等授权/Windows 路径…）
 - **结构性根因（推断，待 R1 验证）**：进程以 AI 会话后台进程方式运行，会话结束/睡眠=被杀；无 OS 级守护
 - 修复方向：R1 计划任务守护（心跳超时检测→杀树→重启→记账），非修 bug
