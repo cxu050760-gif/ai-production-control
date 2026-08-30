@@ -26,8 +26,8 @@
   {
    "name": "v0.9-b2/authority-effect-evidence",
    "role": "CANDIDATE_RED",
-   "head": "a0ce691f",
-   "note": "current development head; publishes formal RED evidence of 16 attack-matrix cases"
+   "head": "f74d48e2",
+   "note": "historical dev line (2026-08-28); superseded by v0.9-b1 merged into master (V1.0 engineering close)"
   },
   {
    "name": "v0.9-b1/authority-effect-core",
