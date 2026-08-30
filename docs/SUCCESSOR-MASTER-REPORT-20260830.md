@@ -211,7 +211,7 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 
 ## 14. 已知未验证/存疑（诚实清单）
 
-- R-PROD 会话健康（8-30 之后未使用，登录态可能过期）——用前先 `chatgpt_bridge status`
+- R-PROD 会话健康：`last_verified=2026-08-19`（实测，11 天+未验证），登录态/会话可能失效——**用前必须 `chatgpt_bridge status` 实测确认**，失效则升级业主（R-Adapter 完成前这是单点故障）
 - LiteLLM 与本系统兼容性（未实测，方案假设）
 - 中继根因"生命周期绑会话"是推断，R1 落地时验证
 - 本报告 77 节重判为单人判定，D6 矩阵 v4 需独立复核
@@ -224,6 +224,7 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
    - `cd C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1 && python scripts/state_doctor.py`（首跑期望 DRIFT_FREE；**若你刚提交过非治理提交而报 DRIFT，按坑 9 同步 dev head/registry 即可，不是环境坏**）
    - `git status -sb`（期望干净同步）
    - `chatgpt_bridge status`（R 通道健康，需 `BSK_HOME=E:/WB/tools/bsk-file-bridge/bsk-home`；**桥停 → 按 §13 拉起顺序恢复；R-PROD 会话失效 → 写升级块给业主，等待期间继续不需要 R 的 READY 工作，不得自行更换会话**）
+   - ⚠ **R-PROD 陈旧风险（实测）**：`会话注册.json` 中 R-PROD 的 `last_verified = 2026-08-19`，到接手时可能已过期 11 天以上（登录态/会话可能失效）。**任何需要 R 审查的动作之前必须先 `chatgpt_bridge status` 实测确认**，不要默认它可用
 3. 按 §8 方案认领阶段（默认从 R1 守护层开工；若 R1 已完成则顺延）
 4. 开工前对你要做的事**先搜 GitHub**（§48 门禁）并留 Decision 记录
 5. 每完成一刀：机器验证（测试/矩阵/doctor）→ 提交推送 → 结果入 evidence → 更新本报告的状态快照
@@ -237,7 +238,7 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 2. 把目标写进 UTF-8 文本文件（如 `goal.txt`）：写清"要什么成果 + 怎么算做完了"。
 3. 提交任务（`<...>` 换成你的真实路径）：
    `& "E:\WB\tools\ai-production-control\runtime\run.cmd" work --goal-file <目标文件> --r-url <R 会话 URL>`
-   - R 会话 URL 从 `E:\执衡\05_资源\会话注册.json` 的 `R-PROD.url` 读取，**不要猜、不要改这个文件**
+   - R 会话 URL 从 `E:\执衡\05_资源\会话注册.json` 的 **`roles` → `R-PROD` → `url`** 读取（注意是嵌套三层，不是顶层 `R-PROD`），**不要猜、不要改这个文件**；取值后用 `chatgpt_bridge status` 确认该会话仍健康（见下条风险）
 4. 干完活把结果写进文本文件回交：
    `& "E:\WB\tools\ai-production-control\runtime\run.cmd" report --run-id <RUN 号> --message-file <结果文件>`
 5. 结果只有两种：`PASS`（通过）或 `REWORK`（审查方说哪里不行）→ 按它说的改 → 再回交，直到 PASS。
@@ -277,4 +278,4 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 | 2026-08-30 23:05 | doctor DRIFT 修复（报告提交后 dev head/registry 同步，恢复 DRIFT_FREE）；修订记录重排 | 遵守本报告坑 9 |
 | 2026-08-30 22:58(补) | §17 审核硬门禁（≥1-2 名独立审核通过方可推进）+ §8 重排（需人实测项标暂缓·等人，机器可完成的先做） | 业主指令 |
 | 2026-08-30 22:56 | 第二轮挑刺 6 处：**双 runtime 混淆警告（事故级）**、AGENTS.md 入清单、缺陷→任务转换器入 D5、弱 AI 能力边界定义、429/额度坑、启动自检补 R 通道 | 业主连续追问榨出的缺口 |
-| 2026-08-30 23:08 | **报告版本 v1.1**：正文（§0-§17，含新增 §15b）冻结——变更须走 §17 审核并登记；**三类可维护区**（§3 状态快照、§9 坑清单追加、修订记录追加）接手者可直接维护。本行取代此前"全冻结"表述 | 修正不可信的冻结声明 |
+| 2026-08-30 23:12 | 机械验证抓到真缺陷：§15b 弱 AI 卡的 R 会话 URL 路径写错（应为 `roles→R-PROD→url` 三层嵌套，非顶层 `R-PROD`）——会直接卡死弱模型第一步；并补 R-PROD `last_verified=2026-08-19` 陈旧风险 | 逐条命令实测（非主观攻击） |\n| 2026-08-30 23:08 | **报告版本 v1.1**：正文（§0-§17，含新增 §15b）冻结——变更须走 §17 审核并登记；**三类可维护区**（§3 状态快照、§9 坑清单追加、修订记录追加）接手者可直接维护。本行取代此前"全冻结"表述 | 修正不可信的冻结声明 |
