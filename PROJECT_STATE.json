@@ -14,13 +14,13 @@
  },
  "baselines": {
   "current_development_head": {
-   "branch": "master",
-   "head": "9407f49cced9b146346f6a7453387964fdd1c954",
-   "verdict": "ENGINEERING_CLOSED",
+   "branch": "v1.1-blackbox",
+   "head": "e25feda0376d676a623ae912df89b7712b5dbb46",
+   "verdict": "IN_DEVELOPMENT",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "9407f49cced9b146346f6a7453387964fdd1c954"
+    "value": "e25feda0376d676a623ae912df89b7712b5dbb46"
    }
   },
   "current_accepted_base": {
