@@ -37,7 +37,27 @@
     "max_browser_retries": 2,
     "max_external_brain_calls": 6,
     "controller_lease_seconds": 120,
-    "lock_lease_seconds": 120
+    "lock_lease_seconds": 120,
+    "authority_effect": {
+      "missing_authorization": "DENY",
+      "executor_self_grant": "DENY",
+      "stale_generation": "DENY",
+      "stale_fence": "DENY",
+      "revoked_or_expired_authorization": "DENY",
+      "authorization_scope_mismatch": "DENY",
+      "effect_count_exhausted": "DENY",
+      "secret_egress": "DENY",
+      "unknown_outcome_ordinary_retry": "DENY",
+      "external_effect_requires_tcb_verified": true,
+      "raw_credentials_in_authority_scope": "DENY",
+      "credential_transport": "REFERENCE_ONLY",
+      "high_risk_human_gate": "REQUIRED",
+      "known_effect_types": [
+        "AI_MESSAGE",
+        "TEST",
+        "PUBLIC_TEST_INTERACTION"
+      ]
+    }
   },
   "allowed_roots": [
     "E:\\WB\\tools\\ai-production-control",
@@ -45,4 +65,3 @@
     "E:\\WB\\outputs\\ai-production-control"
   ]
 }
-

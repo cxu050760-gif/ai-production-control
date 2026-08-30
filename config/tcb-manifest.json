@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "controller_identity": "ai-production-control/python-sqlite",
+  "generation": 1,
+  "scope": [
+    "ai-control.cmd",
+    "scripts/ai_control.py",
+    "scripts/browser_runtime.mjs",
+    "scripts/local_worker.py",
+    "src/aicontrol/__init__.py",
+    "src/aicontrol/util.py",
+    "src/aicontrol/process.py",
+    "src/aicontrol/store.py",
+    "src/aicontrol/security.py",
+    "src/aicontrol/runtimes.py",
+    "src/aicontrol/controller.py",
+    "src/aicontrol/acceptance.py",
+    "config/production.json",
+    "package.json",
+    "package-lock.json"
+  ],
+  "files": [
+    {
+      "path": "ai-control.cmd",
+      "sha256": "bf213a6099c2e13dd3e483572930f40c42842305c046d91669b4bc7152600f87",
+      "size": 389
+    },
+    {
+      "path": "scripts/ai_control.py",
+      "sha256": "e651b0076ad2f01f7905869d410c4a1e8fd2ded04ee3f2ad2f7530e2743aa7eb",
+      "size": 21405
+    },
+    {
+      "path": "scripts/browser_runtime.mjs",
+      "sha256": "740e944070714fd4e05037de231d15c53aa8d1a619a1477a41b6afbc656e07f6",
+      "size": 22445
+    },
+    {
+      "path": "scripts/local_worker.py",
+      "sha256": "f29e5fae2db5ad889ad6af44d586fb587077fcf5e9bc1cd91f7747894208b416",
+      "size": 3784
+    },
+    {
+      "path": "src/aicontrol/__init__.py",
+      "sha256": "9621b2c792efac8b145e34abeea2c9e4825ebf88f6ab09fd182ab15aa930a6ed",
+      "size": 63
+    },
+    {
+      "path": "src/aicontrol/util.py",
+      "sha256": "01d7f6dbfcc50092541bb43f1cb2b83ffe0eb98bfcca3ddf4c58551aa5932cf2",
+      "size": 7051
+    },
+    {
+      "path": "src/aicontrol/process.py",
+      "sha256": "6c19842eb5ac47505e124f262a711a092cc33ee1b9cff8683da983897e1fc8dd",
+      "size": 7642
+    },
+    {
+      "path": "src/aicontrol/store.py",
+      "sha256": "475b0b06fc8bc16745dc011e2d93367bc1ec1bb2ef5e0240a885aaf16b38e188",
+      "size": 93927
+    },
+    {
+      "path": "src/aicontrol/security.py",
+      "sha256": "dc2570dd84b329f214d0b5345857a3d6a3a3a9e55c3ca4a89a788849948a790a",
+      "size": 13558
+    },
+    {
+      "path": "src/aicontrol/runtimes.py",
+      "sha256": "4cb87eb7e4a0b45250ac09bd8d4d26ac6207234a9c469db485e3c4b5f49563eb",
+      "size": 29443
+    },
+    {
+      "path": "src/aicontrol/controller.py",
+      "sha256": "cc53148c4107306248bf6b427f96bae9aadd8bffdb25798e44d148652efc0da2",
+      "size": 64647
+    },
+    {
+      "path": "src/aicontrol/acceptance.py",
+      "sha256": "2d300b4c52ca1511f9e65b58afb7538ef1ec623fe9617e93daac698f747221af",
+      "size": 59689
+    },
+    {
+      "path": "config/production.json",
+      "sha256": "139051d35e8f59a109c8e6c42c2a1d66ada96b59eb6d31ac496da052ad2a1cb0",
+      "size": 2864
+    },
+    {
+      "path": "package.json",
+      "sha256": "a1b1ccc746c0f487be3717e42cee321754347684f01ddc7248b4c832175c58b5",
+      "size": 225
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "5030c69e911387c9ee1487fba793b269c43f9ff4e424d4460d609ea375d8e933",
+      "size": 811
+    }
+  ],
+  "created_at": "2026-08-30T09:45:38.764Z",
+  "same_user_limitation": "NTFS same-user code cannot provide a separate security principal; every external effect re-verifies hashes and workers are withheld from TCB paths.",
+  "reason": "V1.0 engineering close seal - owner ordered, sign roadmap C-2",
+  "manifest_hash": "2dff958d699555b74976012c56e6c4c66dd3fb231b74074fe30029b3d1506981"
+}

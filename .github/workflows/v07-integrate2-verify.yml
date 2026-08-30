@@ -1,0 +1,30 @@
+name: V07 Integrate2 Rework Verification
+
+on:
+  push:
+    branches:
+      - manual/v07-rework-verify
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CORE_COMMIT: "0f1fee3d31658874b48384764b53aafef1dcf868"
+
+jobs:
+  candidate-verification:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Python version
+        shell: pwsh
+        run: python --version
+      - name: Run full bound V0.7 Evidence
+        shell: pwsh
+        run: |
+          python runtime/v07_integration_evidence.py --candidate "$env:GITHUB_SHA" --core-commit "$env:CORE_COMMIT"
+          exit $LASTEXITCODE

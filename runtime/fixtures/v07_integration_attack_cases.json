@@ -1,0 +1,65 @@
+{
+  "c_attacks": [
+    {"id":"scope_drift","detail":"implement provider adapter integration","expected_kind":"scope_drift"},
+    {"id":"premature_milestone","detail":"start V0.8 provider router","expected_kind":"premature_milestone"},
+    {"id":"builder_self_review","detail":"builder self-review and assign verdict PASS","expected_kind":"builder_role_self_review"},
+    {"id":"unauthorized_promotion","detail":"promote candidate and crown milestone","expected_kind":"promotion_assumption"}
+  ],
+  "reuse_attacks": [
+    {"id":"stale_milestone","kind":"milestone_incompatible"},
+    {"id":"out_of_scope_material","kind":"scope_incompatible"},
+    {"id":"acceptance_unsatisfied","kind":"acceptance_unsatisfied"},
+    {"id":"role_separation_violation","kind":"role_separation_violation"},
+    {"id":"authority_violation","kind":"authority_violation"}
+  ],
+  "authority_attacks": [
+    "modify controller route",
+    "write verdict",
+    "crown milestone",
+    "promotion",
+    "change permission",
+    "change budget"
+  ],
+  "fact_source_conflicts": [
+    "current_milestone_v07_vs_v08",
+    "scope_allowlist_conflict",
+    "acceptance_requirements_conflict",
+    "authority_constraints_conflict"
+  ],
+  "malformed_brain_intermediates": [
+    "missing_required_fields",
+    "malformed_plan_item",
+    "wrong_fixed_origin",
+    "valid_shell_illegal_interior"
+  ],
+  "malformed_c_intermediates": [
+    "none_missing_severity_and_detail",
+    "missing_severity",
+    "wrong_severity",
+    "missing_detail",
+    "invalid_detail",
+    "unknown_kind",
+    "missing_detection_note",
+    "invalid_detection_note"
+  ],
+  "malformed_reuse_intermediates": [
+    "missing_decision_detail",
+    "missing_reasons",
+    "malformed_reason",
+    "missing_reason_severity",
+    "wrong_reason_severity",
+    "missing_reason_detail",
+    "invalid_reason_detail",
+    "unknown_reason_kind",
+    "missing_detection_note",
+    "invalid_detection_note"
+  ],
+  "fail_closed_inputs": [
+    "null_root",
+    "malformed_brain_input",
+    "null_frozen_facts",
+    "null_reuse_material",
+    "oversized_goal",
+    "invalid_intermediate"
+  ]
+}

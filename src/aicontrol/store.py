@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 from .util import (
     atomic_write,
@@ -477,8 +477,17 @@ def validate_actor_trajectory(actor_type: str, envelope: dict[str, Any]) -> None
 
 
 class ControlStore:
-    def __init__(self, database_path: str | Path, *, state_root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        database_path: str | Path,
+        *,
+        state_root: str | Path | None = None,
+        known_effect_types: Iterable[str] | None = None,
+    ) -> None:
         self.database_path = Path(database_path)
+        self.known_effect_types = (
+            None if known_effect_types is None else [str(item) for item in known_effect_types]
+        )
         self.state_root = Path(state_root) if state_root else self.database_path.parent
         self.snapshot_root = self.state_root / "snapshots"
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -886,6 +895,12 @@ class ControlStore:
     ) -> dict[str, Any]:
         if max_effect_count < 1:
             raise GateDenied("authorization quota must be positive")
+        if self.known_effect_types is not None:
+            # Mirrors security.known_effect_type_allowed; store must not import
+            # security (security already depends on store), so the rule is restated here.
+            allowed_types = {str(item).strip().upper() for item in self.known_effect_types if str(item).strip()}
+            if not isinstance(effect_type, str) or effect_type.strip().upper() not in allowed_types:
+                raise GateDenied("effect_type is outside the closed effect model")
         goal = self.latest_goal(task_id)
         scope_digest = sha256_text(canonical_json(scope))
         authorization_id = str(uuid.uuid4())
@@ -1359,6 +1374,16 @@ class ControlStore:
             (task_id, logical_effect_id),
         ).fetchone()
         if existing:
+            if existing["status"] in ("OUTCOME_UNKNOWN", "RECONCILING"):
+                recorded = self.connection.execute(
+                    "SELECT controller_instance_id FROM reservations WHERE logical_effect_id=?",
+                    (logical_effect_id,),
+                ).fetchone()
+                if recorded and recorded["controller_instance_id"] == controller_instance_id:
+                    raise GateDenied(
+                        "ordinary retry denied: the same logical effect has an unresolved "
+                        "OUTCOME_UNKNOWN/RECONCILING action; reconciliation is required first"
+                    )
             return Reservation(
                 action_id=existing["action_id"],
                 logical_effect_id=logical_effect_id,
@@ -1387,6 +1412,16 @@ class ControlStore:
                 (task_id, logical_effect_id),
             ).fetchone()
             if existing:
+                if existing["status"] in ("OUTCOME_UNKNOWN", "RECONCILING"):
+                    recorded = conn.execute(
+                        "SELECT controller_instance_id FROM reservations WHERE logical_effect_id=?",
+                        (logical_effect_id,),
+                    ).fetchone()
+                    if recorded and recorded["controller_instance_id"] == controller_instance_id:
+                        raise GateDenied(
+                            "ordinary retry denied: the same logical effect has an unresolved "
+                            "OUTCOME_UNKNOWN/RECONCILING action; reconciliation is required first"
+                        )
                 return Reservation(
                     action_id=existing["action_id"],
                     logical_effect_id=logical_effect_id,
@@ -1552,24 +1587,35 @@ class ControlStore:
                 raise GateDenied("authority or Controller TCB is not verified")
             self.verify_authority_chain(faults=faults)
             row = conn.execute(
-                "SELECT r.*,a.status AS action_status FROM reservations r JOIN actions a ON a.action_id=r.action_id WHERE r.logical_effect_id=?",
+                "SELECT r.*,a.status AS action_status,a.execution_fence_token AS durable_fence"
+                " FROM reservations r JOIN actions a ON a.action_id=r.action_id WHERE r.logical_effect_id=?",
                 (reservation.logical_effect_id,),
             ).fetchone()
             if not row or row["status"] != "RESERVATION_COMMITTED":
                 raise GateDenied("reservation not executable")
+            if row["durable_fence"] != reservation.execution_fence_token:
+                raise GateDenied("execution fence token does not match the durable reservation")
             if not resource_fresh:
                 raise GateDenied("resource became stale before external boundary")
             auth = conn.execute("SELECT * FROM authorizations WHERE authorization_id=?", (row["authorization_id"],)).fetchone()
             reconstructed = self.reconstruct_authority(row["task_id"])["authorizations"].get(row["authorization_id"])
             epoch_row = conn.execute("SELECT epoch FROM revocation_epochs WHERE task_id=?", (row["task_id"],)).fetchone()
             latest_epoch = int(epoch_row["epoch"]) if epoch_row else 0
+            head_row = conn.execute("SELECT revision FROM state_head WHERE singleton=1").fetchone()
             goal = self.latest_goal(row["task_id"])
             if not auth or not reconstructed or auth["status"] != "ACTIVE" or reconstructed["status"] != "ACTIVE":
                 raise GateDenied("authorization revoked before effect start")
+            if head_row is None or int(row["state_revision"]) != int(head_row["revision"]):
+                raise GateDenied("canonical state revision is no longer current")
             if int(row["revocation_epoch"]) != latest_epoch:
                 raise GateDenied("stale execution fence after revocation")
             if int(row["authorization_generation"]) != int(auth["generation"]):
                 raise GateDenied("stale execution fence after authority generation change")
+            latest_generation = conn.execute(
+                "SELECT MAX(generation) AS value FROM authorizations WHERE task_id=?", (row["task_id"],)
+            ).fetchone()["value"]
+            if latest_generation is not None and int(row["authorization_generation"]) != int(latest_generation):
+                raise GateDenied("authorization generation is not the latest durable task generation")
             if row["goal_contract_hash"] != goal["contract_hash"]:
                 raise GateDenied("Goal Contract changed before effect start")
             if row["controller_instance_id"] != controller_instance_id or row["lease_id"] != controller_lease_id:
@@ -1621,6 +1667,65 @@ class ControlStore:
                 record={"outcome": outcome, "auto_retry_permitted": False if unknown else None},
             )
         self.durable_barrier()
+
+    def reconcile_effect_outcome(
+        self,
+        reservation: Reservation,
+        *,
+        evidence: dict[str, Any],
+        occurred: bool,
+    ) -> str:
+        """Advance a reconciled action along the §23 ledger chain. Never executes anything.
+
+        ``occurred=True`` walks OUTCOME_UNKNOWN -> OUTCOME_OBSERVED -> ACTION_COMMITTED.
+        ``occurred=False`` records the observation and leaves the action unresolved:
+        a negative observation grants no replay authority (V14 §26 NEVER_AUTO_RETRY).
+        """
+        with self.transaction() as conn:
+            row = conn.execute("SELECT status FROM actions WHERE action_id=?", (reservation.action_id,)).fetchone()
+            if not row or row["status"] != "OUTCOME_UNKNOWN":
+                raise GateDenied("reconciliation requires an OUTCOME_UNKNOWN action")
+            now = utc_now()
+            if not occurred:
+                self._append_wal(
+                    conn,
+                    action_id=reservation.action_id,
+                    logical_effect_id=reservation.logical_effect_id,
+                    status="OUTCOME_UNKNOWN",
+                    record={
+                        "reconciliation_evidence": evidence,
+                        "reconciliation_result": "NOT_OCCURRED_CONTROLLED_RETRY_ONLY",
+                        "ordinary_retry_permitted": False,
+                        "executed": False,
+                    },
+                )
+                status = "OUTCOME_UNKNOWN"
+            else:
+                status = "ACTION_COMMITTED"
+                for ledger_status in ("OUTCOME_OBSERVED", "ACTION_COMMITTED"):
+                    conn.execute(
+                        "UPDATE actions SET status=?,updated_at=?,outcome_json=? WHERE action_id=?",
+                        (ledger_status, now, canonical_json({"reconciliation_evidence": evidence}),
+                         reservation.action_id),
+                    )
+                    conn.execute(
+                        "UPDATE reservations SET status=?,updated_at=? WHERE logical_effect_id=?",
+                        (ledger_status, now, reservation.logical_effect_id),
+                    )
+                    self._append_wal(
+                        conn,
+                        action_id=reservation.action_id,
+                        logical_effect_id=reservation.logical_effect_id,
+                        status=ledger_status,
+                        record={
+                            "reconciliation_evidence": evidence,
+                            "reconciliation_result": "COMMITTED_NO_EXECUTE",
+                            "ordinary_retry_permitted": False,
+                            "executed": False,
+                        },
+                    )
+        self.durable_barrier()
+        return status
 
     def record_invocation(self, record: dict[str, Any]) -> None:
         with self.transaction() as conn:

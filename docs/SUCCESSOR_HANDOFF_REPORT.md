@@ -1,3 +1,10 @@
+# DEPRECATED / HISTORICAL — Successor Handoff Report
+
+> This report is retained as historical evidence only. It predates V0.1 Official Runtime Entry canonicalization and MUST NOT be used as current startup or Worker instructions.
+> Current entry selection: read `runtime/WEAK_WORKER_START_HERE.md` and use `E:\WB\tools\ai-production-control\runtime\run.cmd` as the only OFFICIAL Runtime Entry. `ai-control.cmd` / `scripts/ai_control.py` are COMPATIBILITY / LEGACY only.
+
+---
+
 # 交接报告 — AI Production Control Plane（V14-FROZEN）
 
 > 生成：2026-08-17 20:30（第 3 任 build owner：TRAE/GLM 接手 OpenAI Codex 后）

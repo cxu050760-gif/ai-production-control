@@ -2,7 +2,8 @@
 
 - Mission: provider-independent AI production system controlled by durable canonical state and evidence.
 - Current stage: `PRODUCT_NOT_READY` infrastructure/product construction.
-- Target production entry: `ai-control.cmd run "<goal>"`.
+- Official Runtime Entry: `E:\WB\tools\ai-production-control\runtime\run.cmd`.
+- Legacy Controller surfaces: `ai-control.cmd` and `scripts/ai_control.py` are COMPATIBILITY / LEGACY only; they are not a second OFFICIAL Runtime Entry.
 - Stable code root: `E:\WB\tools\ai-production-control`.
 - Stable state root: `E:\WB\state\ai-production-control`.
 - Stable output root: `E:\WB\outputs\ai-production-control`.

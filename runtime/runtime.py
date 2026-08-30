@@ -98,6 +98,7 @@ LOCK_STALE_SEC = 180
 R_URL_RE = re.compile(r"^https://chatgpt\.com/c/[A-Za-z0-9-]{8,}$")
 RUN_ID_RE = re.compile(r"^RUN-[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$")
 CONV_ID_RE = re.compile(r"/c/([A-Za-z0-9-]+)")
+CANDIDATE_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 INTERNAL_STRINGS = [
     YZ_LIB,
@@ -275,6 +276,58 @@ def run_dir(run_id: str) -> Path:
     return RUNS_ROOT / run_id
 
 
+def _state_paths(run_id: str) -> tuple[Path, Path, Path, Path]:
+    rd = run_dir(run_id)
+    return (rd / "state.json", rd / "state.integrity.json",
+            rd / "state.prev.json", rd / "state.prev.integrity.json")
+
+
+def _read_json(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _state_matches_integrity(state_path: Path, integrity_path: Path) -> bool:
+    state_text = None
+    try:
+        state_text = state_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    integ = _read_json(integrity_path)
+    if not integ:
+        return False
+    return (sha256_text(state_text) == integ.get("sha256")
+            and json.loads(state_text).get("schema_version") == integ.get("schema_version"))
+
+
+def verify_state(run_id: str) -> dict:
+    sp, ip, pp, pip = _state_paths(run_id)
+    if not sp.exists():
+        return {"ok": False, "reason": "state missing", "run_id": run_id}
+    if _state_matches_integrity(sp, ip):
+        cur = _read_json(sp) or {}
+        return {"ok": True, "reason": "integrity ok", "run_id": run_id,
+                "revision": cur.get("revision"), "schema_version": cur.get("schema_version")}
+    return {"ok": False, "reason": "integrity mismatch", "run_id": run_id}
+
+
+def recover_state(run_id: str) -> dict:
+    sp, ip, pp, pip = _state_paths(run_id)
+    if _state_matches_integrity(sp, ip):
+        return {"recovered": False, "reason": "current state already valid", "run_id": run_id}
+    if not _state_matches_integrity(pp, pip):
+        return {"recovered": False, "reason": "no valid known-good revision to recover", "run_id": run_id}
+    prev_text = pp.read_text(encoding="utf-8")
+    atomic_write_text(sp, prev_text)
+    atomic_write_text(ip, pip.read_text(encoding="utf-8"))
+    cur = _read_json(sp) or {}
+    journal(run_id, "STATE_RECOVERED", revision=cur.get("revision"))
+    return {"recovered": True, "reason": "restored previous known-good revision",
+            "run_id": run_id, "revision": cur.get("revision")}
+
+
 def load_state(run_id: str) -> dict:
     path = run_dir(run_id) / "state.json"
     if not path.exists():
@@ -285,8 +338,23 @@ def load_state(run_id: str) -> dict:
 def save_state(state: dict) -> None:
     state["revision"] = int(state.get("revision", 0)) + 1
     state["updated_at"] = utc_now()
-    atomic_write_text(run_dir(state["run_id"]) / "state.json",
-                      json.dumps(state, ensure_ascii=False, indent=2, default=str))
+    sp, ip, pp, pip = _state_paths(state["run_id"])
+    # Rotate the currently-validated state to known-good before overwriting, so a
+    # corrupted write always leaves a recoverable previous revision (V0.3).
+    if _state_matches_integrity(sp, ip):
+        try:
+            atomic_write_text(pp, sp.read_text(encoding="utf-8"))
+            atomic_write_text(pip, ip.read_text(encoding="utf-8"))
+        except OSError:
+            pass
+    text = json.dumps(state, ensure_ascii=False, indent=2, default=str)
+    atomic_write_text(sp, text)
+    atomic_write_text(ip, json.dumps({
+        "revision": state["revision"],
+        "schema_version": state.get("schema_version"),
+        "sha256": sha256_text(text),
+        "saved_at": utc_now(),
+    }, ensure_ascii=False, indent=2))
 
 
 def journal(run_id: str, event: str, **kw) -> None:
@@ -353,12 +421,19 @@ def _seam_script_run(script: str) -> subprocess.CompletedProcess:
     never sets APC_RUNTIME_INJECT_BRIDGE_FAIL=SCRIPT.
 
     Script file (APC_RUNTIME_INJECT_SCRIPT_FILE) JSON shape:
-      {"conversations": {<url>: {"sid": str, "replies": [..], "failures": [..]}},
+      {"conversations": {<url>: {"sid": str, "replies": [..], "failures": [..],
+                                 "fail_after": int, "fail_token": str}},
        "log": <jsonl path>}
-    Per send: consumes one failure token first; else pops the next reply for
-    the target conversation (durable cursor across processes), writes it to
-    the script's reply file and returns the standard RUNTIME_* markers. Every
-    exchange is journaled to the log so tests can assert role->URL routing."""
+    Per send: consumes one failure token first; else, when the deterministic
+    schedule (fail_after/fail_token) is active and the number of replies
+    already served to this URL is >= fail_after, returns fail_token instead of
+    the next reply; else pops the next reply for the target conversation
+    (durable cursor across processes), writes it to the script's reply file
+    and returns the standard RUNTIME_* markers. fail_after/fail_token exist
+    ONLY so tests can express "first N roundtrips succeed, the next one
+    fails" (e.g. a SEND_FAILED after a REWORK); production never sets them.
+    Every exchange is journaled to the log so tests can assert role->URL
+    routing."""
     cfg_path = os.environ.get("APC_RUNTIME_INJECT_SCRIPT_FILE", "")
     try:
         cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
@@ -385,6 +460,11 @@ def _seam_script_run(script: str) -> subprocess.CompletedProcess:
     reattach = "ACQ_MODE=reattach" in script
     entry = {"url": url, "sid": sid, "stored_sid": (m_stored.group(1) if m_stored else None),
              "reattach": reattach, "message": sent}
+    cur_path = Path(cfg_path + ".cursor.json")
+    try:
+        cursors = json.loads(cur_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cursors = {}
     failures = list(conv.get("failures") or [])
     if failures:
         tok = str(failures.pop(0))
@@ -396,11 +476,12 @@ def _seam_script_run(script: str) -> subprocess.CompletedProcess:
             pass
         _seam_script_log(cfg.get("log"), {**entry, "result": tok})
         return subprocess.CompletedProcess([BASH], 0, "RUNTIME_SID=%s\nRUNTIME_SEND=%s\n" % (sid, tok), "")
-    cur_path = Path(cfg_path + ".cursor.json")
-    try:
-        cursors = json.loads(cur_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        cursors = {}
+    fail_after = int(conv.get("fail_after") or 0)
+    fail_token = str(conv.get("fail_token") or "")
+    if fail_after > 0 and fail_token and int(cursors.get(url, 0)) >= fail_after:
+        _seam_script_log(cfg.get("log"), {**entry, "result": fail_token,
+                                          "scheduled": "fail_after", "after": fail_after})
+        return subprocess.CompletedProcess([BASH], 0, "RUNTIME_SID=%s\nRUNTIME_SEND=%s\n" % (sid, fail_token), "")
     idx = int(cursors.get(url, 0))
     replies = list(conv.get("replies") or [])
     reply = replies[idx] if idx < len(replies) else ""
@@ -724,6 +805,7 @@ def recv_script(sid: str, r_url: str, reply_out_posix: str) -> str:
     return f"""set -u
 {PATH_PROLOGUE}
 source {YZ_LIB} >/dev/null 2>&1
+RURL='{r_url}'
 SID='{sid}'
 if [ -z "$SID" ]; then
   SID=$(yz_acquire_conv '{r_url}')
@@ -836,6 +918,27 @@ def apply_verdict(state: dict, verdict: str | None, next_action: str, reply_path
     state["last_r_verdict"] = verdict or "NO_VERDICT"
     state["last_reply_path"] = str(reply_path)
     state["last_reply_bytes"] = reply_bytes
+    # Review Result Return (V0.1-FIX-REVIEW-RESULT-RETURN): persist a structured,
+    # reload-safe binding of this R verdict to the RUN and — when they were
+    # supplied at review time — to the Candidate / Evidence under review. This
+    # block is written for EVERY verdict branch (including the BLOCKED early
+    # return below) so the result never fails to reach durable Runtime state.
+    if not state.get("review_id"):
+        state["review_id"] = "REV-%s-%s" % (datetime.now().strftime("%Y%m%d-%H%M%S"), uuid.uuid4().hex[:4])
+    state["review_result"] = {
+        "run_id": state["run_id"],
+        "review_id": state["review_id"],
+        "candidate_commit": state.get("candidate_commit"),
+        "evidence_id": state.get("evidence_id"),
+        "verdict": state["last_r_verdict"],
+        "next_action": (next_action or "")[:4000],
+        "reply_path": str(reply_path),
+        "reply_bytes": reply_bytes,
+        "returned_at": utc_now(),
+    }
+    journal(state["run_id"], "REVIEW_RESULT_RETURN", review_id=state["review_id"],
+            verdict=state["last_r_verdict"], candidate_commit=state.get("candidate_commit"),
+            evidence_id=state.get("evidence_id"), reply_bytes=reply_bytes)
     if verdict == "PASS":
         state["next_action"] = "R verdict PASS. Finalize: run `done --run-id %s` after final acceptance items are complete." % state["run_id"]
     elif verdict == "REWORK":
@@ -849,6 +952,31 @@ def apply_verdict(state: dict, verdict: str | None, next_action: str, reply_path
                                 "Next: send a fresh small evidence delta and explicitly request the final verdict token.")
     if next_action and verdict in ("PASS", "REWORK"):
         state["last_r_next_action"] = next_action
+
+
+def _apply_review_bindings(state: dict, candidate_commit: str | None, evidence_id: str | None,
+                           review_id: str | None) -> dict | None:
+    """Review Result Return (V0.1-FIX-REVIEW-RESULT-RETURN): validate + persist the
+    Candidate / Evidence / Review identity bound to this RUN (RUN_ID is implicit).
+    Returns an error doc (caller emits it + EXIT_USAGE, nothing persisted) or None
+    when accepted. Empty/None inputs leave any existing durable binding untouched;
+    when a candidate is bound and no explicit review id is given, REVIEW_ID reuses
+    the existing RUN identity (run_id + review_epoch)."""
+    cand = (candidate_commit or "").strip().lower()
+    if cand and not CANDIDATE_SHA_RE.fullmatch(cand):
+        return {"status": "INVALID_CANDIDATE_COMMIT", "candidate_commit": candidate_commit,
+                "instruction": "--candidate-commit must be a full 40-hex commit SHA when provided."}
+    ev = clean_text(evidence_id or "")[:256].strip()
+    rv = clean_text(review_id or "")[:256].strip()
+    if cand:
+        state["candidate_commit"] = cand
+    if ev:
+        state["evidence_id"] = ev
+    if rv:
+        state["review_id"] = rv
+    elif cand and not state.get("review_id"):
+        state["review_id"] = "%s#epoch%s" % (state["run_id"], state.get("review_epoch", 1))
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -878,6 +1006,10 @@ def _new_run(goal: str, r_url: str, worker_id: str) -> dict:
         "last_r_next_action": "",
         "last_reply_path": None,
         "last_reply_bytes": 0,
+        "candidate_commit": None,
+        "evidence_id": None,
+        "review_id": None,
+        "review_result": None,
         "paused": False,
         "last_user_directive": None,
         "user_override": None,
@@ -940,6 +1072,79 @@ def _load_or_fail(run_id: str) -> tuple[dict | None, int]:
         return None, EXIT_USAGE
 
 
+def _taskgraph_path() -> Path:
+    return STATE_ROOT / "tasks.json"
+
+
+def _load_taskgraph() -> dict:
+    p = _taskgraph_path()
+    if not p.exists():
+        return {"schema_version": 1, "tasks": {}}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"schema_version": 1, "tasks": {}}
+
+
+def _save_taskgraph(g: dict) -> None:
+    atomic_write_text(_taskgraph_path(), json.dumps(g, ensure_ascii=False, indent=2))
+
+
+def _ready_tasks(g: dict) -> list[str]:
+    tasks = g.get("tasks", {})
+    out = []
+    for tid, t in tasks.items():
+        if t.get("state") in ("DONE", "BLOCKED"):
+            continue
+        deps = t.get("deps", [])
+        if all(tasks.get(d, {}).get("state") == "DONE" for d in deps):
+            out.append(tid)
+    return sorted(out)
+
+
+def cmd_task_add(args) -> int:
+    g = _load_taskgraph()
+    tasks = g.setdefault("tasks", {})
+    if args.task_id in tasks:
+        emit({"status": "DENIED", "reason": f"task {args.task_id} already exists"})
+        return EXIT_DENIED
+    tasks[args.task_id] = {
+        "task_id": args.task_id,
+        "deps": [d for d in (args.dep or [])],
+        "state": args.state or "READY",
+        "owner": args.owner or "",
+        "artifact": args.artifact or "",
+        "updated_at": utc_now(),
+    }
+    _save_taskgraph(g)
+    emit({"status": "OK", "task_id": args.task_id, "ready": _ready_tasks(g)})
+    return EXIT_OK
+
+
+def cmd_task_update(args) -> int:
+    g = _load_taskgraph()
+    t = g.get("tasks", {}).get(args.task_id)
+    if t is None:
+        emit({"status": "RUN_NOT_FOUND", "reason": f"task {args.task_id} missing"})
+        return EXIT_RUN_NOT_FOUND
+    if args.state:
+        t["state"] = args.state
+    if args.owner is not None:
+        t["owner"] = args.owner
+    if args.artifact is not None:
+        t["artifact"] = args.artifact
+    t["updated_at"] = utc_now()
+    _save_taskgraph(g)
+    emit({"status": "OK", "task_id": args.task_id, "state": t["state"], "ready": _ready_tasks(g)})
+    return EXIT_OK
+
+
+def cmd_task_list(args) -> int:
+    g = _load_taskgraph()
+    emit({"status": "OK", "tasks": g.get("tasks", {}), "ready": _ready_tasks(g)})
+    return EXIT_OK
+
+
 def cmd_status(args) -> int:
     state, code = _load_or_fail(args.run_id)
     if state is None:
@@ -948,6 +1153,18 @@ def cmd_status(args) -> int:
     out["allowed_actions"] = allowed_actions(state)
     emit(out)
     return EXIT_OK
+
+
+def cmd_state_verify(args) -> int:
+    result = verify_state(args.run_id)
+    emit(result)
+    return EXIT_OK if result.get("ok") else EXIT_ERR
+
+
+def cmd_state_recover(args) -> int:
+    result = recover_state(args.run_id)
+    emit(result)
+    return EXIT_OK if result.get("recovered") or result.get("reason") == "current state already valid" else EXIT_ERR
 
 
 def cmd_step(args) -> int:
@@ -1108,6 +1325,18 @@ def cmd_send(args) -> int:
                   "reason": f"send requires RUNNING; run is {state['status']}",
                   "blocked_reason": state.get("blocked_reason")})
             return EXIT_DENIED if state["status"] != "HARD_BLOCKED" else EXIT_HARD_BLOCKED
+        # Review Result Return: bind Candidate/Evidence/Review identity to this RUN
+        # durably BEFORE transport, so the binding survives even if the send fails
+        # and is present in state when R's structured verdict returns.
+        bind_err = _apply_review_bindings(state, getattr(args, "candidate_commit", None),
+                                          getattr(args, "evidence_id", None),
+                                          getattr(args, "review_id", None))
+        if bind_err:
+            emit(bind_err)
+            return EXIT_USAGE
+        if getattr(args, "candidate_commit", None) or getattr(args, "evidence_id", None) \
+                or getattr(args, "review_id", None):
+            save_state(state)
         if _check_duplicate(state, fingerprint):
             journal(args.run_id, "DUPLICATE_ACTION_BLOCKED")
             save_state(state)
@@ -1316,6 +1545,7 @@ def cmd_send(args) -> int:
           "attachment_mode": "attachment-required" if files else "text-only",
           "last_r_verdict": state["last_r_verdict"],
           "next_action": state["next_action"],
+          "review_result": state.get("review_result"),
           "files_uploaded": [Path(f).name for f, _ in delta_files],
           "files_skipped_unchanged": skipped,
           "reply_path": str(reply_file), "reply_bytes": reply_bytes})
@@ -1333,6 +1563,17 @@ def cmd_recv(args) -> int:
         except PermissionError as exc:
             emit({"status": "DENIED", "reason": f"recv requires RUNNING, run is {exc}"})
             return EXIT_DENIED
+        # Review Result Return: allow (late) binding of Candidate/Evidence/Review
+        # identity on the recv path as well; durable before any verdict is applied.
+        bind_err = _apply_review_bindings(state, getattr(args, "candidate_commit", None),
+                                          getattr(args, "evidence_id", None),
+                                          getattr(args, "review_id", None))
+        if bind_err:
+            emit(bind_err)
+            return EXIT_USAGE
+        if getattr(args, "candidate_commit", None) or getattr(args, "evidence_id", None) \
+                or getattr(args, "review_id", None):
+            save_state(state)
         sid = (state.get("session") or {}).get("sid") or ""
         rd = run_dir(args.run_id)
         reply_file = rd / f"recv_{int(time.time())}_{uuid.uuid4().hex[:6]}.txt"
@@ -1535,6 +1776,17 @@ def cmd_report(args) -> int:
 #     -> REWORK (round < max): SEND_REWORK_TO_BUILDER -> SEND_TO_REVIEWER ...
 #     -> REWORK (round >= max) / BLOCKED / NO_VERDICT / transport budget:
 #        HARD_BLOCKED (never PASS)
+#
+# Continuation (Transport/Continuation Recovery Lite, AC-T5 / AC-T6):
+#   router-run   creates a NEW router RUN then drives it in-process.
+#   router-step  advances EXACTLY ONE pending phase then exits (frozen).
+#   router-continue attaches to an EXISTING router RUN by --run-id and drives
+#     the SAME RUN / SAME durable state / SAME role binding forward through its
+#     pending phases to a terminal/bounded outcome. It is the deterministic
+#     mechanism that guarantees a phase-completed RUN is never left zombie
+#     (RUNNING + pending phase + no live driver). Terminal RUNs are reported,
+#     never resurrected; transport failure hard-blocks and can never PASS.
+#     router-step / router-run behaviour is unchanged (additive command only).
 # ---------------------------------------------------------------------------
 ROUTER_MODE = "router-v0.1"
 ROUTER_MAX_ROUNDS_DEFAULT = 3
@@ -1848,6 +2100,35 @@ def cmd_router_step(args) -> int:
     return EXIT_OK
 
 
+def _router_drive(rid: str, timeout: int, max_rounds: int) -> list[dict]:
+    """Drive one EXISTING router RUN forward through its pending phases.
+
+    Shared continuation core for router-run (immediately after it creates the
+    RUN) and router-continue (attaching to an already-created RUN). Same RUN
+    id, same durable state, same role binding; bounded step budget; fail-closed
+    on transport failure (never PASS). This is the deterministic mechanism that
+    prevents a router RUN from being left RUNNING with a pending phase and no
+    live driver (AC-T5 / AC-T6).
+    """
+    steps: list[dict] = []
+    cap = 2 * (int(max_rounds) + 2) + 4
+    for _ in range(cap):
+        with RunLock(rid):
+            st = load_state(rid)
+            if st["status"] != "RUNNING" or st["router"]["phase"] not in ROUTER_PHASES_PENDING:
+                break
+            try:
+                step = _router_step(st, timeout)
+            except RuntimeError as exc:
+                hard_block(st, "router transport failure: %s" % exc)
+                steps.append({"status": "HARD_BLOCKED"})
+                break
+        steps.append(step)
+        if not step.get("stepped"):
+            break
+    return steps
+
+
 def cmd_router_run(args) -> int:
     err, code = _router_validate_urls(args.b_url, args.r_url)
     if err:
@@ -1874,22 +2155,7 @@ def cmd_router_run(args) -> int:
     state = _router_create(goal, args.b_url, args.r_url,
                            args.worker_id or "router-v0.1", args.max_rounds)
     rid = state["run_id"]
-    steps: list[dict] = []
-    cap = 2 * (int(args.max_rounds) + 2) + 4
-    for _ in range(cap):
-        with RunLock(rid):
-            st = load_state(rid)
-            if st["status"] != "RUNNING" or st["router"]["phase"] not in ROUTER_PHASES_PENDING:
-                break
-            try:
-                step = _router_step(st, args.timeout)
-            except RuntimeError as exc:
-                hard_block(st, "router transport failure: %s" % exc)
-                steps.append({"status": "HARD_BLOCKED"})
-                break
-        steps.append(step)
-        if not step.get("stepped"):
-            break
+    steps = _router_drive(rid, args.timeout, args.max_rounds)
     final = load_state(rid)
     if final["status"] == "DONE":
         status = "ROUTED_PASS"
@@ -1910,6 +2176,65 @@ def cmd_router_run(args) -> int:
     return EXIT_OK if status == "ROUTED_PASS" else (EXIT_HARD_BLOCKED if status == "HARD_BLOCKED" else EXIT_ERR)
 
 
+def cmd_router_continue(args) -> int:
+    """Deterministic same-RUN continuation (AC-T5 / AC-T6).
+
+    Attaches to an EXISTING router RUN (no new RUN, no new role binding) and
+    drives it forward through its pending phases to a terminal or bounded
+    outcome. Resolves the zombie state 'RUNNING + pending phase + no live
+    driver': after a phase completed and the previous driver process exited,
+    router-continue resumes the SAME RUN / SAME state / SAME role binding at
+    the NEXT PHASE. Idempotent and fail-closed: a terminal RUN is reported and
+    never resurrected; transport failure hard-blocks and can never PASS.
+    """
+    state, code = _load_or_fail(args.run_id)
+    if state is None:
+        return code
+    if state.get("mode") != ROUTER_MODE:
+        emit({"status": "DENIED",
+              "reason": "router-continue requires a router RUN (mode=%s)" % state.get("mode")})
+        return EXIT_DENIED
+    rid = args.run_id
+    if state["status"] != "RUNNING":
+        emit({"status": state["status"], "continued": False, "run_id": rid,
+              "run_status": state["status"], "mode": ROUTER_MODE,
+              "phase": state["router"]["phase"],
+              "note": "router RUN is terminal; nothing to continue (not resurrected)"})
+        return EXIT_OK if state["status"] == "DONE" else EXIT_HARD_BLOCKED
+    # Runtime-owned prerequisite chain (same as router-run / production `work`).
+    health = ensure_bridge_ready(force=True)
+    if not health.get("ready"):
+        detail = str(health.get("detail", ""))
+        status = ("RUNTIME_ENV_BLOCKED" if detail.startswith("RUNTIME_ENV_BLOCKED")
+                  else "RUNTIME_BROWSER_BLOCKED" if detail.startswith("RUNTIME_BROWSER_BLOCKED")
+                  else "BRIDGE_UNHEALTHY")
+        emit({"status": status, "detail": detail, "continued": False, "run_id": rid,
+              "instruction": "Runtime could not bring the bridge up. Report this output to the user; "
+                             "do not research the bridge, browser, or daemon."})
+        return EXIT_ERR
+    journal(rid, "ROUTER_CONTINUE", phase=state["router"]["phase"])
+    max_rounds = int(state["router"].get("max_rounds", ROUTER_MAX_ROUNDS_DEFAULT))
+    steps = _router_drive(rid, args.timeout, max_rounds)
+    final = load_state(rid)
+    if final["status"] == "DONE":
+        status = "ROUTED_PASS"
+    elif final["status"] == "HARD_BLOCKED":
+        status = "HARD_BLOCKED"
+    else:
+        status = "IN_PROGRESS"
+    emit({"status": status, "continued": True, "run_id": rid, "run_status": final["status"],
+          "mode": ROUTER_MODE, "phase": final["router"]["phase"],
+          "rounds": final["router"]["round"], "last_r_verdict": final.get("last_r_verdict"),
+          "role_urls": final["role_urls"],
+          "builder_session": final["role_sessions"]["builder"].get("sid"),
+          "reviewer_session": final["role_sessions"]["reviewer"].get("sid"),
+          "steps_executed": len(steps),
+          "state_path": str(run_dir(rid) / "state.json"),
+          "instruction": ("ROUTED_PASS=delivered; HARD_BLOCKED=read blocked_reason and report; "
+                          "IN_PROGRESS=re-run router-continue to keep driving the same durable RUN.")})
+    return EXIT_OK if status == "ROUTED_PASS" else (EXIT_HARD_BLOCKED if status == "HARD_BLOCKED" else EXIT_ERR)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -1923,6 +2248,20 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--worker-id", dest="worker_id", default=None)
 
     s = sub.add_parser("status"); s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("state-verify"); s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("state-recover"); s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("task-add")
+    s.add_argument("--task-id", dest="task_id", required=True)
+    s.add_argument("--dep", action="append", default=[])
+    s.add_argument("--state", default="READY")
+    s.add_argument("--owner", default="")
+    s.add_argument("--artifact", default="")
+    s = sub.add_parser("task-update")
+    s.add_argument("--task-id", dest="task_id", required=True)
+    s.add_argument("--state", default=None)
+    s.add_argument("--owner", default=None)
+    s.add_argument("--artifact", default=None)
+    s = sub.add_parser("task-list")
     s = sub.add_parser("step")
     s.add_argument("--run-id", dest="run_id", required=True)
     s.add_argument("--current", required=True)
@@ -1942,8 +2281,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--file", action="append")
     s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
     s.add_argument("--force-health", dest="force_health", action="store_true")
+    s.add_argument("--candidate-commit", dest="candidate_commit", default=None)
+    s.add_argument("--evidence-id", dest="evidence_id", default=None)
+    s.add_argument("--review-id", dest="review_id", default=None)
 
-    s = sub.add_parser("recv"); s.add_argument("--run-id", dest="run_id", required=True)
+    s = sub.add_parser("recv")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--candidate-commit", dest="candidate_commit", default=None)
+    s.add_argument("--evidence-id", dest="evidence_id", default=None)
+    s.add_argument("--review-id", dest="review_id", default=None)
     s = sub.add_parser("done"); s.add_argument("--run-id", dest="run_id", required=True)
     s = sub.add_parser("metrics"); s.add_argument("--run-id", dest="run_id", required=True)
     s = sub.add_parser("health"); s.add_argument("--force", action="store_true")
@@ -1977,6 +2323,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--worker-id", dest="worker_id", default=None)
     s.add_argument("--max-rounds", dest="max_rounds", type=int, default=ROUTER_MAX_ROUNDS_DEFAULT)
     s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
+
+    s = sub.add_parser("router-continue")
+    s.add_argument("--run-id", dest="run_id", required=True)
+    s.add_argument("--timeout", type=int, default=DEFAULT_SEND_TIMEOUT)
     return p
 
 
@@ -1991,9 +2341,12 @@ def main() -> int:
         return EXIT_USAGE if exc.code else EXIT_OK
     handler = {
         "start": cmd_start, "status": cmd_status, "step": cmd_step, "directive": cmd_directive,
+        "state-verify": cmd_state_verify, "state-recover": cmd_state_recover,
+        "task-add": cmd_task_add, "task-update": cmd_task_update, "task-list": cmd_task_list,
         "send": cmd_send, "recv": cmd_recv, "done": cmd_done, "metrics": cmd_metrics, "health": cmd_health,
         "work": cmd_work, "report": cmd_report,
         "router-start": cmd_router_start, "router-step": cmd_router_step, "router-run": cmd_router_run,
+        "router-continue": cmd_router_continue,
     }[args.command]
     run_id = getattr(args, "run_id", None)
     try:

@@ -1,0 +1,62 @@
+=== RUNTIME ===
+0 | runtime/test_ec_gate_offline.py | Ran 18 tests in 7.993s OK 
+0 | runtime/test_ec_lite_offline.py | Ran 10 tests in 6.151s OK 
+0 | runtime/test_ec_router_telemetry_offline.py | Ran 9 tests in 16.889s OK 
+0 | runtime/test_ec_telemetry_offline.py | Ran 10 tests in 8.132s OK 
+0 | runtime/test_effect_safety_offline.py | Ran 5 tests in 0.030s OK 
+0 | runtime/test_goal_contract_offline.py | Ran 19 tests in 2.957s OK 
+0 | runtime/test_harness_verify_offline.py | Ran 11 tests in 2.697s OK 
+0 | runtime/test_review_result_offline.py | TOTAL=23 PASS=23 FAIL=0 
+0 | runtime/test_router_offline.py | TOTAL=54 PASS=54 FAIL=0 
+0 | runtime/test_runtime_offline.py | TOTAL=55 PASS=55 FAIL=0 
+0 | runtime/test_send_guard_offline.py | Ran 3 tests in 2.157s OK 
+0 | runtime/test_state_recovery_offline.py | Ran 2 tests in 0.040s OK 
+0 | runtime/test_strategic_brain_contract_offline.py | Ran 18 tests in 0.001s OK 
+0 | runtime/test_strategic_correction_offline.py | Ran 28 tests in 0.002s OK 
+0 | runtime/test_strategic_integration_offline.py | Ran 14 tests in 0.004s OK 
+0 | runtime/test_strategic_reuse_contract_offline.py | Ran 30 tests in 0.002s OK 
+0 | runtime/test_taskgraph_offline.py | Ran 2 tests in 1.066s OK 
+0 | runtime/test_v07_integration_candidate_offline.py | Ran 11 tests in 0.020s OK 
+0 | runtime/test_v07_integration_contract_matrix_offline.py | Ran 9 tests in 0.003s OK 
+0 | runtime/test_v08_adapter_core_offline.py | Ran 44 tests in 0.480s OK 
+0 | runtime/test_v08_adapter_evidence_offline.py | Ran 27 tests in 6.833s OK 
+0 | runtime/test_v08_adapter_registry_offline.py | Ran 7 tests in 0.045s OK 
+SKIP_FROZEN runtime/test_v09_attack_matrix_offline.py
+0 | runtime/test_v09_attack_matrix_on_b1_core.py | 
+0 | runtime/test_v09_close_egress_wiring_offline.py | Ran 11 tests in 0.876s OK 
+0 | runtime/test_v09_effect_core_offline.py | Ran 13 tests in 0.065s OK 
+0 | runtime/test_weak_ai_acceptance_offline.py | Ran 1 test in 0.650s OK 
+=== TESTS ===
+0 | test_context.py | OK 
+0 | test_controller_runpipeline.py | OK 
+0 | test_core.py | OK 
+0 | test_directives.py | OK 
+0 | test_driver_restart.py | OK 
+0 | test_lineage.py | OK 
+0 | test_lineage_release.py | OK 
+0 | test_m05_hardening.py | OK 
+0 | test_m1_adapters.py | OK 
+0 | test_pipeline.py | OK 
+0 | test_pipeline_worker.py | OK 
+0 | test_spine.py | OK 
+0 | test_v09_authority_store.py | OK 
+0 | test_v09_close_classification.py | OK 
+0 | test_v09_close_fence.py | OK 
+0 | test_v09_close_reconcile.py | OK 
+0 | test_v09_close_role_binding.py | OK 
+0 | test_v09_close_unknown_gate.py | OK 
+0 | test_workflow.py | OK 
+=== MATRIX ===
+  "AD-2": "intent carries explicit effect_type/data_classification required by b1 execute_effect",
+  "AD-7": "R34 original pass scored with issuance-vs-execution side attribution (T9 dual-sided fail-closed)"
+ "case_count": 36,
+ "matched": 36,
+ "red": 0,
+V09-R11   exp=DENY                       obs=DENY                         MATCH  | GateDenied: authorization expired
+V09-R30   exp=DENY_OR_REDACT             obs=DENY_OR_REDACT               MATCH  | {"candidates": 1, "findings": [{"finding": "credential-like material", "path": "C:\\User
+V09-R34   exp=FAIL_CLOSED                obs=FAIL_CLOSED                  MATCH  | AD-7 closed at issuance_side(store.grant_authorization): GateDenied: effect_type is outs
+V09-R34-FAITHFUL   exp=FAIL_CLOSED  obs=FAIL_CLOSED  MATCH  | closed at issuance_side(store.grant_authorization): GateDenied: effect_type is outside t
+=== DOCTOR ===
+WARN: journal staleness | updated_at=2026-08-17 but latest commit=2026-08-29 (>7 days): docs lagging code
+DRIFT: registered head mismatch | expected=v0.9-b1/authority-effect-core@c6d1a55b | actual=v0.9-b1/authority-effect-core@249e1370
+DRIFT_COUNT=1

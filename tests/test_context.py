@@ -59,8 +59,11 @@ class ContextFixture(unittest.TestCase):
         # Create and start an external effect whose outcome is unknown, so the
         # capsule must surface it as UNKNOWN rather than pretending completion.
         lease = self.controller.acquire_lease()
+        # AD-6: b1 binds an authorization to the issuing controller instance, so the
+        # scope must carry that identity or the effect never starts (see matrix AD-1).
         scope = {"provider": "test", "destination": "test", "purpose": "ctx",
-                 "effect_type": "AI_MESSAGE", "data_classes": ["PUBLIC"]}
+                 "effect_type": "AI_MESSAGE", "data_classes": ["PUBLIC"],
+                 "identity": self.controller.controller_instance_id}
         nonce = self.controller.store.issue_decision_nonce(self.task_id, scope, user_decision_reference="ctx")
         auth = self.controller.store.grant_authorization(
             self.task_id, nonce["decision_nonce"], scope, provider="test", resource="test",
@@ -73,6 +76,11 @@ class ContextFixture(unittest.TestCase):
             "resource": "test", "payload_hash": sha256_text("p"), "critical_params": {},
             "purpose": "ctx", "logical_effect_slot": "CTX_UNKNOWN", "retry_semantics": "RECONCILE_REQUIRED",
             "impact": "LOW", "reversibility": "REVERSIBLE", "effect_scope": "EXTERNAL",
+            # AD-6: b1's execute_effect requires these two bindings (see V09-R33, which
+            # expects FAIL_CLOSED when they are absent). Without them no reservation is
+            # ever created, so the capsule had no OUTCOME_UNKNOWN effect to preserve and
+            # the assertions below tested nothing. Product code is deliberately unchanged.
+            "effect_type": "AI_MESSAGE", "data_classification": "PUBLIC",
         }
         try:
             self.controller.execute_effect(
