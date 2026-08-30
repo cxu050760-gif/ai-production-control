@@ -21,7 +21,7 @@
 - next_exact_actions: `USER-PROVIDED BREAKTHROUGH: E:\WB\tools\bsk-file-bridge\reports\ENTRY_README.md (old bridge) confirms the correct A08/A09 path: bsk daemon (port 52900) + Chrome extension connects to the REAL running production Chrome (default profile, already logged into ChatGPT) - NO profile copying needed (their README explicitly forbids it, matching F004). Concrete steps for any successor: (1) start daemon non-blocking: bsk.exe daemon start --port 52900 (NOTE: it is a foreground blocking command - launch via Start-Process or background job, NOT direct RunCommand); (2) verify extension connection via bsk.exe status (project runtimes.py bsk_status already wraps this); (3) reuse yz_lib.sh proven functions (yz_acquire_conv/yz_send_text/yz_grab_reply at E:\WB\workspace\2026-08-16-21-49-32\work\yz_lib.sh) as reference for conversation acquire/send/grab via bsk; (4) route acceptance.py chatgpt_call through bsk adapter (config already has bsk_executable/bsk_home/bsk_daemon_port=52900/bsk_extension), (5) rerun acceptance -> release candidate -> digest verify -> final report. User's Chrome (16 procs) was running during takeover; bsk.exe process alive but port 52900 NOT listening yet.`
 - resume_information: `read this journal + V14-FROZEN spec at prompt_source path; TCB gen6 is current; git HEAD = baseline; acceptance manifest lands in E:\WB\outputs\ai-production-control`
 - latest_context_capsule_version: `capsule-via-acceptance runner pending`
-- updated_at: `2026-08-17T20:10:00+08:00`
+- updated_at: `2026-08-30`
 
 ## V0.9 CLOSE 施工检查点（Builder，actor=Builder；裁决来源 = 用户 2026-08-28 裁决 + 主脑规格 V09_CLOSE_BUILD_SPEC + 裁决书 R1/R2、R18、R3/R4）
 
@@ -49,3 +49,11 @@
   (b) HARD STOP——9 例 egress 判定为缺陷（egress 许可 key 无生产者），未改测试、未改期望，见 D010。
 
 - 2026-08-29 final-batch checkpoint（流 A 收口，actor=Builder 寇豆码 + 主理人齐活林接管）：8 处 start-like 调用三门场景构造落地（send_guard 2/ec_gate 2/ec_telemetry 4）+ 新增 test_v09_close_egress_wiring_offline.py 11 例（FINALBATCH §3.2 全项）。全量验证：矩阵 36/36 red=0 + R34 FAIL_CLOSED；tests/ 19 文件全绿；CLOSE 40 全绿；runtime 25/26 exit 0（唯一例外 harness_verify 环境变量超长噪声，剔除后 11/11 OK）；doctor 零新增漂移（仅 §7.8 豁免项）。AD-8 登记册 docs/evidence/v09-close/AD8-REGISTRY-final-batch.md；D016 CLOSED。release_status 维持 PRODUCT_NOT_READY；TCB 封印未执行（发布负责人职责，维持 UNVERIFIED_AFTER_CONTROLLER_CHANGE）。
+
+## 2026-08-29 晚 ~ 2026-08-30 收束大事记（口径批补记，B-3；actor=recovery-controller）
+
+- **8-29 晚（GLM/DeepSeek 会话，章程 v4.4 全权委托）**：开工自检 4/4 → 流 Zero（宪法文档+谱系+修订史+版本对照入仓 docs/canon/，QA 7/7）→ 流 A（V0.9 CLOSE 最终批：8 处三门构造 + 11 例接线，矩阵 36/36 red=0，AD-8/D016，双轮审查 PASS）→ 流 E（9 裁决书+R18+章程双哈希+BUILD_SPEC+Q5 版本阶梯入仓 docs/governance/，QA 7/7）→ 流 B（冻结快照+盘点 38/18/9+大文件索引+敏感清单+融合评估 13 候选，双轮 PASS）→ 流 C/D（真实 GOAL 第一批 3 次 b173/b718/7cfe 全 DONE+PASS = V1.0"连续三次"判据；V0.11 三案例；成熟度报告）。
+- **8-29 23:40~8-30 01:10（恢复控制会话，DeepSeek-V4-Flash）**：中继 construction-relay 恢复运行（心跳 PID 17360，V07-INTEGRATE-2 隔离 quarantine）；本地链资产收束第一刀（3 手册逐字节入仓 docs/canon/zh_cn/ + 2 索引 docs/ops/）；Brain 激活（brain_bridge 复用 strategic_brain_contract，Goal→Task Graph）；Capsule 接入（capsule_bridge 机械续跑）；真实 GOAL 第二批 5 次（ff88/41b4/cfb5/c33e/37d9）全 DONE+PASS（含 4+8 次 REWORK 返工闭环）；Task Graph 双视图 human_view；state 完整性 verify；《继任者真相互相报告 + 20 次自我攻击》。
+- **8-30（主脑裁决批 1）**：MAINBRAIN_RULING_E1-E4_BATCH 入仓（D018）：E1 封印后置/E2 release 维持 PRODUCT_NOT_READY/E3 master 后移/E4 累积清单逐项（B-5 勘误 6 处、G-2 ROADMAP 入仓+PROJECT_STATE 登记、P0 备份 7 项 260MB 至 E:\WBackups\、C-1 沙箱破坏演练恢复案例 FULL、C-3 矩阵 v3 §56/§63/§65 降级 41/35/1、W-1 方案只出稿、S-02/03/06 轮换清单业主执行）。
+- **8-30（第二团审计）**：AUDIT_REPORT_2026-08-30 16 项 15 PASS/1 REWORK/0 BLOCKED（D019，commit 5e4f86d）；REWORK 项 = 计数口径不一致（真实 GOAL 8/5/4/3 四处、REWORK 轮次 11 vs 实测 12），非实质缺陷。
+- **8-30（主脑裁决批 2 = 本口径批）**：MAINBRAIN_RULING_COUNT_CALIBRATION_AND_SIGN_ROADMAP 入仓（D020）：B-1 真实 GOAL 权威口径 = 累计 8（第一批 3 + 第二批 5）全 DONE+PASS，术语表 docs/governance/GLOSSARY.md；B-2 返工轮次 = reply 中 ===REVIEW_VERDICT=== REWORK 判定计数，重数全部 8 个 RUN = 16 轮（4+12，与审计实测一致）；B-3 本 journal 补记 + capsule 计数 9→13；§74 签字路线图（口径批→封印→签字→master 汇合→ARCHIVE）。

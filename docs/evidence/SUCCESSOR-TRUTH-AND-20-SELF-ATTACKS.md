@@ -47,7 +47,7 @@
 - 本会话新增模块测试全绿：brain_bridge 10 + capsule_bridge 13 + strategic 90 + context 5 + lineage 8 = 126+
 - 矩阵 36/36（此前流 A 达成）；生产 Runtime 冻结回归 55/55
 
-### 3.4 真实 GOAL 记录（本会话 5 次，全 PASS）
+### 3.4 真实 GOAL 记录（第二批 5 次，全 PASS；累计 8 次 = 第一批 3 + 第二批 5，全部 DONE+PASS）
 | RUN | 类型 | 结果 |
 |---|---|---|
 | RUN-...-ff88 | 状态真源核验 | PASS |

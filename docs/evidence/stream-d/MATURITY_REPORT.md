@@ -6,7 +6,7 @@
 
 ## 0. 总评
 
-执衡系统六大组成**全部存在且已收束**；V0.9 CLOSE 全量绿（矩阵 36/36）、连续 3 次真实 GOAL 全绿（R 强模型 PASS）、治理文档全量入仓。V1.0 出口判据全部达成（**工程判据口径，章程 §10；非定义 §74 FINAL DONE**；见 §7）；FINAL DONE 待 §10 末条：团内独立审查通过 + 业主裁决。
+执衡系统六大组成**全部存在且已收束**；V0.9 CLOSE 全量绿（矩阵 36/36）、连续 3 次真实 GOAL 全绿（第一批，R 强模型 PASS；累计 8 次（3+5）全部 DONE+PASS）、治理文档全量入仓。V1.0 出口判据全部达成（**工程判据口径，章程 §10；非定义 §74 FINAL DONE**；见 §7）；FINAL DONE 待 §10 末条：团内独立审查通过 + 业主裁决。
 
 ## 1. 仓库（代码+治理）— VERIFIED
 
@@ -25,7 +25,7 @@
 ## 3. E:\执衡（证据/手册/会话注册）— VERIFIED
 
 - 手册 7 文件（8-20）+ 8-28 强模型双报告（防误导/能力审计）已读并采信
-- 04_测试证据 1022 文件/198MB（P0 备份清单）；会话注册 R-PROD 现役（流 C 3 次真实评审全部经此会话）
+- 04_测试证据 1022 文件/198MB（P0 备份清单）；会话注册 R-PROD 现役（流 C 3 次真实评审（第一批）全部经此会话）
 - 成果回流：流 B 索引 + 流 C 真实证据入仓（docs/evidence/stream-c/）
 
 ## 4. 输出根 E:\WB\outputs\ai-production-control — VERIFIED
@@ -35,7 +35,7 @@
 ## 5. 接入设施 — VERIFIED（零改动）
 
 - catpaw 反代：32177 LISTENING（PID 22944）LIVE_PASS，零改动（实测 8-29）
-- bsk daemon（52900）+ chatgpt_bridge（冻结）+ Runtime V1 run.cmd（生产现役）：流 C 3 次真实 GOAL 全链路经此通道，bridge READY 稳定
+- bsk daemon（52900）+ chatgpt_bridge（冻结）+ Runtime V1 run.cmd（生产现役）：流 C 3 次真实 GOAL（第一批）全链路经此通道，bridge READY 稳定
 - 缺口：G-5 bridge download 未开发（未来项）；G-14 yz_lib.sh 迁移建议（已登记）
 
 ## 6. 融合资源池 — VERIFIED（决策已记录）
@@ -48,7 +48,7 @@
 
 | 判据 | 达成 | 证据 |
 |---|---|---|
-| 连续 3 次真实 GOAL 全绿 | ✅ | RUN-b173/b718/7cfe 全部 DONE+PASS（R 强模型真实评审；含 REWORK 返工闭环） |
+| 连续 3 次真实 GOAL 全绿 | ✅ | RUN-b173/b718/7cfe 全部 DONE+PASS（判据口径=第一批 3；累计 8 次（3+5）全 PASS） |
 | TCB 重封记录 | ✅（记录） | G-6 禁止 seal（UNVERIFIED_AFTER_CONTROLLER_CHANGE）；封印须发布负责人/业主裁决后执行——见流 D 结果块 §5 |
 | 《系统成熟度报告》 | ✅ | 本文件（六大组成全覆盖） |
 | release_status 建议 | ✅ | 建议维持 PRODUCT_NOT_READY 至（a）TCB 封印执行（b）业主 V1.0/FINAL DONE 裁决；届时建议晋升（见流 D 结果块 §6） |

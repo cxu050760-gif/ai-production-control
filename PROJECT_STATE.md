@@ -14,15 +14,15 @@
 
 | 概念 | 值 | 等级 |
 |---|---|---|
-| 当前开发头 | `v0.9-b1/authority-effect-core@a7befcb`（2026-08-30，含 Brain/Capsule 激活、5 次真实 GOAL 证据、V1.0 收束报告） | VERIFIED |
+| 当前开发头 | `v0.9-b1/authority-effect-core@a7befcb`（2026-08-30，含 Brain/Capsule 激活、累计 8 次真实 GOAL（3+5）证据、V1.0 收束报告） | VERIFIED |
 | 当前被接受基线 | `v0.8-integrate/adapter-final-4@e8c53d4a`（v0.9 证据模块硬编码指认） | VERIFIED |
-| 最后绿基线 | v0.9-b1（112+ 测试全绿 + 5 次真实 GOAL 全 PASS；正式封绿待业主裁决） | VERIFIED + 限定 |
+| 最后绿基线 | v0.9-b1（112+ 测试全绿 + 累计 8 次真实 GOAL（3+5）全 PASS；正式封绿待业主裁决） | VERIFIED + 限定 |
 | master | `@4cf41fd`，MERGED_BASELINE_STALE（落后开发头 90+ 提交）；**合并裁决暂缓（E3 待业主）** | VERIFIED |
 
 ## 当前阻塞（2026-08-30 状态）
 
 1. **BLK-1** ~~完整 V0.9 规范未入库~~ → 已由流 Zero 入仓（docs/canon/），CLOSED
-2. **BLK-2** ~~无通用 Goal Worker~~ → 5 次真实 GOAL 全 PASS（RUN-ff88/41b4/cfb5/c33e 等），CLOSED
+2. **BLK-2** ~~无通用 Goal Worker~~ → 累计 8 次真实 GOAL（3+5）全 PASS（第二批含 RUN-ff88/41b4/cfb5/c33e/37d9），CLOSED
 3. **BLK-3** ~~权限闸门 16 例攻击案例应 DENY 却 ALLOW~~ → 流 A 三门构造后矩阵 36/36 red=0，CLOSED
 4. **BLK-4** reconciliation API → 记录在案，待后续版本
 

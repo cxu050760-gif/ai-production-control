@@ -181,7 +181,7 @@
 
 - decision 3（Capsule 接入）：写 capsule_bridge.py，RUN state.json→机械 Context Capsule（facts + resume instruction），复用 M2 Context Capsule 设计（机械投影、non_authority、§24 记忆不是 Truth）。
 - reason：定义 §27 新 AI 接管应机械续跑；M2 只完成模块未接端到端，本会话补上接线。
-- evidence：commit 6aeebe3，capsule_bridge 9 测试绿，真实 RUN 演示 DONE 续跑指引。
+- evidence：commit 6aeebe3，capsule_bridge 13 测试绿（计数 2026-08-30 口径批刷新 9→13，实测 Ran 13 tests OK），真实 RUN 演示 DONE 续跑指引。
 
 - decision 4（V1.0 判定）：工程判据（§74 中机器验证/Evidence/R PASS/绑定）达成；FINAL DONE 按定义须业主裁决（§74 末条 + 章程 §10），本会话不擅自宣布完成。
 - reason：定义明文「任何单一角色声称完成均无效」；防自封是系统灵魂。

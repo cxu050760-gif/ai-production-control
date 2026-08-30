@@ -14,7 +14,7 @@
 
 ## 本会话新增提交（V1.0 收束推进）
 - b274b4f: feat(brain) Brain 激活（brain_bridge + 8 测试）
-- 6aeebe3: feat(capsule) Capsule 接入恢复（capsule_bridge + 9 测试）
+- 6aeebe3: feat(capsule) Capsule 接入恢复（capsule_bridge + 13 测试，计数 2026-08-30 刷新 9→13）
 - （本提交）: 生产目标 #1 证据
 
 ## 状态

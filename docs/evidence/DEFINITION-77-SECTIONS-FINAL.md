@@ -18,14 +18,14 @@
 | §6 | 核心角色 | ✅ | O/B/C/R/EC/Runtime 全在案 |
 | §7 | Brain | ✅ | brain_bridge 激活（10 测试） |
 | §8/§9 | C 纠偏+独立性 | ✅ | strategic_correction 287 行契约 PASS |
-| §10 | Worker | ✅ | 5 次真实 GOAL |
+| §10 | Worker | ✅ | 累计 8 次真实 GOAL（第一批 3 + 第二批 5） |
 
 ## §11-§20
 
 | 节 | 内容 | 状态 | 证据 |
 |---|---|---|---|
 | §11 | EC 执行纠偏 | ✅ | ec_lite.py（含 NO_PROGRESS 检测） |
-| §12 | R 独立审查 | ✅ | 6 次真实 R 审查（11 轮 REWORK） |
+| §12 | R 独立审查 | ✅ | 8 个真实 GOAL 终审全 PASS（16 轮 REWORK 判定：4+12） |
 | §13 | 三纠错不混淆 | ✅ | EC≠C≠R 分置 |
 | §14 | Lifecycle Controller | ✅ | 中继恢复运行 |
 | §15 | 跨回合自动继续 | ✅ | 多轮 REWORK 自动重交 |
@@ -104,7 +104,7 @@
 | §66 | Stable/Candidate | ✅ | StableLineage 8 测试绿 |
 | §67 | Rollback | ✅ | lineage.rollback |
 | §68 | 自举 | 🟡 | V1.0 后启动 |
-| §69 | 每阶段可用产品 | ✅ | 5 次真实 GOAL |
+| §69 | 每阶段可用产品 | ✅ | 累计 8 次真实 GOAL（3+5） |
 | §70 | Trace | 🟡 | 账本有 |
 
 ## §71-§76

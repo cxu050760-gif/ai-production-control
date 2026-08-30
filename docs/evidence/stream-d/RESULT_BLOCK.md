@@ -6,8 +6,8 @@
 
 | 案例 | 证据 | 位置 |
 |---|---|---|
-| 成功 ×3 | 真实 GOAL b173/b718/7cfe 全部 DONE+PASS（R 强模型评审，reply 含 ===REVIEW_VERDICT=== PASS + ===CHATGPT_DONE=== marker） | E:\WB\state\...\runs\RUN-20260829-{223254-b173,223925-b718,224224-7cfe}\ |
-| 返工 ×3 | 三次真实 REWORK→PASS 闭环（R 指令逐条执行：①补可审计证据 ②完整 SHA256 ③未修改证据+HEAD 精确一致 ④短/长 SHA 澄清 ⑤failures=0 ⑥doctor 口径 ⑦26 条口径权威确认 AD-9） | 同 RUN 目录（contract_bound_report×N）；docs/evidence/stream-c/ |
+| 成功 ×3 | 真实 GOAL b173/b718/7cfe 全部 DONE+PASS（=第一批 3，V1.0"连续三次"判据口径；累计 8 次（3+5）全 PASS，见 `docs/governance/GLOSSARY.md`；R 强模型评审，reply 含 ===REVIEW_VERDICT=== PASS + ===CHATGPT_DONE=== marker） | E:\WB\state\...\runs\RUN-20260829-{223254-b173,223925-b718,224224-7cfe}\ |
+| 返工 ×3 | 三次真实 REWORK→PASS 闭环（=第一批 3 个 RUN 各含 1~2 次 REWORK 判定，共 4；累计 16 轮 REWORK 判定（第一批 4 + 第二批 12），见 GLOSSARY；R 指令逐条执行：①补可审计证据 ②完整 SHA256 ③未修改证据+HEAD 精确一致 ④短/长 SHA 澄清 ⑤failures=0 ⑥doctor 口径 ⑦26 条口径权威确认 AD-9） | 同 RUN 目录（contract_bound_report×N）；docs/evidence/stream-c/ |
 | 恢复 | state-verify b173 → ok=true integrity ok（revision 6）；state-recover b173 → "current state already valid"（真实执行恢复机制）；检查点 HANDOFF-20260829-...（249e137 提交）→ 本会话续作恢复。**证据强度：FULL**（C-1 沙箱破坏演练已补：沙箱内损坏 revision→mismatch 检测→recover 回滚 revision 5→复验 ok，见 `docs/evidence/stream-d/RECOVERY-DRILL-C1-20260830.md`） | runtime state-recover 输出；docs/evidence/HANDOFF-20260829-stream-zero-A-E-B-closed.md；RECOVERY-DRILL-C1-20260830.md |
 
 ## 2. V1.0 判据达成（§10 · 工程判据口径，非定义 §74 FINAL DONE）
