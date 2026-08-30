@@ -152,6 +152,25 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 
 > **执行顺序原则（业主 2026-08-30 指令）**：①需要**人参与的实测**（弱模型会话、API key、真实目标）一律标 ⚠ **暂缓·等人**，排在机器可完成工作之后；②不需要人参与的（代码/脚本/registry/测试套件/文档）先全部做完；③"机器验证"（测试/矩阵/doctor）不算实测，每刀必须做；④每刀过 §17 审核硬门禁后才算完成。
 
+### 8a. 并行任务矩阵（业主允许多会话并行）
+
+| 可并行会话（互不抢文件） | 文件域 | 备注 |
+|---|---|---|
+| S1：R1 守护层 + A1 自动调度接线 | `scripts/guard/`、relay 相关 | A1 依赖 R1 完成后才动手 |
+| S2：R2 能力注册表 + 资产接入 | `config/capability-registry.json`、`docs/ops/registry-*` | 纯数据/脚本 |
+| S3：R3 四动词补齐 + 一页卡 + §71 视图 | `runtime/` 新命令文件、`docs/ops/blackbox-card*` | 新增走独立模块+薄入口 |
+| S4：D3 Playwright+download + D4 测试套件 | `runtime/` 测试文件、`docs/evidence/reviews/` | 等 R1/R2 基础 |
+
+**主会话职责**：用户指定一个会话为"主"，负责 `docs/DECISION_LEDGER.md`/`PROJECT_STATE.*`/`state/branch_registry.json`/本报告的合并与治理同步；其他会话只写自己文件域 + 自己的 `docs/evidence/HANDOFF-CP-<日期>-<序号>-<会话名>.md`。**并行 git 纪律（重申）**：开工 fetch、提交前 pull --rebase、push 串行（主会话协调）、禁 force、冲突先沟通。
+
+### 8b. 测试分层（人参与点边界·写死）
+
+- **L1 机器自测（自己跑，绝不找业主）**：单元测试、矩阵 36/36、doctor、编译、lint、脚本自检——每刀必做，跑不过=代码没做完。
+- **L2 模拟实测（自己跑，绝不找业主）**：mock Provider 调用、事件触发式流转测试、模拟损坏/断网/超时、沙箱演练——能用 mock/沙箱/模拟完成的真实感测试，全部自己做。
+- **L3 真实实测（唯一可留业主的点）**：真实弱模型会话（混元3/豆包）实测、真实 API key 调用（LiteLLM→真 Provider）、真实多 Worker 生产并行、业主真实目标走 §3 全自动、§74 终裁。**只有 L3 才能找业主**；把 L2 当 L3 推给业主 = 违反本条，属工作未完成。
+
+**"代码开发相关必须全部跑完"定义**：R1-R3/A1/D1(mock)/D2/D3/D4/D5(mock 部分)/D6 机器复核 = 全部必须做完；仅 §3 真实目标终验、§5 真实 Provider 替换、§4 真实交付、§74 终裁 4 项属 L3 留业主。
+
 | 阶段 | 内容 | 对应节 | 验收 |
 |---|---|---|---|
 | **R1 守护层** | **可执行规格**：①先查 Trae-Ralph 的中继启动入口（package.json scripts 或 relay start 命令）；**兜底命令（已实测可用）**：watcher=`node src/review-relay.js watch --config "E:\WB\state\ai-production-control\construction-relay\relay.config.json"`；guard=`node src/relay/outer-guard.js watch --config <同 config>`（工作目录 `E:\WB\tools\Trae-Ralph`）；都不得接 tail/head 管道（坑 4）。查到官方入口优先，查不到用兜底——**不得因入口不明而停**；②写 `scripts/guard/guard_all.cmd`：a) 读 `construction-relay/watcher-heartbeat.json` 的 `at`，**超 300 秒**视为死 → `taskkill /F /T` 进程树 → 重启 watcher+guard（**不得接 tail/head 管道**，坑 4）；b) 查 52900 无监听 → 拉 bsk daemon；c) 查 Chrome 扩展连接 → 断则**记录+提示**（不自动开 Chrome，避免触发人工确认边界，见 §39），此项**不阻塞其他自愈动作**；d) 查 state.json 完整性 → 坏则 state-recover；e) 每动作追加 `construction-relay/guard-actions.ndjson` 记账；③注册计划任务 `schtasks /create /tn "ZhihengGuard" /tr "<guard_all.cmd 全路径>" /sc minute /mo 2 /f`（开机自启、与 AI 会话无关）；④验证：人为改旧心跳时间戳触发一次自愈（快速验证，不必等 72h），确认账本有记录 | §14/§61 | 触发式自愈实测 1 次成功；账本有记录；`schtasks /query /tn ZhihengGuard` 存在 |
