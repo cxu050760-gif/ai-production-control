@@ -229,3 +229,10 @@
 - 执行顺序：Part 1 封印 → Part 2 签字文书 → Part 3 汇合（merge+tag+PROJECT_STATE+registry+push）→ doctor 零豁免 → 结果块
 - 停止条件：任何冲突/意外提交/封印影响测试 = 立即停止升级
 - status: ACTIVE（本批执行中；完成后宣告 V1.0 工程收口执行完毕，施工团任务全部结束）
+
+- **执行结果（2026-08-30 补全）**：
+  - Part 1 封印 ✅：收口专用库 `E:\WB\statei-production-control1-close\`（与在产隔离，control.db mtime 未变）；tcb_generation=1，manifest_hash=`2dff958d…`；manifest 入仓 `config/tcb-manifest.json`（`git add -f`：.gitignore:7 历史规则被签署包 Part 1 最新指令覆盖，manifest 无凭据仅哈希列表）；封印后 doctor + 矩阵 36/36 复验通过。
+  - Part 2 签字 ✅：`docs/governance/SIGNING-V1-ENGINEERING-CLOSE.md` 与包内给定内容逐字符一致（边界条款一字未删）；业主 2026-08-30 在本包下达签字指令，施工团代记"业主已签"。
+  - Part 3 汇合 ✅：`git merge --no-ff` 合并提交 `793fa41`（零冲突；master 为 b1 祖先故 --no-ff 强制真实合并）；tag `v1.0-engineering-close`→793fa41；PROJECT_STATE（current_stage=V1_ENGINEERING_CLOSED、release_status=READY_FOR_USER_ACCEPTANCE+边界注记、trunk_policy.master=CURRENT@793fa41、baselines=master@793fa41 ENGINEERING_CLOSED）；branch_registry（master CURRENT、v0.9-b1→ARCHIVE@7c5669a、b2 顺带刷新 f74d48e2、原豁免项废止）；推送 master+tag+b1 全部禁 force。
+  - doctor：**DRIFT_FREE 零豁免**（exit=0）。
+- status: COMPLETE（V1.0 工程收口执行完毕，施工团任务结束；项目进入"业主验收 + 北极星"新阶段）
