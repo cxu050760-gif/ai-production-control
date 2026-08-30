@@ -11,6 +11,7 @@
 | `ZHIHENG_FULL_DELEGATION_CHARTER.md` | 委托章程 v4.4（§0 哈希锁定版） | `1dec34570979915b46214d1b1825d09bfaa4440586ae7d989abd9b2224d6ad0c` | close-pack |
 | `rulings/v09-close/BUILDER_RULING_{AD8TCB,EGRESS,FINALBATCH,GATE23,R18,R1_R2,R3_R4,T11B,TIER2}.md` | 裁决书集（9 份） | 各见裁决链哈希：a32e14a4 / de4ad566 / 1987b91e / 6b476ca9 / 7e1a714d / dd9b89e5 / 34c18b74 / 866b2004 / 17f46a12（前 8 位） | close-pack |
 | `rulings/v09-close/MAINBRAIN_RULING_E1-E4_BATCH.md` | 主脑裁决书（E1-E4 及累积清单批量裁决，2026-08-30） | `4a98499b4690dc79e0262afe1fd4b71190ba79430b0a8a2846d15758afcc33fc` | close-pack（主脑会话） |
+| `rulings/v09-close/MAINBRAIN_RULING_COUNT_CALIBRATION_AND_SIGN_ROADMAP.md` | 主脑裁决书（计数口径统一 + §74 签字路线图，2026-08-30） | `10045466cf08b92245d16599aa002c8ff7c73d00cf9a81f0616728e919c49679` | close-pack（主脑会话） |
 | `analysis/R18_SEMANTIC_ANALYSIS.md` | R18 语义分析 | 与来源逐字节一致 | close-pack |
 | `../specs/V09_CLOSE_BUILD_SPEC.md` | V0.9 CLOSE 施工规格 | 与来源逐字节一致 | close-pack（G-3：入 specs 与 V14-FROZEN 同级） |
 | `VERSION_LADDER_V01_V04.md` | Q5 版本阶梯回填（V0.1–V0.4） | 见文件头 | 流 E 考古产出（草案 → 正式版） |

@@ -210,3 +210,13 @@
 - 北极星未达成（实测）：`active_run.txt` 指向已完成的 37d9；`watcher-heartbeat.json` phase_state=COMPLETED 且 mtime 2026-08-30 01:42（审计时 17:18）→ 自动调度闭环尚未达成，相关"系统可自动生产"宣称不应成立
 - 方法论留痕（防后续审计误判）：① 章程哈希须按其 §0 口径（剔除"章程身份行："行 + LF 归一）复算，裸哈希=1dec3457…会误判 BLOCKED；② 77 节矩阵为表格行结构，按 `## §N` 标题统计会误判为 8 节；③ RUN 真实路径为 `E:\WB\state\ai-production-control\runtime-v1\runs\`；④ B-5 加注实际措辞为「工程判据（章程 §10），非定义 §74 FINAL DONE」，检索"工程判据非 §74"零命中；⑤ egress"四件套"= 1 文件内 4 个负例方向，非 4 个文件
 - status: CLOSED（审计完成入仓，等待业主对 §74 签字与两项计数口径的处置；审计者按章程停止，不修任何东西）
+
+## D020 — 主脑裁决：计数口径统一 + §74 签字路线图入仓（actor=recovery-controller，依据=第二份主脑裁决书 2026-08-30）
+
+- 裁决书：`docs/governance/rulings/v09-close/MAINBRAIN_RULING_COUNT_CALIBRATION_AND_SIGN_ROADMAP.md`（SHA256 = 10045466cf08b92245d16599aa002c8ff7c73d00cf9a81f0616728e919c49679，入仓前记录，复制后逐字节 MATCH）
+- 背景：第二团审计 16 项 15 PASS/1 REWORK/0 BLOCKED（D019 已入仓 5e4f86d）；REWORK 项 = 记录层计数口径不一致，非实质缺陷
+- B-1：真实 GOAL 权威口径 = 累计 8 次（第一批 3：b173/b718/7cfe + 第二批 5：ff88/41b4/cfb5/c33e/37d9）全部 DONE+PASS；8=累计/5=第二批/4=快照少计/3=连续三次判据；全部回写并保留口径说明，禁止裸数字；真实 GOAL 定义边界（经 Runtime 黑盒真实执行+完整 RUN 目录+R-PROD 终审 PASS）记入 governance 术语表
+- B-2：返工轮次 = reply 文件中 ===REVIEW_VERDICT=== REWORK 判定计数；按此重数全部 8 个真实 GOAL 的 reply 并列表回写，替换"11 轮"类旧表述
+- B-3：BUILD_MISSION_JOURNAL 补记 8-28~8-30 收束大事更新 updated_at（消 WARN）；capsule_bridge 测试计数台账 9→13 刷新
+- §74 签字路线图：口径批（本批）→ 封印（发布负责人=业主或其指定者，施工团不得代封）→ §74 签字（业主；边界=工程判据+十二条件核验，北极星未达成列为 V1.0 后第一目标）→ master 汇合（E3，签字后原子执行）→ v0.9-b1 转 ARCHIVE
+- status: ACTIVE（本批=口径批纯文档，完成后停止等业主封印签字）
