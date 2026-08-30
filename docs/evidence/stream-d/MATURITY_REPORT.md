@@ -6,7 +6,7 @@
 
 ## 0. 总评
 
-执衡系统六大组成**全部存在且已收束**；V0.9 CLOSE 全量绿（矩阵 36/36）、连续 3 次真实 GOAL 全绿（R 强模型 PASS）、治理文档全量入仓。V1.0 出口判据全部达成（见 §7）；FINAL DONE 待 §10 末条：团内独立审查通过 + 业主裁决。
+执衡系统六大组成**全部存在且已收束**；V0.9 CLOSE 全量绿（矩阵 36/36）、连续 3 次真实 GOAL 全绿（R 强模型 PASS）、治理文档全量入仓。V1.0 出口判据全部达成（**工程判据口径，章程 §10；非定义 §74 FINAL DONE**；见 §7）；FINAL DONE 待 §10 末条：团内独立审查通过 + 业主裁决。
 
 ## 1. 仓库（代码+治理）— VERIFIED
 
@@ -44,7 +44,7 @@
 - P0 融合 8 项（catpaw/Codex_Bridge/open-kimi-ppt/windows-mcp-runtime/BrowserSkill/DeepSeekHarness/00_HOME/资产台账）
 - 生产在用设施（catpaw、Runtime、桥）均按"只登记零改动"处置，直接复用
 
-## 7. V1.0 出口判据达成表（§10）
+## 7. V1.0 出口判据达成表（§10 · 工程判据口径，非定义 §74 FINAL DONE）
 
 | 判据 | 达成 | 证据 |
 |---|---|---|
@@ -56,4 +56,4 @@
 
 ## 8. 结论
 
-系统六大组成全部 VERIFIED 级收束，V1.0 判据四项达成；FINAL DONE 按 §10 末条需业主裁决（含 TCB 封印处置、master 汇合、release_status 晋升）。
+系统六大组成全部 VERIFIED 级收束，V1.0 判据四项达成（**工程判据口径，章程 §10；非定义 §74 FINAL DONE**）；FINAL DONE 按 §10 末条需业主裁决（含 TCB 封印处置、master 汇合、release_status 晋升）。

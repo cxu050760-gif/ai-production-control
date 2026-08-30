@@ -10,7 +10,7 @@
 | 返工 ×3 | 三次真实 REWORK→PASS 闭环（R 指令逐条执行：①补可审计证据 ②完整 SHA256 ③未修改证据+HEAD 精确一致 ④短/长 SHA 澄清 ⑤failures=0 ⑥doctor 口径 ⑦26 条口径权威确认 AD-9） | 同 RUN 目录（contract_bound_report×N）；docs/evidence/stream-c/ |
 | 恢复 | state-verify b173 → ok=true integrity ok（revision 6）；state-recover b173 → "current state already valid"（真实执行恢复机制）；检查点 HANDOFF-20260829-...（249e137 提交）→ 本会话续作恢复 | runtime state-recover 输出；docs/evidence/HANDOFF-20260829-stream-zero-A-E-B-closed.md |
 
-## 2. V1.0 判据达成（§10）
+## 2. V1.0 判据达成（§10 · 工程判据口径，非定义 §74 FINAL DONE）
 
 - ✅ 连续 3 次真实 GOAL 全绿（b173/b718/7cfe）
 - ✅ TCB 重封记录（见 §5）
@@ -35,7 +35,7 @@
 
 ## 6. release_status 建议
 
-- 建议：**维持 PRODUCT_NOT_READY**，直至 (a) TCB 封印执行（§5）与 (b) 业主 V1.0/FINAL DONE 裁决（§10 末条）完成；届时建议晋升 PRODUCT_READY（系统实际成熟度已达：36/36 + 3×真实 GOAL 全绿 + 六大组成收束）
+- 建议：**维持 PRODUCT_NOT_READY**，直至 (a) TCB 封印执行（§5）与 (b) 业主 V1.0/FINAL DONE 裁决（§10 末条）完成；届时建议晋升 PRODUCT_READY（系统工程判据已达：36/36 + 3×真实 GOAL 全绿 + 六大组成收束——**工程判据口径，非定义 §74 FINAL DONE**）
 - 依据：诚实门禁（发布状态不因施工完成自动晋升；业主裁决为最终门槛）
 
 ## 7. 团自裁事项（供业主审阅）
