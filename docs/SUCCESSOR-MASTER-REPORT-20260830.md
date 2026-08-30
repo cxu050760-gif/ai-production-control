@@ -1,4 +1,4 @@
-# 执衡接手者主报告（SUCCESSOR MASTER REPORT）
+# 执衡接手者主报告（SUCCESSOR MASTER REPORT）· **版本 v1.1**
 
 - 生成：2026-08-30 22:40（北京）· 生成者：接手控制会话
 - 读者：**任何一个零上下文的新 AI 会话**（弱模型如混元3/豆包级即可）
@@ -154,7 +154,7 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 
 | 阶段 | 内容 | 对应节 | 验收 |
 |---|---|---|---|
-| **R1 守护层** | Windows 计划任务 guard-all（每 2min：心跳超时→重启中继；52900 检查→拉桥；Chrome 连接检查；state 完整性；全部记账本）。纯确定性、非 AI、开机自启 | §14/§61 | 心跳连续 72h；自愈动作入账本 |
+| **R1 守护层** | **可执行规格**：①先查 Trae-Ralph 的中继启动入口（package.json scripts 或 relay start 命令——**先确认准确命令再写守护，不得猜**）；②写 `scripts/guard/guard_all.cmd`：a) 读 `construction-relay/watcher-heartbeat.json` 的 `at`，**超 300 秒**视为死 → `taskkill /F /T` 进程树 → 重启 watcher+guard（**不得接 tail/head 管道**，坑 4）；b) 查 52900 无监听 → 拉 bsk daemon；c) 查 Chrome 扩展连接 → 断则引导重连；d) 查 state.json 完整性 → 坏则 state-recover；e) 每动作追加 `construction-relay/guard-actions.ndjson` 记账；③注册计划任务 `schtasks /create /tn "ZhihengGuard" /tr "<guard_all.cmd 全路径>" /sc minute /mo 2 /f`（开机自启、与 AI 会话无关）；④验证：人为改旧心跳时间戳触发一次自愈（快速验证，不必等 72h），确认账本有记录 | §14/§61 | 触发式自愈实测 1 次成功；账本有记录；`schtasks /query /tn ZhihengGuard` 存在 |
 | **R2 注册表+资产接入** | §63 机器可读 capability registry（JSON：Brain/Worker/C/R/Browser/Tool/Provider×Cost/Quota/Reliability/Official|Experimental）+ catpaw/bsk 由 registry 驱动拉起 | §63/§20/§21 | registry 被运行时消费；桥自动拉起 |
 | **R3 黑箱 v1** | run.cmd 四动词补齐（补 RESULT/HUMAN_GATE）+ 一页操作卡（3-5 步）。⚠ **弱模型实测部分暂缓（需业主开弱模型会话）**——四动词/操作卡先做完，实测条件就绪即验 | §65/§71 | 代码+卡完成（机器验证）；弱模型实测留待业主 |
 | **D1 R-Adapter（最优先）** | LiteLLM 接入：安装+配置+适配层代码全部先做完（不需要 key 的部分：安装、config 骨架、健康探测代码、热切换逻辑、仲裁规则、测试用 mock Provider）。⚠ **真实 Provider 调用暂缓（需业主提供 API key）**；LiteLLM 兼容性 POC 用 mock 先行 | §5/§12/§73 | mock 全链测试绿；真实 Provider 实测留待业主给 key |
@@ -207,6 +207,7 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 - 证据丢：P0 备份 `E:\WB\backups\ai-production-control-P0_BACKUP-20260830-1700\`（260MB 全校验）
 - R 会话死：临时用会话注册.json 里其他会话或升级业主（R-Adapter 完成前这是单点）
 - 全环境坏：按 §2 路径地图逐个拉起（start 顺序：catpaw→bsk daemon→Chrome→中继→验证 doctor）
+- **改坏了第一时间怎么办**：①**代码/文档类** → `git revert <坏提交>` 或 `git checkout <文件>`（先 `git log --oneline` 定位）；②**RUN 状态类** → state-recover；③**不确定改了什么** → `git status`+`git diff` 看清再动，不确定就停下升级，**不要乱 revert 别人的提交**；④治理文件改错 → 按坑 9 重新同步 + doctor 复验
 
 ## 14. 已知未验证/存疑（诚实清单）
 
@@ -219,11 +220,28 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 ## 15. 新 AI 启动指令（你的第一步）
 
 1. 读本报告全文（约 15 分钟）
-2. 自检：`cd <worktree> && python scripts/state_doctor.py`（期望 DRIFT_FREE）+ `git status -sb`（期望干净同步）+ `chatgpt_bridge status`（R 通道健康，需 BSK_HOME=E:/WB/tools/bsk-file-bridge/bsk-home；桥停则先按 §13 拉起顺序恢复）
+2. 自检（**注意 cwd**：doctor 与矩阵脚本在 worktree 根跑；单测在 `runtime/` 目录跑——跑错目录会误判）：
+   - `cd C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1 && python scripts/state_doctor.py`（首跑期望 DRIFT_FREE；**若你刚提交过非治理提交而报 DRIFT，按坑 9 同步 dev head/registry 即可，不是环境坏**）
+   - `git status -sb`（期望干净同步）
+   - `chatgpt_bridge status`（R 通道健康，需 `BSK_HOME=E:/WB/tools/bsk-file-bridge/bsk-home`；**桥停 → 按 §13 拉起顺序恢复；R-PROD 会话失效 → 写升级块给业主，等待期间继续不需要 R 的 READY 工作，不得自行更换会话**）
 3. 按 §8 方案认领阶段（默认从 R1 守护层开工；若 R1 已完成则顺延）
 4. 开工前对你要做的事**先搜 GitHub**（§48 门禁）并留 Decision 记录
 5. 每完成一刀：机器验证（测试/矩阵/doctor）→ 提交推送 → 结果入 evidence → 更新本报告的状态快照
 6. 遇到与定义/章程冲突 → 停下写升级块，不猜着干
+
+## 15b. 弱 AI 精简启动卡（混元3/豆包级可读性版）
+
+> 你不需要理解执衡内部。只做三件事：**①读本卡 ②说目标 ③跑一条命令**。其余全部自动。
+
+1. 进入目录：`cd C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1`
+2. 把目标写进 UTF-8 文本文件（如 `goal.txt`）：写清"要什么成果 + 怎么算做完了"。
+3. 提交任务（`<...>` 换成你的真实路径）：
+   `& "E:\WB\tools\ai-production-control\runtime\run.cmd" work --goal-file <目标文件> --r-url <R 会话 URL>`
+   - R 会话 URL 从 `E:\执衡\05_资源\会话注册.json` 的 `R-PROD.url` 读取，**不要猜、不要改这个文件**
+4. 干完活把结果写进文本文件回交：
+   `& "E:\WB\tools\ai-production-control\runtime\run.cmd" report --run-id <RUN 号> --message-file <结果文件>`
+5. 结果只有两种：`PASS`（通过）或 `REWORK`（审查方说哪里不行）→ 按它说的改 → 再回交，直到 PASS。
+6. **禁止**：改 `E:\WB\tools\ai-production-control\runtime\` 下任何文件；碰任何凭据文件；自己宣布"完成了"（只有审查方 PASS 算数）；猜路径。
 
 ## 16. 持续推进协议（业主指令：不许中途停，做到终点）
 
@@ -232,10 +250,11 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
   1. 红线触发（§12）→ SAFE_HALT + 升级块；
   2. 与定义/章程冲突或发现报告错误 → 升级块（写完继续不受阻的 READY 工作）；
   3. 需要业主/主脑裁决的事项（merge、新分支、凭据、高危效果、预算熔断）→ 升级块，**等待期间继续其他 READY 工作**（§16 精神：冻结的是 Candidate 不是 Builder）；
-  4. **上下文将尽** → 先落移交检查点（更新本报告 §3 状态快照 + 修订记录 + 下一动作），新会话从 §15 无缝恢复——这是唯一"停了但不丢进度"的停止；
+  4. **上下文将尽** → 先落移交检查点到**独立文件** `docs/evidence/HANDOFF-CP-<日期>-<序号>.md`（含：完成项/进行中/下一步精确命令/踩坑/待确认），**主报告只追加修订记录一行**（避免每会话改主报告引发 drift 与冲突），新会话从检查点 + 本报告 §15 恢复——这是唯一"停了但不丢进度"的停止；
   5. 业主 STOP/PAUSE（最高优先，立即生效）。
 - **进度自证**：每刀完成 → 机器验证（测试/矩阵/doctor）→ 提交推送 → 本报告修订记录登记实际耗时与新状态。修订记录就是你持续推进的轨迹，任何会话断掉后接手者从它恢复。
 - **并行**：能开多会话就开（按 §8 目录分工），主会话负责合并与治理文件。
+- **并行 git 互斥（重要）**：多人**同时 push 会冲突**——纪律：①开工前 `git fetch`；②提交前 `git pull --rebase`；③**push 串行**（主会话协调，一个推完下一个）；④治理文件（PROJECT_STATE.*/branch_registry/本报告）**只由主会话写**；⑤冲突先沟通，不擅自强制解冲突（禁 force）。
 
 ## 17. 审核硬门禁（业主指令：无审核通过不得推进）
 
@@ -258,4 +277,4 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 | 2026-08-30 23:05 | doctor DRIFT 修复（报告提交后 dev head/registry 同步，恢复 DRIFT_FREE）；修订记录重排 | 遵守本报告坑 9 |
 | 2026-08-30 22:58(补) | §17 审核硬门禁（≥1-2 名独立审核通过方可推进）+ §8 重排（需人实测项标暂缓·等人，机器可完成的先做） | 业主指令 |
 | 2026-08-30 22:56 | 第二轮挑刺 6 处：**双 runtime 混淆警告（事故级）**、AGENTS.md 入清单、缺陷→任务转换器入 D5、弱 AI 能力边界定义、429/额度坑、启动自检补 R 通道 | 业主连续追问榨出的缺口 |
-| 2026-08-30 23:05 | 冻结声明：本报告正文自此冻结，后续仅状态快照节可由接手者按 §15.5 更新 | 移交完成 |
+| 2026-08-30 23:08 | **报告版本 v1.1**：正文（§0-§17，含新增 §15b）冻结——变更须走 §17 审核并登记；**三类可维护区**（§3 状态快照、§9 坑清单追加、修订记录追加）接手者可直接维护。本行取代此前"全冻结"表述 | 修正不可信的冻结声明 |
