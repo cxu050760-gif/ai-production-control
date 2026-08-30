@@ -236,3 +236,11 @@
   - Part 3 汇合 ✅：`git merge --no-ff` 合并提交 `793fa41`（零冲突；master 为 b1 祖先故 --no-ff 强制真实合并）；tag `v1.0-engineering-close`→793fa41；PROJECT_STATE（current_stage=V1_ENGINEERING_CLOSED、release_status=READY_FOR_USER_ACCEPTANCE+边界注记、trunk_policy.master=CURRENT@793fa41、baselines=master@793fa41 ENGINEERING_CLOSED）；branch_registry（master CURRENT、v0.9-b1→ARCHIVE@7c5669a、b2 顺带刷新 f74d48e2、原豁免项废止）；推送 master+tag+b1 全部禁 force。
   - doctor：**DRIFT_FREE 零豁免**（exit=0）。
 - status: COMPLETE（V1.0 工程收口执行完毕，施工团任务结束；项目进入"业主验收 + 北极星"新阶段）
+
+## D022 — v1.1-blackbox 开发线开工 + R1 守护层 §48 Reuse 门禁（actor=successor-session-20260830）
+
+- 背景：master 已冻结为 V1.0 收束基准（D021 COMPLETE）；业主裁决新开开发分支 v1.1-blackbox（修订记录 23:36），本会话接手按 §8 方案从 R1 开工
+- 分支：v1.1-blackbox（本地 HEAD=55d4a5a），已登记 branch_registry；推送 origin/v1.1-blackbox（全程代理、禁 force）
+- **§48 Reuse 门禁（R1）**：守护层缺口（§14/§61）经 GitHub 调研（2026-08-30，关键字 watchdog/scheduler/keepalive/heartbeat）确认**无现成可直接接入方案**——主流方案（schtasks+cron 类外部调度、心跳探活、JSONL 记账）均为模式而非可复用组件，且本项目中继（Trae-Ralph）为私有本地代码、上游已归档；决策 = **Compose**（复用系统自带 schtasks/taskkill/netstat + 既有中继启动命令，自写薄守护脚本），不引入新依赖
+- 关键教训（来自调研案例 1：watchdog 误判重复拉起 11 进程）：**探活必须用端口/心跳时间戳判定，禁用 tasklist WINDOWTITLE 判活**——本刀 heartbeat>300s 判死+端口探活符合该原则
+- status: ACTIVE（R1 实现中）
