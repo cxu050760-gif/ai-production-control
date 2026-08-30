@@ -20,7 +20,7 @@
   {
    "name": "master",
    "role": "TRUNK",
-   "head": "fee507a4",
+   "head": "9181e2ee",
    "note": "CURRENT; V1.0 engineering close + successor master report (registry synced per pitfall 9)"
   },
   {
