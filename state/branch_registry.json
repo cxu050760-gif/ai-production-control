@@ -268,6 +268,12 @@
    "role": "DELETE_CANDIDATE",
    "head": "f9ffbb3f",
    "note": "declared ignore by naming"
+  },
+  {
+   "name": "v1.1-blackbox",
+   "role": "ACTIVE",
+   "head": "e409253",
+   "note": "V1.1 blackbox dev line (owner-ruled 2026-08-30); all new development here, master frozen as closed baseline"
   }
  ]
 }
