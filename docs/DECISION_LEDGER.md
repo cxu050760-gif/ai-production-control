@@ -220,3 +220,12 @@
 - B-3：BUILD_MISSION_JOURNAL 补记 8-28~8-30 收束大事更新 updated_at（消 WARN）；capsule_bridge 测试计数台账 9→13 刷新
 - §74 签字路线图：口径批（本批）→ 封印（发布负责人=业主或其指定者，施工团不得代封）→ §74 签字（业主；边界=工程判据+十二条件核验，北极星未达成列为 V1.0 后第一目标）→ master 汇合（E3，签字后原子执行）→ v0.9-b1 转 ARCHIVE
 - status: ACTIVE（本批=口径批纯文档，完成后停止等业主封印签字）
+
+## D021 — 最终签字包执行：封印 + §74 签字 + master 汇合（actor=recovery-controller，依据=FINAL_SIGNING_PACKAGE 2026-08-30）
+
+- 签署包：`docs/governance/FINAL_SIGNING_PACKAGE.md`（SHA256 = 11b5faf1cf67fc3c53026118060b3b5684aa3454da1f35e6d488d5b239b9b496，入仓前记录，复制后逐字节 MATCH）
+- 业主授权：① 封印令（Part 1，收口专用库，禁碰在产状态）② §74 签字（业主已签，Part 2 文书入仓，边界条款一字不得删）③ master 汇合（Part 3 原子执行，零冲突预期）
+- 范围：封印 + 签字文书 + 汇合 + 状态/注册表更新，**零代码逻辑改动**（唯一新文件 = 封印 manifest 与签字文书）
+- 执行顺序：Part 1 封印 → Part 2 签字文书 → Part 3 汇合（merge+tag+PROJECT_STATE+registry+push）→ doctor 零豁免 → 结果块
+- 停止条件：任何冲突/意外提交/封印影响测试 = 立即停止升级
+- status: ACTIVE（本批执行中；完成后宣告 V1.0 工程收口执行完毕，施工团任务全部结束）
