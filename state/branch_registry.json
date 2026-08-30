@@ -1,7 +1,7 @@
 {
  "schema": "BRANCH_REGISTRY_1",
  "updated_at": "2026-08-31",
- "updated_by": "successor-session (D1 commit sync)",
+ "updated_by": "successor-session (D2 commit sync)",
  "policy": [
   "Unregistered branches are treated as SPECULATIVE (fail-closed: unknown = untrusted).",
   "Role transitions require an entry in DECISION_LEDGER with actor.",
@@ -272,8 +272,8 @@
   {
    "name": "v1.1-blackbox",
    "role": "ACTIVE",
-   "head": "3c112e3b",
-   "note": "V1.1 blackbox dev line; R1/R2/R3/A1/D1 completed+reviewed 2026-08-31"
+   "head": "e4e3b759",
+   "note": "V1.1 blackbox dev line; R1/R2/R3/A1/D1/D2 completed+reviewed 2026-08-31"
   }
  ]
 }
