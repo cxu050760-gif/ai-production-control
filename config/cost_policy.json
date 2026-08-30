@@ -1,0 +1,149 @@
+{
+  "schema": "COST_POLICY",
+  "schema_version": 1,
+  "generated_by": "software-engineer-d2 (v1.1-blackbox dev line)",
+  "generated_at": "2026-08-31",
+  "constitution_anchor": "宪法 §2 成本感知 / §59 成本路由（成本感知——按任务价值路由到合适的 AI）/ §61 Hard Fuse（安全熔断 SAFE_HALT）",
+  "currency": "CNY",
+  "unit": "元/次调用 (per AI call, estimated)",
+  "note": "D2 成本路由策略。模型单价为施工环境估算值（source=估算/官方价目/待实测），用于 L2 成本路由演示与 SAFE_HALT 熔断；真实价目与真实额度消耗=留业主 L3。消费方：runtime/cost_router.py（只读本文件 + config/capability-registry.json costs 节）。",
+
+  "reference_tokens_per_call": 2000,
+  "tokens_est_default": 2000,
+
+  "unit_prices": {
+    "brain-chatgpt-web": {
+      "model": "chatgpt-web",
+      "role": "brain",
+      "unit_price": 0.30,
+      "source": "估算",
+      "note": "ChatGPT Web 主脑：网页会话单次调用估算（订阅摊销；官方价目待 L3 实测）"
+    },
+    "brain-workbuddy-deepseek-v4-flash": {
+      "model": "deepseek-v4-flash",
+      "role": "brain",
+      "unit_price": 0.05,
+      "source": "估算",
+      "note": "弱模型便宜干活（宪法 §59 弱模型档）"
+    },
+    "brain-codex-local": {
+      "model": "codex-local",
+      "role": "brain",
+      "unit_price": 0.20,
+      "source": "估算",
+      "note": "Codex Local 主脑回退 2：中等偏强"
+    },
+    "worker-workbuddy-cli": {
+      "model": "deepseek-v4-flash",
+      "role": "worker_weak",
+      "unit_price": 0.05,
+      "source": "估算",
+      "note": "弱 Worker 执行（Worker-Adapter id=worker-workbuddy-cli，与 registry costs 节 capability_id 对齐）"
+    },
+    "worker-codex-cli": {
+      "model": "codex-local",
+      "role": "worker_strong",
+      "unit_price": 0.20,
+      "source": "估算",
+      "note": "强 Worker 执行（Worker-Adapter id=worker-codex-cli）"
+    },
+    "r-prod-chatgpt-web": {
+      "model": "chatgpt-web",
+      "role": "r_strong",
+      "unit_price": 0.30,
+      "source": "估算",
+      "note": "强 R 审查（R-Adapter provider id=r-prod-chatgpt-web，与 registry costs 节 cost-r-chatgpt-web capability_id=r-prod-chatgpt-web 对齐）"
+    },
+    "r-deepseek-v4-flash": {
+      "model": "deepseek-v4-flash",
+      "role": "r_weak",
+      "unit_price": 0.05,
+      "source": "估算",
+      "note": "弱 R 审查（R-Adapter provider id=r-deepseek-v4-flash；D1 示例配置存在）"
+    },
+    "r-codex-local": {
+      "model": "codex-local",
+      "role": "r_strong_fallback",
+      "unit_price": 0.20,
+      "source": "估算",
+      "note": "Codex Local R 化（R-Adapter provider id=r-codex-local）"
+    },
+    "provider-catpaw": {
+      "model": "catpaw-longcat-2.0",
+      "role": "provider",
+      "unit_price": null,
+      "source": "待实测",
+      "note": "CatPaw 9 模型 API 定价未知：单价缺失，路由跳过其成本计算（输出'待校准'）"
+    },
+    "provider-trae-solo-cn": {
+      "model": "trae-solo-cn",
+      "role": "provider",
+      "unit_price": null,
+      "source": "待实测",
+      "note": "Trae Solo CN 中继定价未知：单价缺失，路由跳过其成本计算（输出'待校准'）"
+    }
+  },
+
+  "roles": {
+    "worker_weak": "worker-workbuddy-cli",
+    "worker_strong": "worker-codex-cli",
+    "r_strong": "r-prod-chatgpt-web",
+    "r_weak": "r-deepseek-v4-flash"
+  },
+
+  "route_options": {
+    "weak": {
+      "worker": "worker-workbuddy-cli",
+      "reviewer": null,
+      "note": "弱 Worker 直接交付：无强审查，最低成本档（低价值/低风险任务）"
+    },
+    "hybrid": {
+      "worker": "worker-workbuddy-cli",
+      "reviewer": "r-prod-chatgpt-web",
+      "note": "弱 Worker 执行 + 强 R 审查（宪法默认管道：弱模型便宜干活、强模型贵审查）"
+    },
+    "strong": {
+      "worker": "worker-codex-cli",
+      "reviewer": "r-prod-chatgpt-web",
+      "note": "强 Worker 执行 + 强 R 审查：最高成本档（高价值/高风险任务）"
+    }
+  },
+
+  "rework_probability": {
+    "low": 0.1,
+    "mid": 0.3,
+    "high": 0.6
+  },
+
+  "max_review_cycles": 3,
+  "max_worker_retries": 2,
+
+  "budget": {
+    "default_budget_threshold": 0.5,
+    "note": "默认预算阈值（元/任务）。route 未显式给 --max-cost 时用此值做熔断判定；生产阈值由业主在 L3 依据真实价目调整。"
+  },
+
+  "circuit_breaker": {
+    "enabled": true,
+    "no_progress_limit": 3,
+    "consecutive_breach_limit": 2,
+    "freeze_on_trigger": true,
+    "note": "宪法 §61 Hard Fuse：触发 SAFE_HALT 后冻结该任务（不自动重试）；人工审查后 reset 解冻。"
+  },
+
+  "goal_type_keywords": {
+    "high": [
+      "high-risk", "高危", "风险", "safety", "安全", "security", "生产", "production",
+      "金融", "financial", "外部", "extern", "deploy", "发布", "credential", "凭据",
+      "secret", "机密", "egress", "外发", "deny", "拒绝"
+    ],
+    "mid": [
+      "analysis", "分析", "proposal", "方案", "review", "审查", "refactor", "重构",
+      "integration", "集成", "design", "设计", "debug", "调试"
+    ],
+    "low": [
+      "mechanical", "机械", "read", "读取", "format", "格式化", "rename", "重命名",
+      "test", "测试", "docs", "文档", "extract", "抽取", "convert", "转换"
+    ]
+  }
+}

@@ -1201,14 +1201,14 @@
       }
     ],
     "costs": [
-      {"id": "cost-chatgpt-web", "capability_id": "brain-chatgpt-web", "cost_per_call": null, "cost_model": null, "note": "待 D2 校准", "status": "official"},
-      {"id": "cost-workbuddy-deepseek-v4-flash", "capability_id": "brain-workbuddy-deepseek-v4-flash", "cost_per_call": null, "cost_model": null, "note": "待 D2 校准", "status": "official"},
-      {"id": "cost-codex-local", "capability_id": "brain-codex-local", "cost_per_call": null, "cost_model": null, "note": "待 D2 校准", "status": "official"},
-      {"id": "cost-catpaw", "capability_id": "provider-catpaw", "cost_per_call": null, "cost_model": null, "note": "待 D2 校准；9 模型 API 定价未知", "status": "experimental"},
-      {"id": "cost-trae-solo-cn", "capability_id": "provider-trae-solo-cn", "cost_per_call": null, "cost_model": null, "note": "待 D2 校准", "status": "experimental"},
-      {"id": "cost-worker-workbuddy-cli", "capability_id": "worker-workbuddy-cli", "cost_per_call": null, "cost_model": null, "note": "待 D2 校准", "status": "official"},
-      {"id": "cost-worker-codex-cli", "capability_id": "worker-codex-cli", "cost_per_call": null, "cost_model": null, "note": "待 D2 校准", "status": "official"},
-      {"id": "cost-r-chatgpt-web", "capability_id": "r-prod-chatgpt-web", "cost_per_call": null, "cost_model": null, "note": "待 D2 校准（R 审查会话成本）", "status": "official"}
+      {"id": "cost-chatgpt-web", "capability_id": "brain-chatgpt-web", "cost_per_call": 0.3, "cost_model": "per_call_estimate", "source": "估算", "note": "D2 已校准（估算）：ChatGPT Web 主脑单次调用（订阅摊销）；引用 config/cost_policy.json unit_prices.brain-chatgpt-web；官方价目待 L3 实测", "status": "official"},
+      {"id": "cost-workbuddy-deepseek-v4-flash", "capability_id": "brain-workbuddy-deepseek-v4-flash", "cost_per_call": 0.05, "cost_model": "per_call_estimate", "source": "估算", "note": "D2 已校准（估算）：弱模型便宜干活档；引用 config/cost_policy.json unit_prices.brain-workbuddy-deepseek-v4-flash", "status": "official"},
+      {"id": "cost-codex-local", "capability_id": "brain-codex-local", "cost_per_call": 0.2, "cost_model": "per_call_estimate", "source": "估算", "note": "D2 已校准（估算）：Codex Local 主脑回退 2（中等偏强）；引用 config/cost_policy.json unit_prices.brain-codex-local", "status": "official"},
+      {"id": "cost-catpaw", "capability_id": "provider-catpaw", "cost_per_call": 0.1, "cost_model": "per_call_estimate", "source": "待实测", "note": "D2 占位估算（source=待实测）：9 模型 API 定价未知，占位 0.1 仅供路由演示；cost_policy.json unit_prices.provider-catpaw.unit_price=null（路由输出'待校准'并跳过成本计算）；真实价目待 L3 实测", "status": "experimental"},
+      {"id": "cost-trae-solo-cn", "capability_id": "provider-trae-solo-cn", "cost_per_call": 0.1, "cost_model": "per_call_estimate", "source": "待实测", "note": "D2 占位估算（source=待实测）：Trae Solo CN 中继定价未知，占位 0.1 仅供路由演示；cost_policy.json unit_prices.provider-trae-solo-cn.unit_price=null（路由输出'待校准'并跳过成本计算）", "status": "experimental"},
+      {"id": "cost-worker-workbuddy-cli", "capability_id": "worker-workbuddy-cli", "cost_per_call": 0.05, "cost_model": "per_call_estimate", "source": "估算", "note": "D2 已校准（估算）：弱 Worker 执行档（宪法 §59 弱模型便宜干活）；引用 config/cost_policy.json unit_prices.worker-workbuddy-cli；与 D1 worker_adapter id 对齐", "status": "official"},
+      {"id": "cost-worker-codex-cli", "capability_id": "worker-codex-cli", "cost_per_call": 0.2, "cost_model": "per_call_estimate", "source": "估算", "note": "D2 已校准（估算）：强 Worker 执行档；引用 config/cost_policy.json unit_prices.worker-codex-cli；与 D1 worker_adapter id 对齐", "status": "official"},
+      {"id": "cost-r-chatgpt-web", "capability_id": "r-prod-chatgpt-web", "cost_per_call": 0.3, "cost_model": "per_call_estimate", "source": "估算", "note": "D2 已校准（估算）：强 R 审查会话单次调用（宪法 §59 强模型贵审查）；引用 config/cost_policy.json unit_prices.r-prod-chatgpt-web；与 D1 r_adapter provider id=r-prod-chatgpt-web 对齐", "status": "official"}
     ],
     "quotas": [
       {"id": "quota-chatgpt-web", "capability_id": "brain-chatgpt-web", "limit": null, "unit": null, "note": "待 D2 校准", "status": "official"},
@@ -1440,10 +1440,10 @@
     "provider": ["provider-chatgpt-web", "provider-workbuddy", "provider-codex", "provider-catpaw", "provider-trae-solo-cn"]
   },
   "notes": [
-    "本注册表为机器可读能力清单（宪法 §63），所有成本/配额/可靠性字段无数据时一律 null 并注明待 D2 校准；不得编造不存在的能力。",
+    "本注册表为机器可读能力清单（宪法 §63）；成本字段已由 D2 校准为估算值（source=估算/待实测，引用 config/cost_policy.json 模型单价；真实价目待 L3 实测），配额/可靠性无数据时一律 null 并注明待校准；不得编造不存在的能力。",
     "凭据纪律：会话注册.json、browser profile、proxy-key.dpapi 一律只登记路径，不复制内容、不读取、不外传（§52/§53/§57）。",
     "与 production.json 的差异点：browser.generic_profile（E:/WB/state/ai-production-control/browser-profile）2026-08-30 实测目录缺失，已登记为 experimental 并标注告警。",
     "catpaw 反代（32177）当前停机；其 proxy-key.dpapi 为 DPAPI 机器绑定密文，轮换执行主体=业主本人（S-06）。",
-    "运行时消费点：docs/ops/registry-launch.py 读取本注册表探测健康并输出拉起建议；D2 成本路由将消费 costs/quotas 字段；§5 Adapter 将消费 adapters 字段。"
+    "运行时消费点：docs/ops/registry-launch.py 读取本注册表探测健康并输出拉起建议；D2 成本路由已消费 costs/quotas 字段（runtime/cost_router.py + config/cost_policy.json，见 docs/ops/cost-router-README.md）；§5 Adapter 将消费 adapters 字段。"
   ]
 }
