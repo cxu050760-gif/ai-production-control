@@ -195,3 +195,18 @@
 - 本批执行范围（裁决书 §E）：B-5 勘误 / G-2 ROADMAP 入仓 / P0 备份 / C-1 沙箱破坏演练（禁碰生产状态根）/ C-3 矩阵 v3（§63/§65/§56 降级）/ W-1 只出方案 / 凭据类只出操作清单 / E1/E2/E3 不施工
 - 北极星（裁决书 §D）：**自动调度闭环**——至少 1 个真实任务由系统自身完成 提交→拆解→调度→执行→审查→REWORK/PASS→交付，全程无人手动敲 work/report；该目标达成前不得宣称"系统可自动生产"
 - status: ACTIVE（本批执行中，完成后出结果块等待第二团审计）
+
+## D019 — 第二团独立审计报告入仓（actor=第二团独立审计者，依据=审计章程 SECOND_TEAM_AUDIT_PACK.md §2）
+
+- 报告：`docs/evidence/audit/AUDIT_REPORT_2026-08-30.md`（本次唯一允许的写；审计全程只读，未修任何东西）
+- 审计对象：`v0.9-b1/authority-effect-core @ 52cbc614`（HEAD == origin 同分支，落后/领先 0/0）
+- 总判定：**AUDIT_PASS_WITH_REWORK** —— 16 项中 15 PASS / 1 REWORK / 0 BLOCKED；无锚点级问题、无越权改动、无状态造假嫌疑
+- REWORK 项（§2-8）：真实 GOAL 计数记录偏差——审计章程称 8 / PROJECT_STATE.md 称 5（两处）/ V1.0-CLOSE-OUT-REPORT 称 4 / MATURITY_REPORT 称 3，四处互不一致；实测点名的 5 个真实 GOAL（ff88/41b4/cfb5/c33e/37d9）**全部 DONE+PASS，实质成立**
+- 同类子发现（§2-9 §12）：R 审查/REWORK 轮次记 11，实测 5 个真实 GOAL 的 reply 中 REWORK 判定为 12
+- 复核为真的关键判据（全部亲手复跑）：矩阵 36/36 MATCH（MISMATCH=0），R34 与 R34-FAITHFUL 均 FAIL_CLOSED；CLOSE 五件套 40/40 全绿；egress 四向负例 11/11 OK；brain_bridge 10 / capsule_bridge 13 / taskgraph 2 全绿；state_doctor DRIFT_COUNT=1（仅豁免项 registry b1-head 滞后，c6d1a55b→52cbc614 祖先关系已确认）
+- 主脑裁决执行六项全部 PASS 且有硬证据：B-5(`98a70a0`, 加注 6 处) / G-2(`d0fb3bd`, 346 行 24196 字节) / C-1(`6b82db8`, 沙箱实存且 `find 状态根 -newermt 16:00` 为空→未碰生产状态根) / C-3(§56/§63/§65 实测均 🟡) / P0 备份(`E:\WB\backups\...P0_BACKUP-20260830-1700` 实存) / W-1(`467d2a9` 仅新增 2 个 md、零代码改动→只方案未施工；Reuse Decision=R=Reuse)
+- 77 节自评矩阵未注水：实测 ✅38 / 🟡34 / ❌1（非全绿）；§74 = ❌「工程项达成，业主裁决待定」
+- §74 签字建议：**暂不建议签字——补两项计数口径（真实 GOAL 次数、R/REWORK 轮次）后可签**。签字时须明确边界：通过的是工程判据（章程 §10 口径），FINAL DONE 仍须业主裁决（定义 §74 末条，"任何单一角色声称完成均无效"）
+- 北极星未达成（实测）：`active_run.txt` 指向已完成的 37d9；`watcher-heartbeat.json` phase_state=COMPLETED 且 mtime 2026-08-30 01:42（审计时 17:18）→ 自动调度闭环尚未达成，相关"系统可自动生产"宣称不应成立
+- 方法论留痕（防后续审计误判）：① 章程哈希须按其 §0 口径（剔除"章程身份行："行 + LF 归一）复算，裸哈希=1dec3457…会误判 BLOCKED；② 77 节矩阵为表格行结构，按 `## §N` 标题统计会误判为 8 节；③ RUN 真实路径为 `E:\WB\state\ai-production-control\runtime-v1\runs\`；④ B-5 加注实际措辞为「工程判据（章程 §10），非定义 §74 FINAL DONE」，检索"工程判据非 §74"零命中；⑤ egress"四件套"= 1 文件内 4 个负例方向，非 4 个文件
+- status: CLOSED（审计完成入仓，等待业主对 §74 签字与两项计数口径的处置；审计者按章程停止，不修任何东西）
