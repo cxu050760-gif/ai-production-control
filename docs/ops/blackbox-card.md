@@ -67,6 +67,26 @@ python runtime\blackbox_bridge.py human-gate
 - `MISSING_R_URL` / `INVALID_R_URL`：R 会话 URL 没给对，问用户。
 - `RUNTIME_ENV_BLOCKED` / `BRIDGE_UNHEALTHY`：环境没起来，把输出贴给用户。
 
+## 浏览器通用操作（Playwright / download，§20 D3）
+
+> 通用网页（无需登录态）：搜索、抓正文、下载文件，走本仓 `runtime\browser_adapter.py`。
+> **登录态敏感站（ChatGPT 等）仍走 bsk（chatgpt_bridge），不要用本适配器。**
+
+| 操作 | 命令 |
+|---|---|
+| 搜索 | `python runtime\browser_adapter.py search --query "<关键词>" --max 5` |
+| 抓正文 | `python runtime\browser_adapter.py fetch --url "<页面URL>"` |
+| 下载 | `python runtime\browser_adapter.py download --url "<文件URL>" --dest "E:\WB\outputs\ai-production-control"` |
+| 可用性 | `python runtime\browser_adapter.py status` |
+
+- `search` 输出：`results[]`（title/url/snippet）；`fetch` 输出：title/body_text/final_url；
+  `download` 输出：file 路径 / size / sha256。
+- 下载目录默认 `E:\WB\outputs\ai-production-control`；网络不通时加 `--proxy http://127.0.0.1:7897`；
+  离线冒烟加 `--mock`（明确标注 mock，不代表真实结果）。
+- 红线：本适配器一律用临时 profile，**不碰任何登录态/凭据**；离线/断网时如实报错，不伪造。
+
+---
+
 ## 红线（违者重罚）
 
 - **禁止**修改 `E:\WB\tools\ai-production-control\runtime\` 下任何文件。

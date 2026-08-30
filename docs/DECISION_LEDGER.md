@@ -244,3 +244,14 @@
 - **§48 Reuse 门禁（R1）**：守护层缺口（§14/§61）经 GitHub 调研（2026-08-30，关键字 watchdog/scheduler/keepalive/heartbeat）确认**无现成可直接接入方案**——主流方案（schtasks+cron 类外部调度、心跳探活、JSONL 记账）均为模式而非可复用组件，且本项目中继（Trae-Ralph）为私有本地代码、上游已归档；决策 = **Compose**（复用系统自带 schtasks/taskkill/netstat + 既有中继启动命令，自写薄守护脚本），不引入新依赖
 - 关键教训（来自调研案例 1：watchdog 误判重复拉起 11 进程）：**探活必须用端口/心跳时间戳判定，禁用 tasklist WINDOWTITLE 判活**——本刀 heartbeat>300s 判死+端口探活符合该原则
 - status: ACTIVE（R1 实现中）
+
+## D023 — D3 Reuse 门禁/供应链/Playwright 交付 + registry tools 登记（actor=successor-session-20260831）
+
+- 背景：D3 三子项（§48-51 Reuse 门禁工具化、§51 Supply Chain 清单、§20 通用网页+download）S3 实现完成并实测
+- **Reuse 门禁**：scripts/reuse_gate.py——check/record/list + `--require-decision` 强制门禁（无 Decision 记录 → BUILD_BLOCKED exit 1）；本地 registry 搜索 + FAILED_APPROACH_LEDGER 衔接（F003 已失败路线命中警告）；gh CLI 未装 → GUIDANCE_ONLY 回退（不自动出网）；Decision 留痕 docs/evidence/reuse-decisions.ndjson
+- **§48 门禁本次执行**：Playwright 通用网页 = **Reuse**（微软官方 Playwright，§7 已调研映射）；pip-audit = **Reuse**（直接复用）；门禁工具本体 = **Compose**（无现成强制门禁组件，复用 git/registry/账本组装）；Decision D3-383007B5 已留痕
+- **Supply Chain**：scripts/supply_chain_check.py——pip-audit 复用实测（litellm 1.83.0 OK；urllib3 1.26.4/requests 2.32.5 演示 VULNERABLE 检出）；未装分支 UNKNOWN 不伪造
+- **Playwright（§20）**：runtime/browser_adapter.py——search/fetch/download 实测各 1 次（真实 Bing 5 条结果；python-logo.png 15770B 下载成功 sha256=9c121e…）；NODE_OPTIONS=--use-system-ca 破坏 node driver 坑已修（启动清除）；登录态敏感站走 bsk 互补边界已注明
+- **registry 登记**：sections.tools 新增 3 条目（tool-reuse-gate/tool-supply-chain-check/tool-browser-adapter，均 official），validator PASS；cap-browser-download 的 provided_by 转 official 依据=本次 download 实测
+- 测试：S4 专属实例写正式 test_*.py（§8a 分工）
+- status: ACTIVE（S4 测试 + 审核中）
