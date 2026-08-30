@@ -130,6 +130,17 @@
       "status": "COMMITTED",
       "committed_by": "Stream Zero Z4 (Builder under Charter v4.4)",
       "committed_at": "2026-08-29"
+    },
+    {
+      "spec_id": "ROADMAP-V0.9-CLOSE",
+      "title": "ROADMAP-V0.9到V1.0收口路线（详版，主脑裁决 B6 批准入仓）",
+      "path": "docs/governance/ROADMAP-V0.9到V1.0收口路线.md",
+      "sha256": "597100f0f5cae53597af56c69788ad42fc197afdcf0c03e7e483db4f653cfc08",
+      "size_bytes": 24196,
+      "source_provenance": "C:\\Users\\17838\\Documents\\QoderCN\\2026-08-28\\chat-1\\ROADMAP-V0.9到V1.0收口路线.md (byte-exact copy, hash-verified, MAINBRAIN_RULING B6 2026-08-30)",
+      "status": "COMMITTED",
+      "committed_by": "recovery-controller (batch E1-E4 execution)",
+      "committed_at": "2026-08-30"
     }
   ],
   "evidence_registry": [
