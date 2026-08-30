@@ -64,11 +64,11 @@
 **⚠ 双 runtime 警告（事故级，勿混淆）**：本机存在**两个 runtime**——①**生产黑盒** `E:\WB	oolsi-production-control
 untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；②**施工线副本** worktree 的 `runtime/`（brain_bridge/capsule_bridge 等新模块在此开发）。**写代码只写 worktree 副本；绝不动生产 runtime.py 的既有结构**（红线"不得结构性重构"；新增命令走独立模块+薄入口，参照 brain_bridge 模式）。R3 四动词补齐若发现必须改生产 runtime.py 结构 → 停下升级，不得硬改。
 
-**分支现状**：`master`=当前主线（全部工作在此）；`v0.9-b1/authority-effect-core`=ARCHIVE（已合入 master，勿再开发）；`v0.9-b2/authority-effect-evidence`=历史线（8-28 旧开发线，勿动）；`spec/*`=历史变体（勿动）。**一切新工作在 master 或从 master 切出的新分支**（新分支需业主/主脑裁决后创建）。
+**分支现状**：`master`=当前主线（全部工作在此，HEAD=`3467bc0`）；`v0.9-b1/authority-effect-core`=ARCHIVE（已合入 master，勿再开发）；`v0.9-b2/authority-effect-evidence`=历史线（8-28 旧开发线，勿动）；`spec/*`=历史变体（勿动）。**一切新工作在 master 或从 master 切出的新分支**（新分支需业主/主脑裁决后创建）。
 
 ## 3. 状态快照（2026-08-30 22:30 实测）
 
-- git：master=`e52945c`（本报告提交；快照 22:30 时为 0979c69），本地=远端，工作树干净
+- git：master=`3467bc0`（收尾后 HEAD，快照 23:30；22:30 时点为 0979c69），本地=远端，工作树干净
 - 测试：runtime 6 模块 113 tests OK + tests 13 OK；矩阵 36/36（`test_v09_attack_matrix_on_b1_core.py`，**用这个**，不是 `_offline.py`）
 - 中继：**停**（最后心跳 8-30 01:42；历史 32 次启动、29 个崩溃锁——根因=进程生命周期绑 AI 会话，非 bug）
 - 桥/catpaw：**停**（52900/32177 无监听）
@@ -81,7 +81,7 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 **✅ 40 节**（略——明细见 `docs/evidence/DEFINITION-77-SECTIONS-FINAL.md` v3 的 ✅ 集合，本重判与其差异：§62 升 ✅）：
 §0,1,6,9,10,12,13,15,21,22,24,25,26,27,28,29,31,32,33,35,36,37,39,42,43,44,45,46,47,52,53,54,62,64,66,67,69,72,75,76
 
-**🟡 30 节**（机制在、缺闭环/实测——按修复依赖排序）：
+**🟡 30 节**（机制在、缺闭环/实测——按修复依赖排序；含 §74 最终完成条件，见下）：
 
 | 节 | 缺什么 | 归属阶段 |
 |---|---|---|
@@ -280,5 +280,6 @@ untime\`（run.cmd + runtime.py，现役、冻结，弱模型实测走它）；�
 | 2026-08-30 23:05 | doctor DRIFT 修复（报告提交后 dev head/registry 同步，恢复 DRIFT_FREE）；修订记录重排 | 遵守本报告坑 9 |
 | 2026-08-30 23:08 | 第三轮挑刺 7 处：R1 可执行规格、并行 git 互斥、检查点独立文件、§15b 弱 AI 精简卡、回滚指引、cwd/R-PROD 细节；报告版本 v1.1（正文冻结 + 三类可维护区） | 换角度攻击（使用者视角） |
 | 2026-08-30 23:12 | 机械验证抓到真缺陷：§15b 弱 AI 卡的 R 会话 URL 路径写错（应为 roles→R-PROD→url 三层嵌套，非顶层 R-PROD）；补 R-PROD last_verified=2026-08-19 陈旧风险 | 逐条命令实测（非主观攻击） |
-| 2026-08-30 23:15 | 修订记录重建为规范 11 行（去字面 
+| 2026-08-30 23:15 | 修订记录重建为规范 10 行（修乱序、补缺失行、去嵌入换行） | 接手前收尾（DeepSeek V4 flash） |
+
 、修乱序、补缺失行）；清理临时脚本 | 接手前收尾（DeepSeek V4 flash） |
