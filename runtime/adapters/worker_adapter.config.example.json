@@ -1,0 +1,107 @@
+{
+  "schema": "WORKER_ADAPTER_CONFIG",
+  "schema_version": 1,
+  "default_timeout_sec": 300,
+  "note": "示例配置：CLI 型 Worker 列表，与 config/capability-registry.json workers 节 + config/production.json workers 节衔接（只读）。entry.command 只登记路径/命令，不携带 token；真实 AI worker 调用留业主 L3。costs/quotas 字段待 D2 成本路由时补充（capability-registry.json 已有 costs/quotas 数据面，只读衔接）。",
+  "workers": [
+    {
+      "id": "worker-local-python",
+      "name": "Local Python 3.12（规范解释器）",
+      "role": "worker",
+      "type": "LOCAL_RUNTIME",
+      "status": "official",
+      "entry": {
+        "kind": "command",
+        "command": ["C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe", "-"],
+        "cwd": null,
+        "note": "脚本型 stdin 契约（DEF-2 架构会签）：python - 把 stdin 当 Python 源码解析——goal 必须是合法脚本，喂自然语言中文 goal 会 NameError；自然语言 goal 应走 AI_CLI worker 或 worker-echo 示例"
+      },
+      "health_check": {
+        "kind": "file",
+        "path": "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe"
+      },
+      "timeout_sec": 60,
+      "adapter": "adapter-local-command",
+      "capabilities": ["cap-local-python", "cap-local-shell", "cap-local-filesystem"]
+    },
+    {
+      "id": "worker-echo",
+      "name": "Echo（stdin 原文回显，CLI 协议演示）",
+      "role": "worker",
+      "type": "LOCAL_RUNTIME",
+      "status": "official",
+      "entry": {
+        "kind": "command",
+        "command": ["C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe", "-c", "import sys; print(sys.stdin.read(), end='')"],
+        "cwd": null,
+        "note": "回显型 stdin 契约：原样打印 stdin（自然语言 goal 也可回显）；用于 CLI 协议回环实测与 L2 演示"
+      },
+      "health_check": {
+        "kind": "file",
+        "path": "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe"
+      },
+      "timeout_sec": 10,
+      "adapter": "adapter-local-command",
+      "capabilities": ["cap-local-python"]
+    },
+    {
+      "id": "worker-workbuddy-node",
+      "name": "WorkBuddy Node 22.22.2",
+      "role": "worker",
+      "type": "LOCAL_RUNTIME",
+      "status": "official",
+      "entry": {
+        "kind": "command",
+        "command": ["C:/Users/17838/.workbuddy/binaries/node/versions/22.22.2/node.exe", "-"],
+        "cwd": null
+      },
+      "health_check": {
+        "kind": "file",
+        "path": "C:/Users/17838/.workbuddy/binaries/node/versions/22.22.2/node.exe"
+      },
+      "timeout_sec": 60,
+      "adapter": "adapter-local-command",
+      "capabilities": ["cap-local-node"]
+    },
+    {
+      "id": "worker-workbuddy-cli",
+      "name": "WorkBuddy CLI（AI Worker，CLI 型）",
+      "role": "worker",
+      "type": "AI_CLI",
+      "status": "official",
+      "entry": {
+        "kind": "command",
+        "command": ["C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy"],
+        "cwd": null,
+        "note": "真实调用消耗额度=L3 业主；本适配器只构造协议（stdin=goal/stdout=结果/stderr=日志）"
+      },
+      "health_check": {
+        "kind": "file",
+        "path": "C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy"
+      },
+      "timeout_sec": 300,
+      "adapter": "adapter-api-model",
+      "capabilities": ["cap-analysis", "cap-mechanical-read", "cap-proposal", "cap-command-execution"]
+    },
+    {
+      "id": "worker-codex-cli",
+      "name": "Codex CLI（AI Worker，CLI 型）",
+      "role": "worker",
+      "type": "AI_CLI",
+      "status": "official",
+      "entry": {
+        "kind": "command",
+        "command": ["C:/Users/17838/AppData/Roaming/npm/codex.cmd"],
+        "cwd": null,
+        "note": "真实调用=L3 业主；arbiter 场景 sandbox=read-only"
+      },
+      "health_check": {
+        "kind": "file",
+        "path": "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+      },
+      "timeout_sec": 300,
+      "adapter": "adapter-api-model",
+      "capabilities": ["cap-analysis", "cap-code-review", "cap-proposal", "cap-command-execution"]
+    }
+  ]
+}
