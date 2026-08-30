@@ -4,20 +4,20 @@
 > `scripts/state_doctor.py` 校验）。其余文档（README/STATUS/Journal）均为派生视图。
 > 断言证据等级：VERIFIED（有锚点且已复核）/ INFERRED（有依据未复核）/ UNVERIFIED（假设）。
 
-## 状态（2026-08-30，PHASE_0 收束中）
+## 状态（2026-08-30，V1_ENGINEERING_CLOSED）
 
-- 发布状态：**PRODUCT_NOT_READY**（R4 约束：开发头裁决 RED 期间必须维持；晋升待业主裁决 E2）
-- 路线：Phase 0 → V0.9 收口 → V0.10 单类真实 GOAL → V0.11 REWORK/RECOVERY → V1.0 硬化（用户已批准）
+- 发布状态：**READY_FOR_USER_ACCEPTANCE**（V1.0 工程收口签字后晋升；边界注记见 `docs/governance/SIGNING-V1-ENGINEERING-CLOSE.md`——**北极星"自动调度闭环"未达成，"执衡可自动生产"宣称不成立**，达成前不得再晋升）
+- 路线：Phase 0 → V0.9 收口 → V0.10 单类真实 GOAL → V0.11 REWORK/RECOVERY → V1.0 硬化（用户已批准）→ **V1.0 工程收口（2026-08-30 执行完毕）**
 - 总纪律：KEEP > REPAIR > SIMPLIFY > REPLACE > REBUILD
 
 ## 四基线（不得互相画等号）
 
 | 概念 | 值 | 等级 |
 |---|---|---|
-| 当前开发头 | `v0.9-b1/authority-effect-core@a7befcb`（2026-08-30，含 Brain/Capsule 激活、累计 8 次真实 GOAL（3+5）证据、V1.0 收束报告） | VERIFIED |
+| 当前开发头 | `master@793fa41`（V1_ENGINEERING_CLOSED，合并 v0.9-b1 的合并提交，tag `v1.0-engineering-close`） | VERIFIED |
 | 当前被接受基线 | `v0.8-integrate/adapter-final-4@e8c53d4a`（v0.9 证据模块硬编码指认） | VERIFIED |
-| 最后绿基线 | v0.9-b1（112+ 测试全绿 + 累计 8 次真实 GOAL（3+5）全 PASS；正式封绿待业主裁决） | VERIFIED + 限定 |
-| master | `@4cf41fd`，MERGED_BASELINE_STALE（落后开发头 90+ 提交）；**合并裁决暂缓（E3 待业主）** | VERIFIED |
+| 最后绿基线 | master@793fa41（112+ 测试全绿 + 累计 8 次真实 GOAL（3+5）全 PASS + 封印 manifest） | VERIFIED |
+| master | `@793fa41`，**CURRENT**（已合并 v0.9-b1/authority-effect-core，V1.0 工程收口，FINAL_SIGNING_PACKAGE Part 3） | VERIFIED |
 
 ## 当前阻塞（2026-08-30 状态）
 
@@ -26,7 +26,7 @@
 3. **BLK-3** ~~权限闸门 16 例攻击案例应 DENY 却 ALLOW~~ → 流 A 三门构造后矩阵 36/36 red=0，CLOSED
 4. **BLK-4** reconciliation API → 记录在案，待后续版本
 
-**剩余待业主裁决**：E1 TCB 封印、E2 release_status 晋升、E3 master 汇合、E4 累积清单（见 docs/evidence/V1.0-CLOSE-OUT-REPORT-20260830.md）
+**V1.0 工程收口（2026-08-30）已完成**：E1 TCB 封印已执行（收口专用库，gen 1）、E2 release_status 已晋升 READY_FOR_USER_ACCEPTANCE（带边界注记）、E3 master 已汇合（793fa41 + tag v1.0-engineering-close）、E4 累积清单已全部裁决。施工团任务结束，进入"业主验收 + 北极星（自动调度闭环）"新阶段。
 
 ## 16 RED 分类（规划者裁决提案，最终以锚定规范为准）
 
