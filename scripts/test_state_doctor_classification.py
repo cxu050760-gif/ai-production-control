@@ -83,5 +83,32 @@ class StateDoctorDevHeadPolicyTests(unittest.TestCase):
         self.assertFalse(doc._all_in([], doc.GOVERNANCE_PATHS))
 
 
+class StateDoctorGovernancePathTests(unittest.TestCase):
+    """v16 §4-A：治理路径白名单扩充的分类行为钉测。"""
+
+    def test_journal_only_commit_is_governance(self):
+        self.assertTrue(doc._all_in(
+            ["docs/BUILD_MISSION_JOURNAL.md"], doc.GOVERNANCE_PATHS))
+
+    def test_final_prompt_only_commit_is_governance(self):
+        self.assertTrue(doc._all_in(
+            ["docs/asset-registry/FINAL_PROMPT.md"], doc.GOVERNANCE_PATHS))
+
+    def test_owner_notice_prefix_match(self):
+        self.assertTrue(doc._all_in(
+            ["docs/owner-notices/20260831-regression-entry-interpreter-pin.md"],
+            doc.GOVERNANCE_PATHS))
+
+    def test_state_json_plus_journal_is_governance(self):
+        self.assertTrue(doc._all_in(
+            ["PROJECT_STATE.json", "state/branch_registry.json",
+             "docs/BUILD_MISSION_JOURNAL.md"], doc.GOVERNANCE_PATHS))
+
+    def test_code_file_still_rejected(self):
+        self.assertFalse(doc._all_in(
+            ["docs/BUILD_MISSION_JOURNAL.md", "runtime/runtime.py"],
+            doc.GOVERNANCE_PATHS))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

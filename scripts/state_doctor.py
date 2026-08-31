@@ -41,13 +41,20 @@ STALENESS_DAYS = 7
 # State-only / governance-only paths. A leading commit that touches ONLY these
 # is a governance meta-commit (e.g. a Phase 0 seal) and is allowed to sit ahead
 # of CURRENT_DEVELOPMENT_HEAD. Any other path = a real code/development change.
+# v16 §4-A 扩充（2026-08-31）：docs/BUILD_MISSION_JOURNAL.md（§0.6 强制里程碑
+# 同步纪律——journal-only 里程碑同步提交是经常性合法模式）与
+# docs/asset-registry/FINAL_PROMPT.md（§9 施工 AI 修订=新提交+owner-notice，
+# 任务书本身亦属治理文档）纳入；两类路径均不承载代码，逃逸面为零。
 GOVERNANCE_PATHS = frozenset({
-    "PROJECT_STATE.json",
-    "PROJECT_STATE.md",
-    "state/branch_registry.json",
-    "scripts/state_doctor.py",
-    "scripts/test_state_doctor_classification.py",
-    "docs/PHASE0_PACK_README.md",
+"PROJECT_STATE.json",
+"PROJECT_STATE.md",
+"state/branch_registry.json",
+"scripts/state_doctor.py",
+"scripts/test_state_doctor_classification.py",
+"docs/PHASE0_PACK_README.md",
+"docs/BUILD_MISSION_JOURNAL.md",
+"docs/owner-notices/",
+"docs/asset-registry/FINAL_PROMPT.md",
 })
 
 drifts: list[str] = []
@@ -160,8 +167,13 @@ def _unregistered_branches(actual_names, registered_names):
 
 def _all_in(given, allowed) -> bool:
     """True iff every element of `given` is in `allowed` and `given` is non-empty.
-    An empty change set is NOT governance-only (fail closed)."""
-    return bool(given) and all(p in allowed for p in given)
+    An empty change set is NOT governance-only (fail closed).
+    目录前缀项（以 / 结尾）按前缀匹配其下全部文件。"""
+    def _hit(p: str) -> bool:
+        if p in allowed:
+            return True
+        return any(a.endswith("/") and p.startswith(a) for a in allowed)
+    return bool(given) and all(_hit(p) for p in given)
 
 
 def _commit_is_governance_only(commit: str) -> bool:
