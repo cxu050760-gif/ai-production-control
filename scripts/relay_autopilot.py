@@ -170,7 +170,16 @@ def admission_checks(goal, require_gates=False):
                 result["reasons"].append(f"lease-gate took over from {holder}（§34）")
             else:
                 r = controller_lease.check_execute_right(holder, gen)
-                result["checks"]["lease"] = {"ok": r["ok"], "reason": r.get("reason")}
+                if not r["ok"] and r.get("reason") == "LEASE_EXPIRED":
+                    # 自己持有的过期租约：同代续约即可（renew 在文件锁内校验
+                    # generation——若期间已被他人接管则仍拒，fencing 不弱化）。
+                    rn = controller_lease.renew(holder, gen)
+                    result["checks"]["lease"] = {"action": "renewed", "ok": rn.get("ok"),
+                                                 "reason": rn.get("reason")}
+                    if rn.get("ok"):
+                        r = {"ok": True, "reason": "OK"}
+                result["checks"]["lease"].setdefault("ok", r.get("ok"))
+                result["checks"]["lease"].setdefault("reason", r.get("reason"))
                 if not r["ok"]:
                     result["admitted"] = False
                     result["reasons"].append(f"lease-gate {r.get('reason')}: 老权失效或过期")
