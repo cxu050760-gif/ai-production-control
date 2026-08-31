@@ -97,10 +97,23 @@ def _lease_lock(path: Path, timeout: float = DEFAULT_LOCK_TIMEOUT) -> Tuple[int,
         except FileExistsError:
             try:
                 if time.time() - lock_path.stat().st_mtime > STALE_LOCK_SECONDS:
-                    # Best-effort stale-lock reclaim; a racing remove self-heals
-                    # on the next loop iteration.
-                    os.remove(str(lock_path))
-                    continue
+                    # P2-3 (internal review): stale reclaim via rename-steal —
+                    # os.rename is atomic and the unique winner gets the
+                    # reclaim; losers retry the O_EXCL loop and hit the fresh
+                    # lock (fail-closed LeaseLockTimeout at worst, never two
+                    # holders). Works on POSIX too (where unlink succeeds even
+                    # on open files).
+                    steal = Path(str(lock_path) + f".stolen-{os.getpid()}-{time.monotonic_ns()}")
+                    try:
+                        os.rename(str(lock_path), str(steal))
+                    except OSError:
+                        time.sleep(0.02)
+                        continue  # another reclaimer stole it first
+                    try:
+                        os.remove(str(steal))
+                    except OSError:
+                        pass
+                    continue  # reclaimed: retry O_EXCL on the now-free path
             except OSError:
                 pass
             if time.monotonic() >= deadline:

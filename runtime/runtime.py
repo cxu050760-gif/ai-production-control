@@ -259,6 +259,8 @@ class RunLock:
         try:
             raw = self.lock_path.read_text(encoding="utf-8")
             data = json.loads(raw) if raw.strip() else {}
+            if not isinstance(data, dict):
+                data = {}  # P3: a bare JSON scalar is as good as empty (age decides)
             ts = float(data.get("ts", 0)) or self.lock_path.stat().st_mtime
             if time.time() - ts > LOCK_STALE_SEC:
                 self._unlink_quiet()

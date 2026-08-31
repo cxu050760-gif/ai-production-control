@@ -929,32 +929,42 @@ def cmd_effect_reconcile(rt, argv: list) -> int:
     p.add_argument("--evidence-file", required=True,
                    help="JSON object with observation evidence for the reconciliation")
     args = p.parse_args(argv)
-    state = rt.load_state(args.run_id)
-    record = state.get("effect_safety") or {}
-    if record.get("status") != "OUTCOME_UNKNOWN":
-        rt.emit({"status": "DENIED",
-                 "reason": ("reconciliation requires OUTCOME_UNKNOWN; "
-                            f"current={record.get('status')!r}"),
-                 "run_id": args.run_id})
-        return rt.EXIT_DENIED
-    try:
-        evidence = json.loads(Path(args.evidence_file).read_text(encoding="utf-8") or "{}")
-    except Exception as exc:  # noqa: BLE001
-        rt.emit({"status": "DENIED", "reason": f"evidence file unreadable: {exc}",
-                 "run_id": args.run_id})
-        return rt.EXIT_DENIED
-    record = reconcile_effect(rt, state, str(record.get("logical_effect_id") or ""),
-                              observed_succeeded=bool(args.succeeded), evidence=evidence)
-    if args.succeeded and state.get("status") == "HARD_BLOCKED":
-        # Effect confirmed delivered: resume the lifecycle (auditable), so the
-        # normal flow can continue. NOT applied for --not-occurred (fail-closed:
-        # replay needs a new explicit authority decision).
-        state["status"] = "RUNNING"
-        state["blocked_reason"] = ""
-        state["next_action"] = "reconciled: effect confirmed delivered; continue the normal flow"
-        rt.save_state(state)
-        rt.journal(state["run_id"], "EFFECT_RECONCILE_RESUME",
-                   logical_effect_id=record.get("logical_effect_id"))
+    # P2-2 (internal review): all other state-mutating commands hold the
+    # per-RUN RunLock; without it two concurrent reconciles could both pass
+    # the OUTCOME_UNKNOWN pre-check and double-commit/double-resume, and a
+    # racing directive/report could lose updates via the prev-rotation.
+    lock = rt.RunLock(args.run_id)
+    with lock:
+        state = rt.load_state(args.run_id)
+        record = state.get("effect_safety") or {}
+        if record.get("status") != "OUTCOME_UNKNOWN":
+            rt.emit({"status": "DENIED",
+                     "reason": ("reconciliation requires OUTCOME_UNKNOWN; "
+                                f"current={record.get('status')!r}"),
+                     "run_id": args.run_id})
+            return rt.EXIT_DENIED
+        try:
+            evidence = json.loads(Path(args.evidence_file).read_text(encoding="utf-8") or "{}")
+        except Exception as exc:  # noqa: BLE001
+            rt.emit({"status": "DENIED", "reason": f"evidence file unreadable: {exc}",
+                     "run_id": args.run_id})
+            return rt.EXIT_DENIED
+        try:
+            record = reconcile_effect(rt, state, str(record.get("logical_effect_id") or ""),
+                                      observed_succeeded=bool(args.succeeded), evidence=evidence)
+        except EffectDenied as exc:
+            rt.emit({"status": "DENIED", "reason": str(exc), "run_id": args.run_id})
+            return rt.EXIT_DENIED
+        if args.succeeded and state.get("status") == "HARD_BLOCKED":
+            # Effect confirmed delivered: resume the lifecycle (auditable), so the
+            # normal flow can continue. NOT applied for --not-occurred (fail-closed:
+            # replay needs a new explicit authority decision).
+            state["status"] = "RUNNING"
+            state["blocked_reason"] = ""
+            state["next_action"] = "reconciled: effect confirmed delivered; continue the normal flow"
+            rt.save_state(state)
+            rt.journal(state["run_id"], "EFFECT_RECONCILE_RESUME",
+                       logical_effect_id=record.get("logical_effect_id"))
     rt.emit({"status": "OK", "run_id": state.get("run_id"),
              "effect_status": record.get("status"),
              "run_status": state.get("status")})

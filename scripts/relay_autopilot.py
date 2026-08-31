@@ -290,12 +290,35 @@ def acquire_lock():
             # 新鲜锁（0<=age<=300）：另一实例持有 -> SKIP_LOCKED，绝不覆盖
             if 0 <= age <= 300:
                 return None
-            # stale（age>300）或解析失败/未来时间 -> 接管
+            # stale（age>300）或解析失败/未来时间 -> 接管。
+            # P2-1（内审）：不能直接 os.remove——并发接管者 A 读 stale、B
+            # remove+认领+写新 json、A 再 remove 会删掉 B 的**新鲜**锁 ->
+            # 双持有者。改为 rename-steal：把旧 lock.json 原子改名到唯一
+            # 墓碑名，rename 唯一成功者才获得接管权（失败者 SKIP）。
+            tombstone = os.path.join(LOCK_DIR, f"lock.stolen-{token}")
             try:
-                os.remove(lock_json)
+                os.rename(lock_json, tombstone)
             except OSError:
+                return None  # 别的接管者已偷走（或 Windows 文件打开中）
+            try:
+                fd = os.open(lock_json, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                try:
+                    os.remove(tombstone)
+                except OSError:
+                    pass
                 return None
-            continue
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump({"token": token, "at": utcnow()}, fh, ensure_ascii=False)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+            finally:
+                try:
+                    os.remove(tombstone)
+                except OSError:
+                    pass
+            return token
         else:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump({"token": token, "at": utcnow()}, fh, ensure_ascii=False)
