@@ -86,3 +86,14 @@
   - **【新发现·GATE-3 系统性测试隔离缺陷】**audit hook（sys.addaudithook）实证：全套件回归对**仓根真实 state/controller_lease.json** 有 24 次访问、600s 过期后发生真实 renew 写入（时间依赖性，r1p 轮 CLEAN 纯属租约未过期运气）。双根因：①controller_lease.default_lease_path() 无视 APC_RUNTIME_STATE_ROOT 测试缝（runtime.py/harness_verify.py 均遵守，唯它例外）；②test_effect_reconcile_offline._make_run 的 finally 无条件 pop 该 env，摧毁 discover 外层隔离。两处已修（生产默认路径不变；env 保存/恢复式），新增 StateRootSeamTests 2 例缝回归钉；write-mode 审计复放=0 真实写入；
   - **【假失败定性（§6）】**audit-hook 开销下并发用例 1 次时序抖动失败，标准入口连续 2 轮复现 0 失败 → 定性为观测工具开销假失败，非产品缺陷；
   - **新基线**：runtime 639→652（+11 三参数/续约 +2 缝钉）、tests 219 不变，858→871；对账口径"≥基线 639+219"仍满足，增量声明须列明 +13。
+- **HEAD 增量盲审补内审（P0-2，独立子代理盲审 41e80e3..fa5406f）= REWORK**：
+  - P2-1 状态一致性未闭合（PROJECT_STATE/registry 落后一代，state_doctor DRIFT）→ governance-only 同步提交处置（本条所在提交）；
+  - P2-2 rename-steal 未真消除双持有者（stat 与 rename 之间 B 可重建新鲜锁被 A 偷走）→ 两处复验修复：偷到的墓碑若非"所判 stale"（上界语义 age≤阈值，免疫时钟量化微差）→ 恢复原位+busy 重试，绝不双持有者；
+  - P2-3 --review-packet 显式缺失静默回落 round18 根 → fail-closed：cmd_submit 提前拒（rc=2，不入 admission）+build_event 显式缺失抛 ValueError（默认路径回落保留）；E2/E5 断言同步；
+  - P3-1 _WIRING_AVAILABLE=False 时 drive 跳过 lease 门 → 维持 sandbox 既有语义（范围外降级，不在本批改动）；
+  - P3-2 load_json None 分支把新鲜空锁当损坏接管 → 修复：0 字节新鲜（age∈[-5s,300s]，-5s 为时钟量化容差——实测 datetime.now() 微秒截断可致刚写文件 age≈-1e-6）SKIP；非空撕裂残留照常接管（保 n5c 自愈语义）；
+  - P3-3 FINAL_PROMPT 缝措辞与 controller_lease 现状矛盾 → 已修（governance 提交）；
+  - P3-4 059afe8 并发改动零直接测试 → 补 6 例钉测（controller_lease steal 复验×2+relay acquire_lock steal 复验×3 含正向+并发窗口实证注释）；
+  - 盲审 APPROVE 项（无发现）复核通过：fencing 正确/KeyError 回归钉/包装无破坏调用方/RunLock 防崩/阈值合规/生产默认路径不变/13 例新测试真断言。
+- **盲审处置后两轮直录**：r2f=runtime 658 OK+tests 219 OK（154s，CLEAN）；r2g=658+219 OK（153s，CLEAN）——REWORK 修复生效，877 例全绿。
+- **测试健壮性两处（r2a/r2c/r2e 假失败定性后处置，非产品改动）**：n2 等待条件扩为"executor 注册且 proc 已创建"（产品侧 _executors 注册先于 run() 内 proc 创建，parallel_scheduler.py:1013-1016 真实异步窗口）+等待窗 5s→20s；并行墙钟阈值 0.26→0.285（顺序 0.30 的 95%，0.266 负载越线属假失败）。

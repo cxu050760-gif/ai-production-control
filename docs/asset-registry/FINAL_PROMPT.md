@@ -148,7 +148,9 @@ publish_builder_ready(_v4/v5).py（无 build_review_packet_v4.py）。worktree�
 - 原则二 git 提交与 journal/PROJECT_STATE 单写者=主代理；子代理写 tasks/<id>.jsonl 分片（序号+
   内容哈希）；主代理每收到子任务完成汇报即汇总落盘；journal 追加写，重进先尾部自检，矛盾条目
   降"待验证"实测采信
-- 原则三 测试隔离：APC_RUNTIME_STATE_ROOT 各自 tmp——该 seam 只治理 runtime.py；relay/桥/投递类
+- 原则三 测试隔离：APC_RUNTIME_STATE_ROOT 各自 tmp——该 seam 治理 runtime.py 与
+  controller_lease.py（8-31 起 lease 路径同样尊重该 env，见 GATE-3 补强提交）；
+  relay/桥/投递类
   共享全局单例，强制互斥、仅主代理执行、排队串跑
 - 原则四 全局单例清单：chatgpt_bridge、Chrome/扩展 7da8483f、bsk daemon、ZhihengGuard、
   construction-relay 队列——同时刻仅一个执行体持有。**判定代理对各自可写域拥有独占写权**
