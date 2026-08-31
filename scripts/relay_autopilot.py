@@ -395,7 +395,7 @@ def _resolve_commit(goal, seq, candidate_commit, relay_mode):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:40]
 
 
-def build_event(goal, seq, candidate_commit=None, relay_mode=False):
+def build_event(goal, seq, candidate_commit=None, relay_mode=False, repo_path=None):
     """构造与 review-relay.js validateEvent 期望一致的 BUILDER_READY 事件。"""
     cfg = load_relay_config()
     binding = load_builder_binding()
@@ -420,7 +420,7 @@ def build_event(goal, seq, candidate_commit=None, relay_mode=False):
         "project_id": cfg["project_id"],
         "run_id": run_id,
         "task_id": task_id,
-        "repo_path": ALLOWED_REPO_ROOT,
+        "repo_path": repo_path or ALLOWED_REPO_ROOT,  # GATE-5: caller may inject the real repo (hardcoded E:\WB\temp is legacy)
         "candidate_commit": commit,
         "candidate_branch": "autopilot-mock" if not relay_mode else "autopilot-relay",
         "review_packet": packet,
@@ -464,7 +464,8 @@ def cmd_submit(args):
     ledger("submit_admission", "goal=" + (goal.get('goal_id') or goal.get('title'))
            + " checks=" + json.dumps(admit['checks'], ensure_ascii=False), ok=True)
     seq = int(time.time() * 1000) % 100000
-    event = build_event(goal, seq, args.candidate_commit, relay_mode=(args.mode == "relay"))
+    event = build_event(goal, seq, args.candidate_commit, relay_mode=(args.mode == "relay"),
+                        repo_path=getattr(args, "repo_path", None) or None)
 
     if args.mode == "relay":
         target_dir = REAL_INBOX
@@ -786,6 +787,8 @@ def main():
     p_submit.add_argument("--goal-file", required=True)
     p_submit.add_argument("--mode", choices=["mock", "relay"], default="mock")
     p_submit.add_argument("--candidate-commit", default=None)
+    p_submit.add_argument("--repo-path", default=None,
+                          help="GATE-5: builder 实际工作的 git 仓库（默认遗留常量 E:\\WB\\temp）")
     p_submit.set_defaults(func=cmd_submit)
 
     p_drive = sub.add_parser("drive", help="驱动状态机")
