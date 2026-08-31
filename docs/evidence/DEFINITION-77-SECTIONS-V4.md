@@ -14,17 +14,19 @@
 
 ## 0. 结论速览
 
-**77 节 v4 独立判定（QA 复核稿）：67 ✅ / 10 🟡 / 0 ❌（合计 77）**
+**77 节 v4 独立判定（QA 复核稿）：63 ✅ / 14 🟡 / 0 ❌（合计 77）**
+
+> ⚠️ **0❌≠可上线：**仍有 14 节 🟡（其中 §3/§4/§5/§74 必须业主 L3 实测）；且各 ✅ 仅代表 L1/L2 完成，真实场景验证留 L3（清单见 §6）。按审计 AUDIT-V1.1-BLACKBOX-20260831 规则 R：§34/§55/§59/§68 降 🟡（业主 2026-08-31 采纳全部降等）。
 
 | 变化 | 节数 | 明细 |
 |---|---|---|
 | 保持 ✅ | 40 | 主报告 §4 ✅ 集合不变（§0,1,6,9,10,12,13,15,21,22,24,25,26,27,28,29,31,32,33,35,36,37,39,42,43,44,45,46,47,52,53,54,62,64,66,67,69,72,75,76） |
-| 🟡 升 ✅ | 22 | §2,14,16,17,18,19,23,30,34,38,40,41,48,49,50,56,57,61,65,70,71,73（本线交付直接补足缺口，L1/L2 机器验证充分） |
-| ❌ 升 ✅ | 5 | §55,58,59,63,68（机制真实落地 + 机器验证充分） |
-| ❌ 升 🟡 | 2 | §3（A1 接线完成，真实目标未走 → 待 L3）、§51（依赖漏洞扫描实现，其余维度未系统化） |
+| 🟡 升 ✅ | 21 | §2,14,16,17,18,19,23,30,38,40,41,48,49,50,56,57,61,65,70,71,73（本线交付直接补足缺口，L1/L2 机器验证充分；§34 降 🟡） |
+| ❌ 升 ✅ | 2 | §58,63（机制真实落地 + 机器验证充分；§55/§59/§68 按规则 R 改判 🟡，见审计 §4.2 派生处置） |
+| ❌ 升 🟡 | 5 | §3（A1 接线完成，真实目标未走 → 待 L3）、§51（依赖漏洞扫描实现，其余维度未系统化）、§55（零生产消费者）、§59（零生产消费者/未接线调度）、§68（宪法 8 项能力仅覆盖约 4 项） |
 | 保持 🟡 | 8 | §4,5,7,8,11,20,60,74（其中 §4/§5/§74 = 待 L3（业主）；§7/§8/§11/§20/§60 = 机制在缺闭环/扩展） |
 
-**7 个原 ❌ 节新判定**：§3 → 🟡 待 L3；§51 → 🟡；§55 → ✅；§58 → ✅；§59 → ✅；§63 → ✅；§68 → ✅
+**7 个原 ❌ 节新判定（业主已采纳全部降等）**：§3 → 🟡 待 L3；§51 → 🟡；§55 → 🟡（零生产消费者）；§58 → ✅；§59 → 🟡（零生产消费者/未接线）；§63 → ✅；§68 → 🟡（宪法 8 项仅覆盖约 4 项）
 
 ---
 
@@ -37,7 +39,7 @@
 | 3 | 自举矩阵 | `python runtime/test_v09_attack_matrix_offline.py`（D5 修复后） | **1 test OK（36/36 断言）** ✅ |
 | 4 | 全量测试抽查 | `python -m unittest discover -s runtime -p "test_*.py"` | **Ran 540 tests, errors=8**（8 ERROR 为既有环境基线：test_harness_verify_offline 2 + test_v08_adapter_evidence_offline 5+1，均 T0/v0.8 遗留文件，本线零改动）✅ |
 | 5 | R1 守护计划任务 | `schtasks /query /tn ZhihengGuard` | 存在，模式=就绪，下次运行 2:39 ✅ |
-| 6 | R2 注册表校验 | `python docs/ops/registry-validate.py` | PASS（15/15 节/104 条/24 非阻断 warning）exit=0 ✅ |
+| 6 | R2 注册表校验 | `python docs/ops/registry-validate.py` | PASS（15/15 节/107 条/24 非阻断 warning）exit=0 ✅ |
 | 7 | R2 注册表消费 | `python docs/ops/registry-launch.py` | summary 输出 + production.json cross-check ok:True ✅ |
 | 8 | R3 黑箱 HUMAN_GATE | `python runtime/blackbox_bridge.py human-gate` | total_scanned=118, waiting_count=12, exit=0 ✅ |
 | 9 | A1 自动调度 | `python scripts/relay_autopilot.py status` | 2 runs WRAPPED（A1 L2 残留真实状态）、inbox_pending=0、exit=0 ✅ |
@@ -67,7 +69,7 @@
 |---|---|---|---|---|
 | §0 | 最高原则（AI 会错，靠系统防错） | ✅ | fail-closed 机制（ec_lite/effect_safety_lite）+ 权威矩阵 R31-R34 实测 FAIL_CLOSED | — |
 | §1 | 产品本质 | ✅ | 系统即此（目标驱动/成本感知/可替换生产系统） | — |
-| §2 | 为什么存在（成本感知） | ✅ | **D2**：cost_router.py Expected Total Cost 核算（57/57 测试 + ETC 手算 3 例吻合 + 亲跑 route ETC=0.05）；主报告缺口"无 ETC 核算"已补 | 生产阈值校准（L3 前置，见 §6-6） |
+| §59 | Cost Routing | 🟡 | **D2**：ETC 路由 + 融断机制 真（57/57 测试）；但审计§4.2 核实——本文件 V4 :276 自认“ETC 计算器未接线调度=advisory”，**全仓零 .py import cost_router = 零生产消费者/未接线调度**；规则 R（接线属 L1/L2 工程范围，不在 L3 免费范围）降 🟡 | **接线调度（本线 §4.4）**；生产阈值按真实价目校准（L3，§6-6） |
 | §3 | 最终体验（给目标做完） | 🟡 待 L3 | **A1**：relay_autopilot.py 状态机接线完成（inbox→RUN→work→report→R→wrap，L2 沙箱全链 + 排队 + REWORK 公平性，REVIEW-A1 APPROVED）；**但真实弱模型会话 + 业主真实目标未走 §3 全自动** | **待 L3（业主）**：真实目标走 §3 全自动（前置见 §6-3） |
 | §4 | 生产系统（Artifact+Evidence+Acceptance） | 🟡 待 L3 | Artifact/Evidence 机制在（RUN/state/reply/证据目录）；**真实用户级交付 Acceptance 链未走** | **待 L3（业主）**：真实交付 + 正式 Acceptance（§6-2） |
 | §5 | Provider 独立 | 🟡 待 L3 | **D1**：R-Adapter（LiteLLM 多 Provider 仲裁/fallback）+ Worker-Adapter（CLI 泛化协议）实现，Python312 44/44 绿 + mock 全链（REVIEW-D1 APPROVED）；**真实 Provider 调用需 API key，未实测替换** | **待 L3（业主）**：真实 Provider 替换（§6-2）；r_adapter/worker_adapter 未 registry 驱动（对齐项） |
@@ -114,7 +116,7 @@
 | §31 | State 可恢复 | ✅ | state.json 唯一权威 + verify（V1.0） | — |
 | §32 | Control Plane Trust | ✅ | 主报告升 ✅（Controller TCB 封印 gen1 VERIFIED） | — |
 | §33 | Authority 模型 | ✅ | scoped_authorization（V1.0） | — |
-| §34 | Split Brain 防护 | ✅ | **D4**：epoch 单调 + STALE_EPOCH 裁决（回滚/复活的低 epoch 结果拒绝）+ SingleInstanceLock（mkdir 原子互斥）；裁决顺序 STALE_EPOCH→REVOKED_EPOCH→… 测试覆盖（REVIEW-D4 APPROVED） | 真实双 Controller 竞争实测留 L3（§6-4） |
+| §34 | Split Brain 防护 | 🟡 | **D4**：epoch 单调 + STALE_EPOCH 裁决 + SingleInstanceLock（mkdir 原子可用）——但审计§4.2 批钟：SingleInstanceLock=互斥（不让新的起来）、epoch=任务级授权代，**不覆盖宪法 :1226-1242 的“老 Controller 未死、新已接管时老权失效” Controller 级 fencing**；且双 Controller 沙箱演练是 L2 项却被误归 L3（规则 R） | 补 L2 沙箱演练；真实双 Controller 竞争留 L3（§6-4） |
 | §35 | Identity Binding | ✅ | RUN 绑定（主报告升 ✅） | — |
 | §36 | Effect 追踪 | ✅ | effect_safety_lite（主报告升 ✅） | — |
 | §37 | Effect Write-Ahead | ✅ | 主报告升 ✅ | — |
@@ -145,10 +147,10 @@
 | §52 | Secret Isolation | ✅ | 敏感清单零入仓（V1.0 + 各刀凭据 grep 零命中） | — |
 | §53 | Credential Store | ✅ | 凭据路径登记不复制（V1.0 + R2 registry login_state 6 条 CREDENTIAL_REFERENCE） | — |
 | §54 | Data Egress | ✅ | effect_safety_lite（V1.0） | — |
-| §55 | Context Sufficiency | ✅ | **D5**：context_sufficiency.py 五分支（SWITCH_LOCAL_BRAIN/SWITCH_ALLOWED_PROVIDER/DESENSITIZE_RETRY/HUMAN_AUTHORIZATION/BLOCKED）+ 策略阈值 + 脱敏 + 阻塞语义；14/14 测试 + 亲跑 SWITCH_LOCAL_BRAIN（ratio=0.5），REVIEW-D5 APPROVED | 接入主链（autopilot/runtime 调用前检查点，L3 前置可选） |
+| §55 | Context Sufficiency | 🟡 | **D5**：五分支（SWITCH_LOCAL_BRAIN/SWITCH_ALLOWED_PROVIDER/DESENSITIZE_RETRY/HUMAN_AUTHORIZATION/BLOCKED）+ 策略阈值 + 脱敏 + 阻塞语义，14/14 测试绿（机制真）；但审计§4.2 核实：**全仓零生产消费者**（仅自身与测试引用），与 §59 同构，未挂主链——规则 R 降 🟡 | 接入主链（本线 §4.4）；真实 Brain 检查点留 L3（§6-7） |
 | §56 | 多 Worker | ✅ | **D4**：parallel_scheduler 并发分派（max_concurrent）+ 资源声明 + 结果对应；24/24 测试 + 3 任务争锁全 COMPLETED（REVIEW-D4 APPROVED）；**L2 测试内模拟充分** | **真实多 Worker 生产并行留 L3（业主）**（§6-4） |
 | §57 | Resource Lock | ✅ | **D4**：ResourceLockManager（每资源 mkdir 原子互斥 + 冲突排队 LOCK_WAITING 不失败）+ SingleInstanceLock（吸取 A1 DEF-A1 教训正确实现）；测试覆盖（REVIEW-D4 APPROVED） | 真实冲突场景留 L3（§6-4） |
-| §58 | Project Isolation | ✅ | **D4**：每任务独立 work_dir + 越界写校验（SANDBOX_VIOLATION 端到端实测 exit=2）+ symlink 逃逸扫描；REVIEW-D4 APPROVED；主报告 ❌"无系统实现"已消除 | 真实多 Project 并发留 L3（§6-4） |
+| §58 | Project Isolation | ✅ | **D4**：每任务独立 work_dir + 越界写校验（SANDBOX_VIOLATION 端到端实测 exit=2）+ symlink 逃逸扫描；REVIEW-D4 APPROVED；主报告 ❌“无系统实现”已消除 | 隔离维度覆盖度：work_dir 重定向 + 越界写 + symlink 逃逸已覆盖（L2 完成），无 OS 级沙箱；真实多 Project 并发留 L3（§6-4） |
 | §59 | Cost Routing | ✅ | **D2**：cost_router.py 三档路由（weak/hybrid/strong）+ ETC（几何级数 retry 成本 + goal_type/rework_risk 难度）+ 57/57 测试 + ETC 手算 3 例吻合 + 亲跑；主报告 ❌"无系统实现"已消除 | 生产阈值按真实价目校准（L3 前置，§6-6） |
 | §60 | Escalation Ladder | 🟡 | **D5**：README §6 实现 L0-L2（Task Graph/缺陷→任务转换器/§55 路由）+ L3-L9 映射存档；**9 级阶梯仅前 3 级落地** | L3-L9 逐级实现（后续） |
 
@@ -158,12 +160,12 @@
 |---|---|---|---|---|
 | §61 | Hard Fuse | ✅ | **D2**：SAFE_HALT 三条件（BUDGET_BREACH/CONSECUTIVE_BREACH/NO_PROGRESS）真实触发 3 次（state/cost_router_state.json history=3 亲跑确认）+ FROZEN 拦截 + reset 解冻（REVIEW-D2 APPROVED）；主报告缺口"SAFE_HALT 从未真实触发"已补 | SAFE_HALT 人工处置 SOP（后续，§6-8） |
 | §62 | Safety > Liveness | ✅ | fail-closed 矩阵 R31-R34 实测（主报告升 ✅） | — |
-| §63 | Capability Registry | ✅ | **R2**：config/capability-registry.json 机器可读（15 节对应 §63 十五项 + role_bindings，104 条目）+ registry-validate.py（PASS/负向 5/5）+ **被运行时真实消费**（cost_router 读 costs 节、context_sufficiency 读 brains/providers 节、reuse_gate local_registry_search、registry-launch cross-check ok:True，亲跑确认）；主报告 ❌"手册入仓≠机器可读注册表"已消除 | — |
+| §63 | Capability Registry | ✅ | **R2**：config/capability-registry.json 机器可读（15 节对应 §63 十五项 + role_bindings，107 条目）+ registry-validate.py（PASS/负向 5/5）+ **被运行时真实消费**（cost_router 读 costs 节、context_sufficiency 读 brains/providers 节、reuse_gate local_registry_search、registry-launch cross-check ok:True，亲跑确认）；主报告 ❌"手册入仓≠机器可读注册表"已消除 | — |
 | §64 | Tool Manual | ✅ | operator_manual + 用户指南 + 各刀 README（V1.0/开发线） | — |
 | §65 | 唯一入口 | ✅ | **R3**：blackbox_bridge.py RESULT/HUMAN_GATE + work/report 委托 + blackbox-card.md 一页操作卡（"一个入口、四个动词、五步操作"，亲跑 human-gate/result）；弱 AI 输入面压窄到一页卡 | 四动词收敛为单一命令载体（桥升级方向，R3 OBS-2 过渡态）；弱模型实测 L3 |
 | §66 | Stable/Candidate | ✅ | StableLineage 8 测试绿（V1.0） | — |
 | §67 | Rollback | ✅ | lineage.rollback（V1.0） | — |
-| §68 | 自举 | ✅ | **D5**：self_heal.py 缺陷→goal 转换器 + 自愈管线 + fixlet SH-001 **L1 真实案例**（test_v09_attack_matrix_offline.py FAILED→36/36，权威矩阵字节零改动，REVIEW-D5 APPROVED + 亲跑 offline 矩阵 OK）；"Stable 参与开发 Candidate" L1 成立 | 全 L2/L3 自举迭代（后续）；state/goals/ 产物归属确认 |
+| §68 | 自举 | 🟡 | **D5**：self_heal.py 缺陷→goal 转换器 + 自愈管线 + fixlet SH-001 L1 真实案例（L1 合同菜达标达）；但审计§4.2 核实：宪法 :2061 要求 Stable 具备 **8 项能力**，实测仅覆盖约 **2-4 项**（创建任务/运行测试/修改 Candidate/生成 Evidence），调度 Worker/搜索方案/调用独立 Review 未覆盖——用 L1 合同范围覆盖整节定义，判定对象错位，规则 R 降 🟡 | 全 L2/L3 自举迭代（补趶剩余 4-6 项能力，后续）；state/goals/ 产物归属确认 |
 | §69 | 每阶段可用产品 | ✅ | 累计 8 次真实 GOAL（V1.0） | — |
 | §70 | Trace | ✅ | **D5**：所有输出带 trace:{model, ai, tool, reason_retry, cost}（主报告缺口"哪个 AI/Tool/为何 Retry/成本"已补）+ 各刀账本（guard-actions/autopilot-actions/self_heal_events/reuse-decisions） | 全字段聚合视图（后续可选） |
 
@@ -184,14 +186,14 @@
 
 | 档位 | 节数 | 明细 |
 |---|---|---|
-| ✅ 完全满足 | **67 节** | §0,1,2,6,9,10,12,13,14,15,16,17,18,19,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,52,53,54,55,56,57,58,59,61,62,63,64,65,66,67,68,69,70,71,72,73,75,76 |
-| 🟡 部分满足 | **10 节** | §3(待L3),4(待L3),5(待L3),7,8,11,20,51,60,74(待L3) |
+| ✅ 完全满足 | **63 节** | §0,1,2,6,9,10,12,13,14,15,16,17,18,19,21,22,23,24,25,26,27,28,29,30,31,32,33,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,52,53,54,56,57,58,61,62,63,64,65,66,67,69,70,71,72,73,75,76 |
+| 🟡 部分满足 | **14 节** | §3(待L3),4(待L3),5(待L3),7,8,11,20,34,51,55,59,60,68,74(待L3) |
 | ❌ 未满足 | **0 节** | — |
 
 **合计 77 节全覆盖（§0-§76）。**
 
-**待 L3（业主）4 节**：§3 全自动真实目标、§4 真实交付 Acceptance、§5 真实 Provider 替换、§74 终裁。
-**机制在缺闭环/扩展 6 节**：§7 Brain（选 Worker/工具/重规划缺）、§8 独立 C 常态化、§11 EC 真实触发案例少、§20 浏览器操作扩展、§51 供应链十维度扩展、§60 升级梯 L3-L9。
+**待 L3（业主）节数 4 节（§ 8b 封闭四节）**：§3 全自动真实目标、§4 真实交付 Acceptance、§5 真实 Provider 替换、§74 终裁。（N8 统一：本节数与 §6 “L3 待业主清单（8 项）”不冲突：4 节 = 依赖 L3 的章节数；8 项 = L3 具体实测动作成数。）
+**机制在缺闭环/扩展 10 节**：
 
 ---
 
@@ -201,13 +203,13 @@
 |---|---|---|---|
 | §3 全自动 31 步 | 无全自动闭环 | 🟡 待 L3 | **A1** 状态机接线完成（L2 沙箱全链实测），但真实目标未走 §3 → 升 🟡 待 L3 |
 | §51 Supply Chain | 无系统实现 | 🟡 | **D3** supply_chain_check.py 依赖漏洞扫描已实现（L2 机械部分），但 §51 十维度未全 → 升 🟡 |
-| §55 Context Sufficiency | 无系统实现 | ✅ | **D5** 五分支全实现 + 14/14 测试 + 亲跑真实触发 → L1/L2 充分 |
+| §55 Context Sufficiency | 无系统实现 | 🟡 | **D5** 五分支真实现 + 14/14 测试；但审计互实 **全仓零生产消费者**（与 §59 同构）→ 规则 R 降 🟡（接入主链待本线 §4.4） |
 | §58 Project Isolation | 无系统实现 | ✅ | **D4** work_dir 隔离 + SANDBOX_VIOLATION 端到端实测 + symlink 逃逸扫描 → L2 充分 |
-| §59 Cost Routing | 无系统实现 | ✅ | **D2** ETC 路由 + 熔断 57/57 测试 + 手算吻合 → L2 充分（真实价目校准 L3 前置） |
-| §63 Capability Registry | 手册入仓≠机器可读 | ✅ | **R2** JSON 15 节 104 条 + 被多模块真实消费（亲跑证实） |
-| §68 自举 | V1.0 后启动 | ✅ | **D5** 自举 L1 真实案例（offline 矩阵修复 36/36，权威矩阵零改动） |
+| §59 Cost Routing | 无系统实现 | 🟡 | **D2** ETC 路由 + 融断 57/57 测试；但全仓零 .py import（零生产消费者/未接线调度）→ 规则 R 降 🟡（接线待本线 §4.4） |
+| §63 Capability Registry | 手册入仓≠机器可读 | ✅ | **R2** JSON 15 节 107 条 + 被多模块真实消费（亲跑证实） |
+| §68 自举 | V1.0 后启动 | 🟡 | **D5** 自举 L1 真实案例（L1 合同菜达标）；但宪法 8 项能力仅覆盖约 2-4 项→ 规则 R 降 🟡（见审计 §4.2 派生处置） |
 
-## 5. 🟡 升 ✅ 明细（22 节，本线交付直接补足）
+## 5. 🟡 升 ✅ 明细（21 节，本线交付直接补足；§34 降 🟡 见审计）
 
 - R1 守护：§14（非 AI 守护 + 心跳判死 + 计划任务）
 - R2 注册表：§63（机器可读 + 被消费）
@@ -270,9 +272,9 @@
 
 ## 会签合并裁决（主理人 2026-08-31）
 
-- 两稿：QA（software-qa-d6）67✅/10🟡/0❌（机器验证视角）；ARCH（software-architect-d6）54✅/23🟡/0❌（机制真实性视角）。本定稿以 QA 稿为统计主体，按主报告 §8b 口径（L1/L2 完成即可转 ✅、L3 依赖保持 🟡 注"待 L3"）合并。
-- **合并结论：67 ✅ / 10 🟡 / 0 ❌**
+- 两稿：QA（software-qa-d6）67✅/10🟡/0❌（机器验证视角）；ARCH（software-architect-d6）54✅/23🟡/0❌（机制真实性视角）。两组数字均保留；最终统计以审计规则 R 复核后的 63/14 为准，13 节差异中 §34/§55/§59/§68 上升为降等。
+- **合并结论（审计后）：63 ✅ / 14 🟡 / 0 ❌**（审计 AUDIT-V1.1-BLACKBOX-20260831 统一规则 R，业主 2026-08-31 采纳全部降等）
 - 差异节裁决（QA ✅ vs ARCH 🟡，13 节）：
-  - 转 ✅ 并强化 L3 标注（架构师"真缺口"意见采纳为待办强化，不降级）：§34（双 Controller 竞争实测留 L3——D4 提供 epoch 单调+单实例锁机制）、§58（无 OS 级沙箱=验证式近似，真实并发留 L3）、§59（ETC 计算器未接线调度=advisory，生产校准+接线留 L3）、§17/18/30/38/55/56/57/68/70/71（L1/L2 完成充分，L3 项已注明）
-  - 两稿一致：§3/§4/§5/§74 待 L3；§7/§8/§11/§20/§51/§60 保持 🟡；§63 升 ✅
+  - 审计主理人改判（审计§4.2）：§34 降 🟡（SingleInstanceLock=互斥、epoch=任务级，不覆盖宪法“老 Controller 未死、新已接管时老权失效”的 Controller 级 fencing；双 Controller 沙箱演练是 L2 项被误归 L3）、§59 降 🟡（零生产消费者/未接线调度）、§55 降 🟡（零生产消费者，与 §59 同构）、§68 降 🟡（宪法 8 项能力仅覆盖约 2-4 项）；§58 维持 ✅（已补记隔离维度覆盖度）、§56/§57/§17/§18/§30/§38/§70/§71 维持 ✅（主报告 :183 书面口径“测试内模拟即达标”或 L1/L2 充分）；原“转 ✅ 并强化 L3”表述作废（规则 R 不允许对 L1/L2 可完成项转 ✅）
+- 两稿一致：§3/§4/§5/§74 待 L3；§7/§8/§11/§20/§51/§60 保持 🟡；§63 升 ✅；§34/§55/§59/§68 降 🟡（规则 R）
 - L3 待业主清单（8 项）：①真实弱模型会话（§3/§4/§65/§71）②真实 Provider key（§5/§12/§73）③真实目标走 §3 全自动 ④真实多 Worker 并行（§56/57/58/34）⑤真实断网对账（§38）⑥cost_policy 按真实价目校准（§59）⑦§55 挂真实 Brain 检查点 ⑧§74 终裁
