@@ -15,14 +15,14 @@
  "baselines": {
   "current_development_head": {
    "branch": "hardening/p0-gates-20260831",
-   "head": "e32f78ce1a7d69844e1b6fec06f547e4f0761334",
+   "head": "fc6ac71ece695fe454511d380223a872dab0848e",
    "verdict": "IN_DEVELOPMENT",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "e32f78ce1a7d69844e1b6fec06f547e4f0761334"
+    "value": "fc6ac71ece695fe454511d380223a872dab0848e"
    },
-   "note": "synced 2026-09-01 governance-only (R final-adjudication REWORK disposition round: candidate_commit git-object existence gate; hardening line per docs/evidence/HARDENING-PLAN-20260831.md)"
+   "note": "synced 2026-09-01 governance-only (E2 achievement matrix round); hardening line per docs/evidence/HARDENING-PLAN-20260831.md"
   },
   "current_accepted_base": {
    "branch": "v0.8-integrate/adapter-final-4",
