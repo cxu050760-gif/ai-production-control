@@ -904,9 +904,68 @@ def install(rt, options: dict) -> None:
         rt._router_send_to_role = gated_router_send
 
 
+def cmd_effect_reconcile(rt, argv: list) -> int:
+    """GATE-1#5 (hardening 2026-08-31): CLI reconciliation exit for
+    EFFECT_OUTCOME_UNKNOWN. reconcile_effect previously had no caller, so one
+    transient transport failure permanently self-locked a RUN (dedupe refuses
+    ordinary retry while OUTCOME_UNKNOWN is unresolved, and nothing could ever
+    resolve it).
+
+    Fail-closed semantics preserved:
+    - --succeeded: operator-verified evidence that the effect really happened
+      -> commit SUCCESS (permanently deduplicated; a duplicate send returns
+      the dedup record instead of re-executing) and resume the RUN lifecycle
+      so the normal flow (report -> verdict -> done) can continue.
+    - --not-occurred: record the negative inspection, keep the RUN
+      hard-blocked; any later replay still needs a new explicit authority
+      decision (frozen V0.9 rule, unchanged).
+    """
+    import argparse as _argparse
+    p = _argparse.ArgumentParser(prog="effect-reconcile")
+    p.add_argument("--run-id", required=True)
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--succeeded", action="store_true")
+    g.add_argument("--not-occurred", action="store_true")
+    p.add_argument("--evidence-file", required=True,
+                   help="JSON object with observation evidence for the reconciliation")
+    args = p.parse_args(argv)
+    state = rt.load_state(args.run_id)
+    record = state.get("effect_safety") or {}
+    if record.get("status") != "OUTCOME_UNKNOWN":
+        rt.emit({"status": "DENIED",
+                 "reason": ("reconciliation requires OUTCOME_UNKNOWN; "
+                            f"current={record.get('status')!r}"),
+                 "run_id": args.run_id})
+        return rt.EXIT_DENIED
+    try:
+        evidence = json.loads(Path(args.evidence_file).read_text(encoding="utf-8") or "{}")
+    except Exception as exc:  # noqa: BLE001
+        rt.emit({"status": "DENIED", "reason": f"evidence file unreadable: {exc}",
+                 "run_id": args.run_id})
+        return rt.EXIT_DENIED
+    record = reconcile_effect(rt, state, str(record.get("logical_effect_id") or ""),
+                              observed_succeeded=bool(args.succeeded), evidence=evidence)
+    if args.succeeded and state.get("status") == "HARD_BLOCKED":
+        # Effect confirmed delivered: resume the lifecycle (auditable), so the
+        # normal flow can continue. NOT applied for --not-occurred (fail-closed:
+        # replay needs a new explicit authority decision).
+        state["status"] = "RUNNING"
+        state["blocked_reason"] = ""
+        state["next_action"] = "reconciled: effect confirmed delivered; continue the normal flow"
+        rt.save_state(state)
+        rt.journal(state["run_id"], "EFFECT_RECONCILE_RESUME",
+                   logical_effect_id=record.get("logical_effect_id"))
+    rt.emit({"status": "OK", "run_id": state.get("run_id"),
+             "effect_status": record.get("status"),
+             "run_status": state.get("status")})
+    return rt.EXIT_OK
+
+
 def main(argv: list | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     rt = _load_runtime()
+    if argv and argv[0] == "effect-reconcile":
+        return cmd_effect_reconcile(rt, argv[1:])
     install(rt, {})
     sys.argv = [str(HERE / "runtime.py"), *argv]
     return rt.main()

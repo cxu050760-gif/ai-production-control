@@ -264,7 +264,7 @@ class V08AdapterCoreOfflineTests(unittest.TestCase):
             'if /I "%~1"=="harness-verify" goto harness_verify',
             'if /I "%~1"=="start" goto goal_contract',
             'if /I "%~1"=="send" goto send_guard',
-            'if /I "%~1"=="effect-gate" goto effect_safety',
+            'if /I "%~1"=="effect-reconcile" goto effect_safety',
             'if /I "%~1"=="ec-gate" goto ec_lite',
         ): self.assertIn(required,text)
         self.assertIn('if /I "%~1"=="adapter-check" goto v08_adapter',text)

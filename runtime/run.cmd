@@ -34,7 +34,10 @@ if /I "%~1"=="router-step" goto send_guard
 if /I "%~1"=="router-run" goto send_guard
 if /I "%~1"=="router-continue" goto send_guard
 if /I "%~1"=="contract-revise" goto goal_contract
-if /I "%~1"=="effect-gate" goto effect_safety
+rem HARDENING GATE-1#5 (2026-08-31): effect-gate was a dead entry (runtime.py
+rem has no such subcommand). Replaced by the reconciliation exit for
+rem EFFECT_OUTCOME_UNKNOWN (see effect_safety_lite.cmd_effect_reconcile).
+if /I "%~1"=="effect-reconcile" goto effect_safety
 if /I "%~1"=="weak-ai-acceptance" goto weak_ai_acceptance
 rem V0.6 EC-lite: execution correction is a rules-only Runtime adapter module,
 rem entered through the single official entry like every other subcommand.
