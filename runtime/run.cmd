@@ -22,7 +22,12 @@ if /I "%~1"=="step" goto goal_contract
 if /I "%~1"=="directive" goto goal_contract
 if /I "%~1"=="send" goto send_guard
 if /I "%~1"=="recv" goto goal_contract
-if /I "%~1"=="report" goto goal_contract
+rem HARDENING GATE-1#1 (2026-08-31): report is the ONLY production outbound
+rem path (cmd_report -> cmd_send). It previously routed to goal_contract only,
+rem which bypassed the Effect Gate -- the same defect send_guard_lite docstring
+rem records for `send` before Slice J2. report now rides the identical three-
+rem gate chain (contract -> effect_safety -> ec), outermost-first, fail-closed.
+if /I "%~1"=="report" goto send_guard
 if /I "%~1"=="done" goto goal_contract
 if /I "%~1"=="router-start" goto send_guard
 if /I "%~1"=="router-step" goto send_guard
