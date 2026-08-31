@@ -2,7 +2,9 @@
 rem Weak-AI Production Runtime V1 - single production entry
 rem Post-entry environment diagnosis: if the canonical dependency is missing,
 rem emit a stable machine status instead of a raw shell error.
-set "APC_PY=C:\Users\17838\AppData\Local\Programs\Python\Python312\python.exe"
+rem GATE-5 (batch B): APC_PY 注入式——默认仍为规范 Python312,允许调用方
+rem 预先 set APC_PY 覆盖(配置注入替代硬编码;规范值变化时仅需改此默认)。
+if not defined APC_PY set "APC_PY=C:\Users\17838\AppData\Local\Programs\Python\Python312\python.exe"
 if not exist "%APC_PY%" (
   echo {"status":"RUNTIME_ENV_BLOCKED","missing":"%APC_PY%","instruction":"canonical Python dependency missing; report to user; do not substitute shells or edit PATH"}
   exit /b 90
