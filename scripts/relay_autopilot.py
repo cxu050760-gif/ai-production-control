@@ -42,6 +42,7 @@ relay_autopilot.py — A1 自动调度闭环接线 (执衡 v1.1-blackbox)
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import random
@@ -86,15 +87,25 @@ except Exception:
     _WIRING_AVAILABLE = False
 
 
-def admission_checks(goal):
+def admission_checks(goal, require_gates=False):
     """调度准入三闸：§59 成本融断 / §55 Context / §34 Controller lease。
-    返回 {admitted: bool, checks: {...}, reasons: [...]}；
-    任一门 fail-closed → admitted=False（submit 拒绝）。
-    模块不可用/配置缺失时保守放行（记下 warning，不误拦）。
+    返回 {admitted: bool, checks: {...}, reasons: [...]}。
+
+    GATE-1#3/#4 (hardening 2026-08-31)：
+    - 闸门正常判定为拒绝（SAFE_HALT/FROZEN/BLOCKED/HUMAN_AUTHORIZATION/租约失效）
+      时，任何模式下都必须拒（判定本身即权威）。
+    - require_gates=True（relay 真实投递）：模块不可用/配置损坏/闸内异常
+      一律 fail-closed 拒绝 —— 真实投递不允许"门坏了就跳过门"。
+    - require_gates=False（mock 沙箱）：闸内异常保守放行并记录（不误拦演练），
+      但判定为拒的仍拒。
     """
     result = {"schema": "ADMISSION_V1", "admitted": True, "checks": {}, "reasons": []}
     if not _WIRING_AVAILABLE:
-        result["reasons"].append("wiring modules unavailable; skip gates")
+        if require_gates:
+            result["admitted"] = False
+            result["reasons"].append("gates-required: wiring modules unavailable (fail-closed)")
+        else:
+            result["reasons"].append("wiring modules unavailable; skip gates (mock only)")
         return result
     gh = goal.get("goal_id") or goal.get("title") or "unknown"
     goal_text = goal.get("objective") or goal.get("title") or ""
@@ -111,13 +122,20 @@ def admission_checks(goal):
         result["checks"]["cost"] = {"verdict": cost.get("verdict"),
                                     "recommended_route": cost.get("recommended_route"),
                                     "expected_total_cost": cost.get("expected_total_cost")}
-        if cost.get("verdict") == "SAFE_HALT":
+        # GATE-1#3: SAFE_HALT（新熔断）与 FROZEN（历史熔断后的冻结应答）均为
+        # 拒绝性 verdict —— 只拦 SAFE_HALT 会让已冻结 goal 换个提交重新入队。
+        if cost.get("verdict") in ("SAFE_HALT", "FROZEN"):
             result["admitted"] = False
-            result["reasons"].append(f"cost-gate SAFE_HALT: {cost.get('safe_halt', {}).get('record_id')}")
+            result["reasons"].append(
+                f"cost-gate {cost.get('verdict')}: {cost.get('safe_halt', {}).get('record_id') or 'frozen'}")
         elif cost.get("verdict") == "UNDETERMINED":
             result["reasons"].append("cost-gate UNDETERMINED (全部待校准，不误拦)")
     except Exception as e:  # noqa: BLE001
-        result["reasons"].append(f"cost-gate error (skip): {e}")
+        if require_gates:
+            result["admitted"] = False
+            result["reasons"].append(f"gates-required: cost-gate error (fail-closed): {e}")
+        else:
+            result["reasons"].append(f"cost-gate error (skip): {e}")
 
     # §55 context 门
     try:
@@ -130,7 +148,11 @@ def admission_checks(goal):
             detail = ctxres.get("blocked_reason") or ctxres.get("reason") or ctxres.get("decision")
             result["reasons"].append(f"context-gate {ctxres.get('decision')}: {detail}")
     except Exception as e:  # noqa: BLE001
-        result["reasons"].append(f"context-gate error (skip): {e}")
+        if require_gates:
+            result["admitted"] = False
+            result["reasons"].append(f"gates-required: context-gate error (fail-closed): {e}")
+        else:
+            result["reasons"].append(f"context-gate error (skip): {e}")
 
     # §34 Controller lease 门（执行代用户控制器表示，还原实现代表）
     try:
@@ -153,7 +175,11 @@ def admission_checks(goal):
                     result["admitted"] = False
                     result["reasons"].append(f"lease-gate {r.get('reason')}: 老权失效或过期")
     except Exception as e:  # noqa: BLE001
-        result["reasons"].append(f"lease-gate error (skip): {e}")
+        if require_gates:
+            result["admitted"] = False
+            result["reasons"].append(f"gates-required: lease-gate error (fail-closed): {e}")
+        else:
+            result["reasons"].append(f"lease-gate error (skip): {e}")
 
     return result
 
@@ -286,6 +312,29 @@ def load_builder_binding():
 # --------------------------------------------------------------------------
 # submit：goal -> BUILDER_READY 事件
 # --------------------------------------------------------------------------
+def _resolve_commit(goal, seq, candidate_commit, relay_mode):
+    """GATE-1#2 (hardening 2026-08-31): resolve candidate_commit fail-closed.
+
+    - explicit candidate_commit must be a real 40-hex value;
+    - relay mode (real inbox, real reviewer) REQUIRES an explicit commit:
+      a fabricated random hex would make R review a commit that does not
+      exist — forbidden;
+    - mock sandbox may omit it: a deterministic placeholder derived from the
+      goal payload (reproducible, goal-bound, never impersonates a commit).
+    """
+    if candidate_commit:
+        commit = str(candidate_commit).strip().lower()
+        if not COMMIT_RE.match(commit):
+            raise ValueError("candidate_commit must be 40 hex chars")
+        return commit
+    if relay_mode:
+        raise ValueError(
+            "relay mode requires --candidate-commit <40-hex real commit>; "
+            "fabricating one is forbidden (GATE-1#2)")
+    payload = json.dumps(goal, ensure_ascii=False, sort_keys=True) + "#" + str(seq)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:40]
+
+
 def build_event(goal, seq, candidate_commit=None, relay_mode=False):
     """构造与 review-relay.js validateEvent 期望一致的 BUILDER_READY 事件。"""
     cfg = load_relay_config()
@@ -296,9 +345,7 @@ def build_event(goal, seq, candidate_commit=None, relay_mode=False):
     run_id = ensure_id(f"RUN-AUTO-{ts}-{seq:04d}", "RUN")
     event_id = ensure_id(f"EV-AUTO-{ts}-{seq:04d}", "EV")
 
-    commit = candidate_commit or "".join(random.choice("0123456789abcdef") for _ in range(40))
-    if not COMMIT_RE.match(commit):
-        raise ValueError("candidate_commit must be 40 hex chars")
+    commit = _resolve_commit(goal, seq, candidate_commit, relay_mode)
 
     packet = DEFAULT_REVIEW_PACKET
     if not os.path.exists(packet):
@@ -347,7 +394,7 @@ def cmd_submit(args):
     if not (goal.get("objective") or goal.get("title")):
         ledger("submit", "goal must have objective or title", ok=False)
         return 2
-    admit = admission_checks(goal)
+    admit = admission_checks(goal, require_gates=(args.mode == "relay"))
     if not admit["admitted"]:
         ledger("submit_rejected", "goal=" + (goal.get('goal_id') or goal.get('title'))
                + " reasons=" + str(admit['reasons']), ok=False)
