@@ -27,6 +27,7 @@ logs/
 
 # B3: runtime-generated state (untracked; canonical evidence goes to docs/evidence/)
 state/cost_router_state.json
+state/controller_lease.json
 state/goals/
 state/self_heal_evidence/
 tmp*/
