@@ -67,7 +67,16 @@ build_review_packet.py、create_review_packet.py、create_review_packet_v4.py、
 publish_builder_ready(_v4/v5).py（无 build_review_packet_v4.py）。worktree：QoderCN\...\chat-1
 （v0.9-b2 占用，禁 checkout）+ Qoder\...\031cb4e3\b1（唯一施工区）。
 
-## 2. 复用铁律（先例：自编证据脚本被全盘作废）
+## 2.1 网络与代理（业主 8-31 明确：网络没问题，但 GitHub 必须走系统代理；ChatGPT 登录态/账号正常——投递/推送失败先找自己操作原因，禁止归因于环境）
+- GitHub 推送前必做：探测系统代理（`netsh winhttp show proxy`+环境变量 HTTP_PROXY/HTTPS_PROXY+
+  注册表 HKCU Internet Settings 的 ProxyServer）→ 用会话级参数推送（不改永久配置）：
+  `git -c http.proxy=http://<地址>:<端口> -c https.proxy=http://<地址>:<端口> push origin <分支>`；
+  直连能通则直连——代理与直连两条路都试败才算"不可达"
+- 桥/ChatGPT 通道：登录态正常（owner 确认）。投递失败排查顺序：①浏览器窗口活性（P0-A）②桥 status
+  READY ③会话绑定（归属双因子）④附件格式——全部排除仍败才可挂起，且 owner-notice 列明已排除项
+- 凭证故障（401/403）仍按红线挂起；其余推送/投递失败=操作问题，换方法重试，不得降级验收
+
+## 2. 复用铁律（先例：自编证据脚本被全盘作废；网络操作先遵 §2.1）
 新建任何东西前留**可证伪搜索证据**：≥2 组同义词 × ASSET_MAP/能力注册表/全仓 glob，搜索命令与命中
 数落盘。
 现成能力（用前读脚本头；dry-run 前确认无写路径，在隔离状态根+tmp 空跑）：
@@ -139,8 +148,10 @@ B. 批次 A 外审（流程见上顺序图）：
      直录 MANIFEST（不经转录）**
    - REWORK 清单按 §0.1 红线过滤（白名单式：仅"修改施工产物/补充材料/重跑测试"执行；其余挂
      owner-notice+回函）
-C. 闭环后：hardening 推送 origin（**推送闸后**退避 15min×2 上限 2h；连续 5 轮不可达=合法降级：
-   git bundle 存 E:\WB\state\ai-production-control\bundles\+MANIFEST+总报告注明，不再阻塞验收）；
+C. 闭环后：hardening 推送 origin（**先按 §2.1 探测系统代理并会话级配置**；**推送闸后**退避
+   15min×2 上限 2h；代理+直连都试败且 owner-notice 报备后，才可合法降级：git bundle 存
+   E:\WB\state\ai-production-control\bundles\+MANIFEST+总报告注明——网络可走代理，此降级预期
+   不触发，若触发=代理排查未做足）；
    隔离区处置=仅移动/归档/重命名（删除挂业主），处置方案报备即动
 D. GATE-5：承诺面逐个清点（HARDENING-PLAN-20260831.md），死机制接线或正式降级声明，零残留
 E. GATE-6：先拆任务清单入 journal（报备即动）再实施。出口=完成转真 OR 延后提案入总报告
@@ -219,7 +230,8 @@ spawn 后第一动作=复制其全部输入到各自可写域快照（盲审→r
 - 会话串台：新会话+归属双因子；投递默认每次新会话或探测通过
 - 附件上传失败：runtime 2 次重试 → 浏览器活性 → 分片（每片头部"片 i/N+总哈希"+分片 MANIFEST+
   逐片校验）→ 超阈值挂"待投递"转门禁期活动，禁为投递成功改变证据形态
-- GitHub 不可达：§4-C 退避；连续 5 轮=合法降级（bundle+报告注明）
+- GitHub 不可达：**先走 §2.1 代理探测与配置（三处找代理地址，会话级 -c 推送）**；代理与直连都
+  试败+owner-notice 报备后才可降级
 - ChatGPT 风控/验证码/限流：立即停通道挂"待投递"；禁重试风暴
 - 弱 AI 通道结论冲突：取最严格结论；原始输出全量存档；有效性同 §4-B 标准
 - R 账号/会话全不可用：外审挂"待投递"，转门禁期活动或 D/E
@@ -236,7 +248,8 @@ delivery\ 内文件=代码文件）的提交或未提交改动（对账代理 gi
    （对账代理内容级比对通过；模板：提交哈希/一句话说明/影响面）
 3. GATE-5 零死机制残留
 4. GATE-6 转真完成，或延后提案已入总报告
-5. 推送：origin 成功（推送闸校验后），或合法降级（bundle+报告注明）
+5. 推送：origin 成功（推送闸校验后；网络走系统代理）。降级条款仅在"代理与直连均确认不通且已
+   owner-notice"时可用
 6. 状态文件一致（对账代理核对+正向修正闭环）；总收官报告（§4-F 体例）交付业主
 
 ## 9. 验收基线模板（本节以独立提交入仓，提交哈希登记入 ASSET_MAP；**判据以任务书内嵌方式送达
