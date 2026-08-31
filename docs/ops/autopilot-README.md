@@ -132,6 +132,24 @@ inbox 事件 --claim--> CLAIMED --work--> WORKING --work done--> REPORTED
   测试：`runtime/test_relay_autopilot_offline.py`（13 用例，覆盖单实例锁三态 /
   状态机全迁移 / R 并发度 1 / 沙箱越界拦截）。
 
+## 调度准入三闸门（接线 §59/§55/§34，2026-08-31）
+
+`submit` 与 `drive` 已接入三闸门（`admission_checks()`，见 relay_autopilot.py 顶部）：
+
+1. **§59 成本路由闸**：submit 前调 `cost_router.do_route`——SAFE_HALT（预算熔断）拒绝提交；
+   UNDETERMINED（全部待校准）不误拦；ALLOWED 放行并把 recommended_route / expected_total_cost
+   记入账本。
+2. **§55 Context Sufficiency 闸**：submit 前调 `context_sufficiency.route`——决策记录到准入结果；
+   BLOCKED / HUMAN_AUTHORIZATION（需人授权，无人值守下不得自动入队）拒绝自动提交；
+   SWITCH_* / SUFFICIENT 放行。
+3. **§34 Controller lease 闸**：`drive` 执行前检查 `controller_lease`（state/controller_lease.json，
+   generation+holder+ttl）——无 lease 自动 acquire（gen=1）；generation 不匹配 / holder 为他人 /
+   已过期 → 老权失效（§34），drive 退码 2 拒执行。新增独立模块 `runtime/controller_lease.py`
+   实现 Lease/Generation/Fencing Token（宪法 :1226-1242 的 Controller 级 fencing，D4 的互斥锁
+   与任务级 epoch 不覆盖此场景）。
+
+测试：`runtime/test_relay_autopilot_wiring_offline.py`（8 用例）+ `runtime/test_controller_lease_offline.py`（7 用例）。
+
 ## 已知边界
 
 - `--mode relay` 提交的真实 inbox 事件由真实 watcher 认领后走真实 R 审查；

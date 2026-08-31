@@ -72,6 +72,92 @@ ALLOWED_EVIDENCE_ROOT = r"E:\WB\state\ai-production-control\runtime-v1\harness"
 DEFAULT_REVIEW_PACKET = os.path.join(REVIEW_PACKET_ROOT, "review_packet_R_round18.txt")
 DEFAULT_EVIDENCE = os.path.join(ALLOWED_EVIDENCE_ROOT, "HE-0105b00e527d4bd1")
 
+# --- 接线：调度准入三闸（§59/§55/§34）---
+_RUNTIME_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+try:
+    import cost_router
+    import context_sufficiency
+    import controller_lease
+    _WIRING_AVAILABLE = True
+except Exception:
+    _WIRING_AVAILABLE = False
+
+
+def admission_checks(goal):
+    """调度准入三闸：§59 成本融断 / §55 Context / §34 Controller lease。
+    返回 {admitted: bool, checks: {...}, reasons: [...]}；
+    任一门 fail-closed → admitted=False（submit 拒绝）。
+    模块不可用/配置缺失时保守放行（记下 warning，不误拦）。
+    """
+    result = {"schema": "ADMISSION_V1", "admitted": True, "checks": {}, "reasons": []}
+    if not _WIRING_AVAILABLE:
+        result["reasons"].append("wiring modules unavailable; skip gates")
+        return result
+    gh = goal.get("goal_id") or goal.get("title") or "unknown"
+    goal_text = goal.get("objective") or goal.get("title") or ""
+    adopts = goal.get("admission") if isinstance(goal.get("admission"), dict) else {}
+
+    # §59 cost 门
+    try:
+        policy = cost_router.load_policy()
+        reg = cost_router.load_registry_costs()
+        state = cost_router.load_state()
+        rk = str(adopts.get("rework_risk") or goal.get("rework_risk") or "low")
+        cost = cost_router.do_route(goal_text, rk, tokens_est=None, max_cost=None,
+                                    policy=policy, registry_costs=reg, state=state)
+        result["checks"]["cost"] = {"verdict": cost.get("verdict"),
+                                    "recommended_route": cost.get("recommended_route"),
+                                    "expected_total_cost": cost.get("expected_total_cost")}
+        if cost.get("verdict") == "SAFE_HALT":
+            result["admitted"] = False
+            result["reasons"].append(f"cost-gate SAFE_HALT: {cost.get('safe_halt', {}).get('record_id')}")
+        elif cost.get("verdict") == "UNDETERMINED":
+            result["reasons"].append("cost-gate UNDETERMINED (全部待校准，不误拦)")
+    except Exception as e:  # noqa: BLE001
+        result["reasons"].append(f"cost-gate error (skip): {e}")
+
+    # §55 context 门
+    try:
+        req = goal.get("required_info") or []
+        ctx = {"goal": goal_text, "goal_id": gh}
+        ctxres = context_sufficiency.route(ctx, req)
+        result["checks"]["context"] = {"decision": ctxres.get("decision")}
+        if ctxres.get("decision") in ("BLOCKED", "HUMAN_AUTHORIZATION"):
+            result["admitted"] = False
+            detail = ctxres.get("blocked_reason") or ctxres.get("reason") or ctxres.get("decision")
+            result["reasons"].append(f"context-gate {ctxres.get('decision')}: {detail}")
+    except Exception as e:  # noqa: BLE001
+        result["reasons"].append(f"context-gate error (skip): {e}")
+
+    # §34 Controller lease 门（执行代用户控制器表示，还原实现代表）
+    try:
+        cur = controller_lease.load_lease()
+        if cur is None:
+            l = controller_lease.acquire("relay_autopilot")
+            result["checks"]["lease"] = {"action": "acquired", "generation": l["generation"]}
+        else:
+            gen = int(cur.get("generation", 0))
+            holder = str(cur.get("holder", ""))
+            if holder != "relay_autopilot":
+                # 老/foreign Controller 持有: 继续者接管 = acquire (generation+1)
+                l = controller_lease.acquire("relay_autopilot")
+                result["checks"]["lease"] = {"action": "took-over", "generation": l["generation"]}
+                result["reasons"].append(f"lease-gate took over from {holder}（§34）")
+            else:
+                r = controller_lease.check_execute_right(holder, gen)
+                result["checks"]["lease"] = {"ok": r["ok"], "reason": r.get("reason")}
+                if not r["ok"]:
+                    result["admitted"] = False
+                    result["reasons"].append(f"lease-gate {r.get('reason')}: 老权失效或过期")
+    except Exception as e:  # noqa: BLE001
+        result["reasons"].append(f"lease-gate error (skip): {e}")
+
+    return result
+
+
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,119}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -261,6 +347,15 @@ def cmd_submit(args):
     if not (goal.get("objective") or goal.get("title")):
         ledger("submit", "goal must have objective or title", ok=False)
         return 2
+    admit = admission_checks(goal)
+    if not admit["admitted"]:
+        ledger("submit_rejected", "goal=" + (goal.get('goal_id') or goal.get('title'))
+               + " reasons=" + str(admit['reasons']), ok=False)
+        print(json.dumps({"ok": False, "admitted": False, "reasons": admit["reasons"],
+                          "checks": admit["checks"]}, ensure_ascii=False, indent=2))
+        return 2
+    ledger("submit_admission", "goal=" + (goal.get('goal_id') or goal.get('title'))
+           + " checks=" + json.dumps(admit['checks'], ensure_ascii=False), ok=True)
     seq = int(time.time() * 1000) % 100000
     event = build_event(goal, seq, args.candidate_commit, relay_mode=(args.mode == "relay"))
 
@@ -471,6 +566,21 @@ def queue_converged(q):
 
 
 def cmd_drive(args):
+    # §34: drive 执行前验证 Controller 代（老权失效拒绝）
+    if _WIRING_AVAILABLE:
+        try:
+            cur = controller_lease.load_lease()
+            if cur is None:
+                controller_lease.acquire("relay_autopilot")
+                ledger("lease_acquired", "drive acquired controller lease gen=1", ok=True)
+            else:
+                chk = controller_lease.check_execute_right(str(cur.get("holder")), int(cur.get("generation", 0)))
+                if not chk["ok"]:
+                    ledger("drive", "lease-gate " + chk.get('reason') + ": old authority revoked, abort execute", ok=False)
+                    print("LEASE_REJECTED: " + str(chk.get("error")), file=sys.stderr)
+                    return 2
+        except Exception as exc:  # noqa: BLE001
+            ledger("lease_check_warn", "lease gate skipped: " + str(exc), ok=False)
     token = acquire_lock()
     if token is None:
         ledger("drive", "SKIP_LOCKED another autopilot drive holds the lock", ok=False)
