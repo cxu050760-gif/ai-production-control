@@ -537,6 +537,13 @@ def cmd_submit(args):
     _repo_arg = getattr(args, "repo_path", None)
     _ev_args = getattr(args, "evidence_path", None)
     if _mode == "relay":
+        # P2-2（盲审批次C）：武装门下沉主链——执行器层的 APC_RELAY_REAL 检查
+        # 会被 scheduler 的 cli 执行器直调绕过，故在 cmd_submit 内再做一道
+        # fail-closed（真实额度属 L3 业主；mock 模式不受限）。
+        if os.environ.get("APC_RELAY_REAL") != "1":
+            ledger("submit", "relay real-mode not armed (fail-closed): set APC_RELAY_REAL=1", ok=False)
+            print("RELAY_REAL_NOT_ARMED: mode=relay 需 APC_RELAY_REAL=1（真实额度属 L3 业主）", file=sys.stderr)
+            return 2
         problems = []
         if not _repo_arg or not os.path.exists(_repo_arg):
             problems.append("--repo-path 必填且必须存在: " + str(_repo_arg))

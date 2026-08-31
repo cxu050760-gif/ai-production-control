@@ -21,6 +21,7 @@ All offline: 全部闸门/收件箱/账本以 mock 注入，不触真实 relay �
 """
 import argparse
 import contextlib
+import os
 import sys
 import tempfile
 import unittest
@@ -156,10 +157,12 @@ class RelayExplicitInputContractTests(unittest.TestCase):
                 str(ev1) if e == "@tmp_ev" else e for e in args.evidence_path]
         admission_m = mock.MagicMock(
             return_value={"admitted": True, "checks": {}, "reasons": []})
-        with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
-             mock.patch.object(ra, "admission_checks", admission_m), \
-             mock.patch.object(ra, "ledger", return_value=None):
-            rc = ra.cmd_submit(args)
+        # P2-2（盲审批次C）：武装门下沉 cmd_submit，relay 模式测试统一武装
+        with mock.patch.dict(os.environ, {"APC_RELAY_REAL": "1"}):
+            with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+                 mock.patch.object(ra, "admission_checks", admission_m), \
+                 mock.patch.object(ra, "ledger", return_value=None):
+                rc = ra.cmd_submit(args)
         return rc, admission_m
 
     def test_n1_relay_repo_missing_rejected_before_admission(self):
@@ -242,7 +245,8 @@ class RelayExplicitInputContractTests(unittest.TestCase):
             build_m = mock.MagicMock(return_value={
                 "event_id": "EV-T", "run_id": "RUN-T", "task_id": "TASK-T"})
             with tempfile.TemporaryDirectory() as inbox:
-                with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+                with mock.patch.dict(os.environ, {"APC_RELAY_REAL": "1"}), \
+                     mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
                      mock.patch.object(ra, "admission_checks", admission_m), \
                      mock.patch.object(ra, "build_event", build_m), \
                      mock.patch.object(ra, "save_json", return_value=None), \
@@ -273,7 +277,8 @@ class RelayExplicitInputContractTests(unittest.TestCase):
             args.candidate_commit = "f" * 40   # 格式合法、对象不存在
             admission_m = mock.MagicMock(
                 return_value={"admitted": True, "checks": {}, "reasons": []})
-            with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+            with mock.patch.dict(os.environ, {"APC_RELAY_REAL": "1"}), \
+                 mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
                  mock.patch.object(ra, "admission_checks", admission_m), \
                  mock.patch.object(ra, "ledger", return_value=None):
                 rc = ra.cmd_submit(args)

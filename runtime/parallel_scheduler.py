@@ -495,6 +495,7 @@ class CliWorkerExecutor:
         self.proc: Optional[subprocess.Popen] = None
         self._monitor_stop = threading.Event()
         self._monitor: Optional[threading.Thread] = None
+        self._killed = False   # P2-1（盲审批次C）：被 stop/reap 杀掉时置位（同 Relay 语义）
         self.timeout_sec = float((task.get("cli") or {}).get("timeout_sec")
                                  or scheduler.timeout_sec)
 
@@ -587,8 +588,10 @@ class CliWorkerExecutor:
                 result = json.loads(stdout)
             except json.JSONDecodeError:
                 result = {"text": _safe_text(stdout, 4000)}
-        if exit_code is None or (timed_out and not stdout.strip()):
+        if exit_code is None or self._killed or (timed_out and not stdout.strip()):
             # §38：子进程被杀 / 超时无明确结果 -> 不猜测
+            # P2-1（盲审批次C）：被 stop/reap 杀掉（_killed）时提交可能已入真
+            # inbox，同样禁止猜测成败，一律 OUTCOME_UNKNOWN。
             return {
                 "schema": SCHEMA, "ok": False, "exit_code": exit_code,
                 "timed_out": timed_out, "outcome": VERDICT_OUTCOME_UNKNOWN,
@@ -618,6 +621,7 @@ class CliWorkerExecutor:
     def _terminate(self) -> None:
         if self.proc is None or self.proc.poll() is not None:
             return
+        self._killed = True   # P2-1：被杀的提交可能已入真 inbox，禁止猜测成败
         try:
             self.proc.terminate()
             try:
@@ -655,6 +659,7 @@ class RelaySubmitExecutor:
         self.proc: Optional[subprocess.Popen] = None
         self._monitor_stop = threading.Event()
         self._monitor: Optional[threading.Thread] = None
+        self._killed = False   # P2-1（盲审批次C）：被 stop/reap 杀掉时置位
         self.timeout_sec = float((task.get("relay") or {}).get("timeout_sec")
                                  or scheduler.timeout_sec)
 
@@ -677,7 +682,10 @@ class RelaySubmitExecutor:
             cmd += ["--repo-path", str(relay["repo_path"])]
         if relay.get("review_packet"):
             cmd += ["--review-packet", str(relay["review_packet"])]
-        for p in (relay.get("evidence_paths") or []):
+        ev = relay.get("evidence_paths") or []
+        if isinstance(ev, str):
+            ev = [ev]   # P3-2（盲审批次C）：字符串按单路径处理，防按字符展开
+        for p in ev:
             cmd += ["--evidence-path", str(p)]
         if relay.get("candidate_commit"):
             cmd += ["--candidate-commit", str(relay["candidate_commit"])]
@@ -714,6 +722,7 @@ class RelaySubmitExecutor:
     def _terminate(self) -> None:
         if self.proc is None or self.proc.poll() is not None:
             return
+        self._killed = True   # P2-1：被杀的提交可能已入真 inbox，禁止猜测成败
         try:
             self.proc.terminate()
             try:
@@ -779,7 +788,7 @@ class RelaySubmitExecutor:
                 result = json.loads(stdout)
             except json.JSONDecodeError:
                 result = {"text": _safe_text(stdout, 4000)}
-        if exit_code is None or (timed_out and not stdout.strip()):
+        if exit_code is None or self._killed or (timed_out and not stdout.strip()):
             return {
                 "schema": SCHEMA, "ok": False, "exit_code": exit_code,
                 "timed_out": timed_out, "outcome": VERDICT_OUTCOME_UNKNOWN,
