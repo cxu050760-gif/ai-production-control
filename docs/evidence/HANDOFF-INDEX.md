@@ -2,7 +2,7 @@
 
 > 维护者：主会话（齐活林/交付总监）。各会话检查点文件统一命名 `HANDOFF-CP-<日期>-<序号>-<会话名>.md`，本 INDEX 汇总每会话完成/进行中/下一步。新会话开工先读本 INDEX 决定接哪块。
 
-## 总览（2026-08-31 03:0x 快照 — 开发线机器阶段全部完成）
+## 总览（2026-08-31 11:30 快照 — 审计 REWORK 三必改 + 接线 + 北极星 L2 全部完成后收口）
 
 | 会话 | 文件域 | 阶段 | 状态 | 下一步 |
 |---|---|---|---|---|
@@ -17,11 +17,29 @@
 | software-engineer-d5 | self_heal/task_graph/ctx_suff | D5 | ✅ 完成 | — |
 | software-qa-d6 / architect-d6 | 矩阵 v4 双会签 | D6 | ✅ 完成（67/10/0） | — |
 
-## 交付终态（HEAD=47f1931，DRIFT_FREE，矩阵 v4 = 67✅/10🟡/0❌）
+## 交付终态（HEAD=7a5461d，DRIFT_FREE，矩阵 v4 = 63✅/14🟡/0❌ 审计改判）
 - R1 守护（guard_all.cmd + ZhihengGuard 计划任务）/ R2 注册表（15 节 107 条目）/ R3 黑箱四动词 / A1 autopilot 状态机
 - D1 R-Adapter+Worker-Adapter（LiteLLM）/ D2 cost_router+SAFE_HALT / D3 reuse_gate+supply_chain+Playwright / D4 parallel_scheduler / D5 self_heal+task_graph+context_sufficiency
 - 全部经 §17 审核门禁（R1/R3/D1/D6 双会签；其余单会签）落 docs/evidence/reviews/
-- 矩阵 v4：docs/evidence/DEFINITION-77-SECTIONS-V4.md（67✅/10🟡/0❌，7 个原 ❌ 全消除）
+- 矩阵 v4：docs/evidence/DEFINITION-77-SECTIONS-V4.md（**63✅/14🟡/0❌** 审计规则 R 降等；7 个原 ❌ 中 §55/§59/§68 降 🟡）
+
+## 审计 REWORK 处置（2026-08-31 接任会话，B1/B3/B2/接线/北极星 L2 全部完成并推送）
+
+| # | 内容 | 状态 | 证据 |
+|---|---|---|---|
+| B1 | A1 补自动化测试 13 用例（锁三态/状态机/R 门控/沙箱越界）+ claim_inbox run_id 校验 | 完成 | runtime/test_relay_autopilot_offline.py（13 OK） |
+| B3 | self_heal 默认证据目录改非跟踪 + gitignore 补齐 + self_heal_events.jsonl 恢复 + SAFE_HALT 证据入仓 | 完成 | docs/evidence/d2/SAFE_HALT-records-20260830.jsonl（N2 关闭） |
+| B2 | 矩阵 v4 改判 63 ✅/14 🟡/0 ❌（§34/§55/§59/§68 降） + 防误读声明 + N8 统一 + N1 注 | 完成 | DEFINITION-77-SECTIONS-V4.md（脚本复核 77 行自洽，无旧数字残留） |
+| 接线 | §59 cost_router 调度准入门 + §55 context_sufficiency 挂主链 + §34 controller_lease fencing（新模块） | 完成 | relay_autopilot.py admission_checks + runtime/controller_lease.py |
+| 北极星 L2 | 沙箱全链闭环 1 次（submit→wrap，3 轮收敛，账本留痕）+ 三闸实测 | 完成 | docs/evidence/POLARIS-L2-20260831.md |
+
+接线后基线：**568 tests OK**（Windows 原生 PowerShell + Python312）+ 权威矩阵 36/36 + doctor DRIFT_FREE。
+红线复核：宪法零改动、master..HEAD 零 merge、-S"api_key" master..HEAD 8 条均为历史既有（本会话零新增）。
+
+## E1 待裁决（R 通道不可用，丢审核链接，不许自行处置）
+- 实测：bsk daemon 活（port 52800, pid 21104）但 **browsers connected 0 / active sessions 0**；R-PROD last_verified=2026-08-19 过期。
+- 阻塞：真实北极星 L3（真实 R 审查）、§3 真实目标全自动、§5 真实 Provider。
+- 处置：本会话不自行换通道、不碰凭据。新审核链接 https://chatgpt.com/c/6a94e724-3870-83e8-b8ce-4c670be3182b 可用性需实测；失效升级业主。
 
 ## L3 待业主清单（唯一剩余，8 项）
 ①真实弱模型会话（§3/§4/§65/§71）②真实 Provider key（§5/§12/§73）③真实目标走 §3 全自动 ④真实多 Worker 并行（§56/57/58/34）⑤真实断网对账（§38）⑥cost_policy 按真实价目校准（§59）⑦§55 挂真实 Brain 检查点 ⑧§74 终裁
