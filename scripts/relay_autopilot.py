@@ -395,7 +395,8 @@ def _resolve_commit(goal, seq, candidate_commit, relay_mode):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:40]
 
 
-def build_event(goal, seq, candidate_commit=None, relay_mode=False, repo_path=None):
+def build_event(goal, seq, candidate_commit=None, relay_mode=False, repo_path=None,
+                review_packet=None):
     """构造与 review-relay.js validateEvent 期望一致的 BUILDER_READY 事件。"""
     cfg = load_relay_config()
     binding = load_builder_binding()
@@ -407,7 +408,7 @@ def build_event(goal, seq, candidate_commit=None, relay_mode=False, repo_path=No
 
     commit = _resolve_commit(goal, seq, candidate_commit, relay_mode)
 
-    packet = DEFAULT_REVIEW_PACKET
+    packet = review_packet or DEFAULT_REVIEW_PACKET
     if not os.path.exists(packet):
         packet = REVIEW_PACKET_ROOT  # 目录也可通过 existsSync
     verdict_path = os.path.join(REVIEW_PACKET_ROOT, f"autopilot-verdict-{run_id}.txt")
@@ -465,7 +466,8 @@ def cmd_submit(args):
            + " checks=" + json.dumps(admit['checks'], ensure_ascii=False), ok=True)
     seq = int(time.time() * 1000) % 100000
     event = build_event(goal, seq, args.candidate_commit, relay_mode=(args.mode == "relay"),
-                        repo_path=getattr(args, "repo_path", None) or None)
+                        repo_path=getattr(args, "repo_path", None) or None,
+                        review_packet=getattr(args, "review_packet", None) or None)
 
     if args.mode == "relay":
         target_dir = REAL_INBOX
@@ -789,6 +791,8 @@ def main():
     p_submit.add_argument("--candidate-commit", default=None)
     p_submit.add_argument("--repo-path", default=None,
                           help="GATE-5: builder 实际工作的 git 仓库（默认遗留常量 E:\\WB\\temp）")
+    p_submit.add_argument("--review-packet", default=None,
+                          help="R 审查包路径（默认遗留 round18 常量会致会话串台，务必注入本任务包）")
     p_submit.set_defaults(func=cmd_submit)
 
     p_drive = sub.add_parser("drive", help="驱动状态机")
