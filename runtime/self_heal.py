@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 
 SCHEMA = "v1.1-d5-self-heal"
 DEFAULT_GOAL_DIR = "state/goals"
-DEFAULT_EVIDENCE_DIR = "docs/evidence/d5"
+DEFAULT_EVIDENCE_DIR = "state/self_heal_evidence"  # 非跟踪路径（B3：默认证据不写已跟踪文件；显式 --evidence 覆盖）
 
 
 def _repo_root() -> Path:
