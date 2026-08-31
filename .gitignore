@@ -31,3 +31,5 @@ state/controller_lease.json
 state/goals/
 state/self_heal_evidence/
 tmp*/
+
+tmp-review-*
