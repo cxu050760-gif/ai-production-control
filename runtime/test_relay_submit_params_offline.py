@@ -162,9 +162,13 @@ class BuildEventParamTests(unittest.TestCase):
             real.write_text("packet", encoding="utf-8")
             ev = self._build(review_packet=str(real))
             self.assertEqual(ev["review_packet"], str(real))
-        # 不存在的注入路径 → 回落 packet 允许根目录（existsSync 语义，目录亦可）
+        # P2-3（盲审 fa5406f）：显式注入路径不存在 → fail-closed 抛错，
+        # 不再静默回落 round18 遗留根（会话串台根因）。
         self.assertFalse(_os.path.exists("X:\\pk\\missing.txt"))
-        ev2 = self._build(review_packet="X:\\pk\\missing.txt")
+        with self.assertRaises(ValueError):
+            self._build(review_packet="X:\\pk\\missing.txt")
+        # 未注入（None）且默认 packet 不存在 → 仍回落 packet 允许根目录
+        ev2 = self._build(_exists=False)
         self.assertEqual(ev2["review_packet"], ra.REVIEW_PACKET_ROOT)
 
     def test_e3_evidence_paths_passthrough(self):
@@ -183,30 +187,34 @@ class SubmitWiringTests(unittest.TestCase):
     """cmd_submit 的 getattr 链 + build_parser 参数面（P1-2 接线钉）。"""
 
     def test_e5_cmd_submit_passes_three_params_to_build_event(self):
-        args = argparse.Namespace(
-            goal_file="g.json", mode="mock", candidate_commit=None,
-            repo_path="X:\\real\\repo", review_packet="X:\\pk\\p.txt",
-            evidence_path=["X:\\e1", "X:\\e2"])
-        captured = {}
+        # P2-3 后：显式 review_packet 必须真实存在 → 用临时文件注入
+        with tempfile.TemporaryDirectory() as pkd:
+            packet = Path(pkd) / "packet.txt"
+            packet.write_text("packet", encoding="utf-8")
+            args = argparse.Namespace(
+                goal_file="g.json", mode="mock", candidate_commit=None,
+                repo_path="X:\\real\\repo", review_packet=str(packet),
+                evidence_path=["X:\\e1", "X:\\e2"])
+            captured = {}
 
-        def fake_build_event(goal, seq, commit, relay_mode=False, **kw):
-            captured.update(kw)
-            captured["relay_mode"] = relay_mode
-            captured["commit"] = commit
-            return {"event_id": "EV-T", "run_id": "RUN-T", "task_id": "TASK-T"}
+            def fake_build_event(goal, seq, commit, relay_mode=False, **kw):
+                captured.update(kw)
+                captured["relay_mode"] = relay_mode
+                captured["commit"] = commit
+                return {"event_id": "EV-T", "run_id": "RUN-T", "task_id": "TASK-T"}
 
-        with tempfile.TemporaryDirectory() as inbox:
-            with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
-                 mock.patch.object(ra, "admission_checks",
-                                   return_value={"admitted": True, "checks": {}, "reasons": []}), \
-                 mock.patch.object(ra, "build_event", side_effect=fake_build_event), \
-                 mock.patch.object(ra, "save_json", return_value=None) as sj, \
-                 mock.patch.object(ra, "ledger", return_value=None), \
-                 mock.patch.object(ra, "SANDBOX_INBOX", inbox):
-                rc = ra.cmd_submit(args)
+            with tempfile.TemporaryDirectory() as inbox:
+                with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+                     mock.patch.object(ra, "admission_checks",
+                                       return_value={"admitted": True, "checks": {}, "reasons": []}), \
+                     mock.patch.object(ra, "build_event", side_effect=fake_build_event), \
+                     mock.patch.object(ra, "save_json", return_value=None) as sj, \
+                     mock.patch.object(ra, "ledger", return_value=None), \
+                     mock.patch.object(ra, "SANDBOX_INBOX", inbox):
+                    rc = ra.cmd_submit(args)
         self.assertEqual(rc, 0)
         self.assertEqual(captured.get("repo_path"), "X:\\real\\repo")
-        self.assertEqual(captured.get("review_packet"), "X:\\pk\\p.txt")
+        self.assertEqual(Path(captured.get("review_packet")), packet)
         self.assertEqual(captured.get("evidence_paths"), ["X:\\e1", "X:\\e2"])
         self.assertFalse(captured.get("relay_mode"))
         sj.assert_called_once()
@@ -225,6 +233,91 @@ class SubmitWiringTests(unittest.TestCase):
         self.assertEqual(ns.evidence_path, ["X:\\e1", "X:\\e2"])
         self.assertEqual(ns.candidate_commit, hex40)
         self.assertEqual(ns.mode, "relay")
+
+    def test_e7_cmd_submit_missing_packet_fails_closed(self):
+        """P2-3：显式 --review-packet 不存在 → cmd_submit 直接拒（rc=2），
+        且不得进入 admission/build_event。"""
+        args = argparse.Namespace(
+            goal_file="g.json", mode="relay", candidate_commit=None,
+            repo_path=None, review_packet="X:\\pk\\missing.txt",
+            evidence_path=None)
+        admission_m = mock.MagicMock(
+            return_value={"admitted": True, "checks": {}, "reasons": []})
+        with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+             mock.patch.object(ra, "admission_checks", admission_m), \
+             mock.patch.object(ra, "ledger", return_value=None):
+            rc = ra.cmd_submit(args)
+        self.assertEqual(rc, 2)
+        admission_m.assert_not_called()
+
+
+class RelayLockReverifyTests(unittest.TestCase):
+    """P2-2/P3-4：relay acquire_lock rename-steal 复验钉测。
+
+    模拟竞争：A 读到 stale → 在 A rename 之前，B 已偷走 stale 并重建新鲜锁；
+    A 的 rename 偷到的是 B 的新鲜锁 → 复验必须恢复 B 的锁并 SKIP，绝双持有者。
+    """
+
+    def _lock_env(self):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        lock_dir = Path(td.name) / "autopilot-locks"
+        lock_dir.mkdir()
+        return td, lock_dir
+
+    def test_v2_never_steals_fresh_rebuild(self):
+        import json as _json
+        from datetime import datetime, timedelta, timezone
+        td, lock_dir = self._lock_env()
+        lock_json = lock_dir / "lock.json"
+        old_at = (datetime.now(timezone.utc) - timedelta(seconds=400)).isoformat()
+        lock_json.write_text(_json.dumps({"token": "OLD", "at": old_at}),
+                             encoding="utf-8")
+        real_rename = ra.os.rename
+        state = {"swapped": False}
+
+        def swapping_rename(src, dst):
+            if str(src) == str(lock_json) and not state["swapped"]:
+                state["swapped"] = True
+                lock_json.unlink()
+                lock_json.write_text(_json.dumps(
+                    {"token": "B", "at": datetime.now(timezone.utc).isoformat()}),
+                    encoding="utf-8")
+            return real_rename(src, dst)
+
+        with mock.patch.object(ra, "LOCK_DIR", str(lock_dir)), \
+             mock.patch.object(ra.os, "rename", side_effect=swapping_rename):
+            token = ra.acquire_lock()
+        self.assertIsNone(token, "偷到新鲜锁必须 SKIP")
+        info = _json.loads(lock_json.read_text(encoding="utf-8"))
+        self.assertEqual(info["token"], "B", "活跃持有者的锁必须原样保留")
+        leftovers = [p for p in lock_dir.glob("lock.stolen-*")]
+        self.assertEqual(leftovers, [])
+
+    def test_v3_fresh_empty_claim_not_stolen(self):
+        """P3-2：O_EXCL 后尚未 flush 的新鲜空锁 = 认领进行中，绝不接管。"""
+        td, lock_dir = self._lock_env()
+        lock_json = lock_dir / "lock.json"
+        lock_json.write_bytes(b"")  # 新鲜空壳
+        with mock.patch.object(ra, "LOCK_DIR", str(lock_dir)):
+            token = ra.acquire_lock()
+        self.assertIsNone(token)
+        self.assertEqual(lock_json.stat().st_size, 0, "新鲜空锁不得被删除/覆盖")
+
+    def test_v4_stale_takeover_still_works(self):
+        """正向钉：真 stale 锁的接管路径不因复验而失效。"""
+        import json as _json
+        from datetime import datetime, timedelta, timezone
+        td, lock_dir = self._lock_env()
+        lock_json = lock_dir / "lock.json"
+        old_at = (datetime.now(timezone.utc) - timedelta(seconds=400)).isoformat()
+        lock_json.write_text(_json.dumps({"token": "OLD", "at": old_at}),
+                             encoding="utf-8")
+        with mock.patch.object(ra, "LOCK_DIR", str(lock_dir)):
+            token = ra.acquire_lock()
+        self.assertIsNotNone(token)
+        info = _json.loads(lock_json.read_text(encoding="utf-8"))
+        self.assertEqual(info["token"], token)
 
 
 class DriveLeaseGateFailClosedTests(unittest.TestCase):

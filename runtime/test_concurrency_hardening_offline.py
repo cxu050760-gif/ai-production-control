@@ -70,11 +70,16 @@ class StaleCliTerminationTests(unittest.TestCase):
             time.sleep(0.02)
         self.assertEqual(fx.tasks["T-STALE"]["state"], ps.TASK_RUNNING)
         # The dispatch thread stores the executor asynchronously: wait for it.
+        # （v16 §4-A：5s 在全套件负载下不够，属预存时序敏感；纯测试健壮性
+        # 加固——等待窗延至 20s，不改断言语义。）
+        # 另（r2e 实测）：产品侧 _executors[tid] 注册先于 run() 内 proc 创建
+        # （parallel_scheduler.py:1013-1016），存在真实异步窗口——等待条件须
+        # 同时覆盖"executor 已注册 且 proc 已创建"，否则 proc 断言为固有竞态。
         executor = None
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             executor = fx._executors.get("T-STALE")
-            if executor is not None:
+            if executor is not None and executor.proc is not None:
                 break
             time.sleep(0.02)
         self.assertIsNotNone(executor, "executor never registered")
@@ -89,7 +94,7 @@ class StaleCliTerminationTests(unittest.TestCase):
         self.assertEqual(changed, 1)
         self.assertEqual(fx.tasks["T-STALE"]["state"], ps.TASK_STALE)
         # THE FIX: the monitor consumes _stop_event and terminates the child.
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             if executor.proc.poll() is not None:
                 break

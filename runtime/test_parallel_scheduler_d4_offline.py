@@ -80,8 +80,10 @@ class TestConcurrentDispatch(unittest.TestCase):
             self.assertEqual(t["result"]["result"]["value"], i)
         self.assertEqual(summary["accepted"], 3)
         self.assertEqual(summary["rejected"], 0)
-        # 并行证据：3×0.10 顺序=0.30；2 worker 并行应明显小于顺序时间
-        self.assertLess(elapsed, 0.26, f"elapsed={elapsed:.3f}s 应体现并发（顺序约 0.30s）")
+        # 并行证据：3×0.10 顺序=0.30；2 worker 并行应明显小于顺序时间。
+        # （v16 §4-A：0.26 阈值仅留 0.04s 裕量，全套件负载下实测 0.266 偶发
+        # 越线=假失败；放宽至顺序时间的 95%（0.285），仍保并发判别力。）
+        self.assertLess(elapsed, 0.285, f"elapsed={elapsed:.3f}s 应体现并发（顺序约 0.30s）")
 
     def test_epoch_monotonic_increases(self):
         fx = _new_fixture(Path(tempfile.mkdtemp()), max_concurrent=2)

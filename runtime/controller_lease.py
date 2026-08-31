@@ -117,6 +117,29 @@ def _lease_lock(path: Path, timeout: float = DEFAULT_LOCK_TIMEOUT) -> Tuple[int,
                     except OSError:
                         time.sleep(0.02)
                         continue  # another reclaimer stole it first
+                    # P2-2 (blind review fa5406f): re-verify the file we just
+                    # renamed is still the STALE one we judged. Between our
+                    # stat and rename, another reclaimer may have stolen the
+                    # stale lock AND rebuilt a fresh one — renaming then would
+                    # displace an ACTIVE holder's lock → double holder.
+                    # Tombstone age ≤ threshold ⇒ we stole a fresh lock:
+                    # restore it in place and treat as busy (fail-closed).
+                    try:
+                        stolen_age = time.time() - steal.stat().st_mtime
+                    except OSError:
+                        stolen_age = None  # vanished: lost the race on POSIX
+                    if stolen_age is not None and stolen_age <= STALE_LOCK_SECONDS:
+                        try:
+                            os.rename(str(steal), str(lock_path))  # restore holder's lock
+                        except OSError:
+                            try:
+                                os.remove(str(steal))
+                            except OSError:
+                                pass
+                        if time.monotonic() >= deadline:
+                            raise LeaseLockTimeout(f"lease lock busy: {lock_path}")
+                        time.sleep(0.02)
+                        continue
                     try:
                         os.remove(str(steal))
                     except OSError:

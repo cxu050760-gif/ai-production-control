@@ -288,9 +288,24 @@ def acquire_lock():
         except FileExistsError:
             info = load_json(lock_json)
             if info is None:
-                # 损坏/半写的认领文件（前主崩溃残留）：删除后重试一次。
-                # Windows 上对仍被打开的文件 unlink 会 PermissionError
-                # -> return None（绝不误删活跃持有者的锁）。
+                # P3-2（盲审 fa5406f）：区分两类无法解析的认领文件——
+                # ① 0 字节新鲜空锁：O_EXCL 已成功但内容尚未 flush（认领进行中，
+                #    绝不接管）。age 判定须带时钟量化容差：datetime.now() 微秒
+                #    截断可使刚写入文件出现 ~-1e-6 的微负 age（实测复现），
+                #    下界用 -5s；>300s 的空壳视为残留照常接管。
+                # ② 非空但撕裂（半写崩溃残留）：保留 n5c 自愈语义，照常接管
+                #    （写进程已死才会留下撕裂内容，单次 json.dump 不会长期半写）。
+                # Windows 上对仍被打开的文件 unlink 失败照旧 return None。
+                try:
+                    _st = os.stat(lock_json)
+                    empty_age = (now - datetime.datetime.fromtimestamp(
+                        _st.st_mtime, datetime.timezone.utc)).total_seconds()
+                    empty_size = _st.st_size
+                except OSError:
+                    empty_age = None
+                    empty_size = 0
+                if empty_size == 0 and empty_age is not None and -5 <= empty_age <= 300:
+                    return None  # 新鲜空锁 = 认领进行中，绝不接管
                 try:
                     os.remove(lock_json)
                 except OSError:
@@ -314,6 +329,37 @@ def acquire_lock():
                 os.rename(lock_json, tombstone)
             except OSError:
                 return None  # 别的接管者已偷走（或 Windows 文件打开中）
+            # P2-2（盲审 fa5406f）：复验偷到的是不是我们判定的那份 stale——
+            # 上界语义：仅当墓碑可解析且 age>300 才"确认 stale"（被判定那份
+            # 必然 age>300，与时钟微差无关）；否则（新鲜锁——含 B 重建后 at
+            # 略晚于本进程 now 导致的微小负 age——或空壳/损坏）一律 fail-closed：
+            # 新鲜可解析→恢复活跃持有者的锁；不可解析→清理墓碑。均 SKIP。
+            try:
+                with open(tombstone, "r", encoding="utf-8") as tfh:
+                    stolen_info = json.load(tfh)
+                _st_age = (now - datetime.datetime.fromisoformat(
+                    str(stolen_info.get("at", "")).replace("Z", "+00:00"))).total_seconds()
+            except Exception:
+                stolen_info = None
+                _st_age = None
+            _confirmed_stale = (isinstance(stolen_info, dict)
+                                and _st_age is not None and _st_age > 300)
+            if not _confirmed_stale:
+                if isinstance(stolen_info, dict):
+                    # 新鲜锁（活跃持有者）→ 原样恢复
+                    try:
+                        os.rename(tombstone, lock_json)  # 恢复活跃持有者的锁
+                    except OSError:
+                        try:
+                            os.remove(tombstone)
+                        except OSError:
+                            pass
+                else:
+                    try:
+                        os.remove(tombstone)
+                    except OSError:
+                        pass
+                return None
             try:
                 fd = os.open(lock_json, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             except FileExistsError:
@@ -410,6 +456,11 @@ def build_event(goal, seq, candidate_commit=None, relay_mode=False, repo_path=No
 
     packet = review_packet or DEFAULT_REVIEW_PACKET
     if not os.path.exists(packet):
+        if review_packet:
+            # P2-3（盲审 fa5406f）：显式注入的 packet 不存在必须 fail-closed。
+            # 静默回落 REVIEW_PACKET_ROOT（round18 遗留根）正是 341d01e 要
+            # 消除的"按旧任务裁决"串台风险；默认路径缺失回落保留。
+            raise ValueError("REVIEW_PACKET_NOT_FOUND: " + str(review_packet))
         packet = REVIEW_PACKET_ROOT  # 目录也可通过 existsSync
     verdict_path = os.path.join(REVIEW_PACKET_ROOT, f"autopilot-verdict-{run_id}.txt")
     evidence = list(evidence_paths or []) or [DEFAULT_EVIDENCE if os.path.exists(DEFAULT_EVIDENCE) else ALLOWED_EVIDENCE_ROOT]
@@ -454,6 +505,13 @@ def cmd_submit(args):
         return 2
     if not (goal.get("objective") or goal.get("title")):
         ledger("submit", "goal must have objective or title", ok=False)
+        return 2
+    # P2-3（盲审 fa5406f）：显式注入的 review-packet 不存在 → fail-closed，
+    # 禁止静默回落遗留 round18 根（会话串台根因）。
+    _packet_arg = getattr(args, "review_packet", None)
+    if _packet_arg and not os.path.exists(_packet_arg):
+        ledger("submit", "review-packet not found (fail-closed): " + str(_packet_arg), ok=False)
+        print("REVIEW_PACKET_NOT_FOUND: " + str(_packet_arg), file=sys.stderr)
         return 2
     admit = admission_checks(goal, require_gates=(args.mode == "relay"))
     if not admit["admitted"]:

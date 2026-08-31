@@ -21,6 +21,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
@@ -177,6 +178,60 @@ class StateRootSeamTests(unittest.TestCase):
         p = Path(cl.default_lease_path())
         self.assertEqual(p.name, "controller_lease.json")
         self.assertEqual(p.parent.name, "state")
+
+
+class LeaseStealReverifyTests(unittest.TestCase):
+    """P2-2/P3-4（盲审 fa5406f）：_lease_lock rename-steal 复验钉测。
+
+    模拟竞争：A 判定 stale → 在 A rename 之前，B 已偷走 stale 并在原路径重建
+    新鲜锁；A 的 rename 实际偷到 B 的新鲜锁 → 复验必须恢复 B 的锁并按 busy
+    重试，绝不产生双持有者。
+    """
+
+    def test_v1_never_steals_fresh_rebuild(self):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        lease = Path(td.name) / "lease.json"
+        lock = Path(str(lease) + ".lock")
+        lease.write_text("{}", encoding="utf-8")
+        lock.write_bytes(b"")  # 旧 stale 锁
+        stale_mtime = time.time() - cl.STALE_LOCK_SECONDS - 60
+        os.utime(lock, (stale_mtime, stale_mtime))
+        real_rename = os.rename
+        state = {"swapped": False}
+
+        def swapping_rename(src, dst):
+            # B 的动作：在 A 的 stat 与 rename 之间偷走 stale 锁并重建新鲜锁
+            if str(src) == str(lock) and not state["swapped"]:
+                state["swapped"] = True
+                lock.unlink()
+                lock.write_bytes(b"")
+            return real_rename(src, dst)
+
+        with mock.patch.object(cl.os, "rename", side_effect=swapping_rename):
+            with self.assertRaises(cl.LeaseLockTimeout):
+                cl._lease_lock(lease, timeout=0.05)
+        self.assertTrue(lock.exists(), "活跃持有者的新鲜锁必须被恢复原位")
+        leftovers = list(Path(td.name).glob("*.stolen-*"))
+        self.assertEqual(leftovers, [], "墓碑必须清理")
+
+    def test_v2_genuine_stale_takeover_unaffected(self):
+        """正向钉：无竞争时真 stale 锁照常接管（复验不得误伤正常路径）。"""
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        lease = Path(td.name) / "lease.json"
+        lock = Path(str(lease) + ".lock")
+        lease.write_text("{}", encoding="utf-8")
+        lock.write_bytes(b"")
+        stale_mtime = time.time() - cl.STALE_LOCK_SECONDS - 60
+        os.utime(lock, (stale_mtime, stale_mtime))
+        fd, lock_path = cl._lease_lock(lease, timeout=2.0)
+        try:
+            self.assertEqual(lock_path, lock)
+            self.assertTrue(lock.exists())
+        finally:
+            cl._release_lease_lock(fd, lock_path)
+        self.assertFalse(lock.exists())
 
 
 if __name__ == "__main__":
