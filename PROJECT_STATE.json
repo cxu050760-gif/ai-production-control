@@ -15,12 +15,12 @@
  "baselines": {
   "current_development_head": {
    "branch": "v1.1-blackbox",
-   "head": "943a146a40d6819b847e25a1c5e267f6dd284660",
+   "head": "5df9ea84a33ade3f8349a545917a6915b66b7058",
    "verdict": "IN_DEVELOPMENT",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "943a146a40d6819b847e25a1c5e267f6dd284660"
+    "value": "5df9ea84a33ade3f8349a545917a6915b66b7058"
    }
   },
   "current_accepted_base": {
