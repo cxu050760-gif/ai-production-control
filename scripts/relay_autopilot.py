@@ -466,6 +466,13 @@ def build_event(goal, seq, candidate_commit=None, relay_mode=False, repo_path=No
         _missing_ev = [p for p in evidence_paths if not os.path.exists(p)]
         if _missing_ev:
             raise ValueError("EVIDENCE_PATH_NOT_FOUND (relay): " + ", ".join(_missing_ev))
+        if candidate_commit:
+            import subprocess as _sp
+            _chk = _sp.run(
+                ["git", "-C", str(repo_path), "cat-file", "-e",
+                 str(candidate_commit).strip() + "^{commit}"], capture_output=True)
+            if _chk.returncode != 0:
+                raise ValueError("CANDIDATE_COMMIT_NOT_FOUND (relay): " + str(candidate_commit))
     packet = review_packet or DEFAULT_REVIEW_PACKET
     if not os.path.exists(packet):
         if review_packet or relay_mode:
@@ -537,6 +544,21 @@ def cmd_submit(args):
             _miss = [p for p in _ev_args if not os.path.exists(p)]
             if _miss:
                 problems.append("--evidence-path 不存在: " + ", ".join(_miss))
+        # R-终裁 REWORK(20260901): relay 的 candidate_commit 必须是 repo 中
+        # 真实存在的 Git 提交对象——40-hex 格式合法但对象不存在的伪造提交
+        # 会让 R 审一个不存在的 commit,与 GATE-1#2 同性质。
+        _cc = getattr(args, "candidate_commit", None)
+        if _cc and _repo_arg:
+            import subprocess as _sp
+            try:
+                _chk = _sp.run(
+                    ["git", "-C", _repo_arg, "cat-file", "-e",
+                     str(_cc).strip() + "^{commit}"], capture_output=True)
+                _git_ok = (_chk.returncode == 0)
+            except OSError:
+                _git_ok = False
+            if not _git_ok:
+                problems.append("--candidate-commit 必须是 repo 中真实存在的 Git 提交对象: " + str(_cc))
         if problems:
             ledger("submit", "relay explicit-input contract violated (fail-closed)", ok=False)
             for _p in problems:

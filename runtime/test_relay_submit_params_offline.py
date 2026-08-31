@@ -220,15 +220,23 @@ class RelayExplicitInputContractTests(unittest.TestCase):
                         evidence_paths=["X:\\no\\ev.json"])
 
     def test_n6_relay_all_valid_passes_contract(self):
+        import subprocess as sp
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
             repo.mkdir()
+            sp.run(["git", "init", "-q", str(repo)], check=True)
+            sp.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c",
+                    "user.name=t", "commit", "--allow-empty", "-q",
+                    "-m", "init"], check=True)
+            head = sp.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
             pkt = Path(tmp) / "packet.txt"
             pkt.write_text("p", encoding="utf-8")
             ev1 = Path(tmp) / "ev1.json"
             ev1.write_text("{}", encoding="utf-8")
             args = self._relay_args(repo=str(repo), packet=str(pkt),
                                     evidence=[str(ev1)])
+            args.candidate_commit = head
             admission_m = mock.MagicMock(
                 return_value={"admitted": True, "checks": {}, "reasons": []})
             build_m = mock.MagicMock(return_value={
@@ -244,6 +252,33 @@ class RelayExplicitInputContractTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             admission_m.assert_called_once()
             build_m.assert_called_once()
+
+    def test_n7_relay_fabricated_commit_rejected_before_admission(self):
+        """R-终裁 REWORK：40-hex 格式合法但对象不存在的伪造 commit 必须
+        在 admission 前 rc=2（git cat-file -e 校验）。"""
+        import subprocess as sp
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            sp.run(["git", "init", "-q", str(repo)], check=True)
+            sp.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c",
+                    "user.name=t", "commit", "--allow-empty", "-q",
+                    "-m", "init"], check=True)
+            pkt = Path(tmp) / "packet.txt"
+            pkt.write_text("p", encoding="utf-8")
+            ev1 = Path(tmp) / "ev1.json"
+            ev1.write_text("{}", encoding="utf-8")
+            args = self._relay_args(repo=str(repo), packet=str(pkt),
+                                    evidence=[str(ev1)])
+            args.candidate_commit = "f" * 40   # 格式合法、对象不存在
+            admission_m = mock.MagicMock(
+                return_value={"admitted": True, "checks": {}, "reasons": []})
+            with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+                 mock.patch.object(ra, "admission_checks", admission_m), \
+                 mock.patch.object(ra, "ledger", return_value=None):
+                rc = ra.cmd_submit(args)
+        self.assertEqual(rc, 2)
+        admission_m.assert_not_called()
 
 
 class BuildEventParamTests(unittest.TestCase):
