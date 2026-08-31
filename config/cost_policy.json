@@ -119,7 +119,11 @@
   "max_worker_retries": 2,
 
   "budget": {
-    "default_budget_threshold": 0.5,
+    "default_budget_threshold": 2.0,
+    "_threshold_history": [
+      {"from": 0.5, "to": 2.0, "at": "2026-08-31", "approved_by": "owner",
+       "reason": "演示阈值 0.5 在真实任务上造成 §61 误熔断（SAFE_HALT-20260831-004：0.555>0.5，审核任务实际走 ChatGPT 网页会话不烧 API 钱）；宪法 §61 recovery 原文允许业主调整预算阈值。真实价目校准仍留 L3。"}
+    ],
     "note": "默认预算阈值（元/任务）。route 未显式给 --max-cost 时用此值做熔断判定；生产阈值由业主在 L3 依据真实价目调整。"
   },
 
