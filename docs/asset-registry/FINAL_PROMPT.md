@@ -247,7 +247,9 @@ spawn 后第一动作=复制其全部输入到各自可写域快照（盲审→r
   ①状态一致性核对（三状态文件 vs git 实际）②**增量声明全量比对+内容级核对**：读
   increment-declaration.md 与 `git log HEAD-FROZEN..HEAD --name-status` 逐条比对（漏一条=
   REWORK）；**且核 packet 内 diff 与 `git diff HEAD-FROZEN..HEAD` 实际输出逐段一致、
-  regression log 关键行与亲跑结果数字对照**——不一致=REWORK"材料与仓库不符" ③"3 连绿"亲验：
+  regression log 关键行与亲跑结果数字对照**——不一致=REWORK"材料与仓库不符" ⑧**达成矩阵
+  逐节证据核验**：每节"满足"标注须附机械验收命令重放通过+证据指针有效（仓库路径+提交哈希+
+  测试名），任一节核验不过=整体 REWORK ③"3 连绿"亲验：
   **亲跑 1 轮直录（入口三元锚定：工作目录=<clone>\runtime\；状态根环境变量
   APC_RUNTIME_STATE_ROOT=<clone>\tmp\state\；入口命令=Git bash 下
   `python -m unittest discover -s . -p "test_*.py"`）+核对主代理 2 轮直录日志存在与 MANIFEST
