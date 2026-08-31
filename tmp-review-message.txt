@@ -1,0 +1,34 @@
+[全新独立审核请求] hardening 批次 A — P0 门禁加固（与 V0.5/V0.6/pass-invalidation 历史任务无关）
+
+致审查方：本请求为全新独立审核。请勿套用你会话中任何历史任务的上下文。
+
+== 审核对象 ==
+仓库分支 hardening/p0-gates-20260831，候选提交 9655c967（9 个修复提交，范围 9a31e2c..9655c967）。
+本批修复：GATE-1（report 主回路接入三闸/禁伪造 commit/FROZEN 拦截/三闸 fail-closed/OUTCOME_UNKNOWN 对账出口）、GATE-2（controller_lease O_EXCL 原子化+revoke/renew 统一包装；调度器资源 all-or-nothing 回滚；reap_stale 直接终止孤儿 CLI 进程（宪法 §57）；缺 epoch 外部结果拒绝（§40）；RunLock 空锁 age 判定；relay 锁 O_EXCL 认领+stale 接管 rename-steal）、测试还账（36 例攻防矩阵改真断言/wiring 隔离/skip 改 FAIL/新增 state 哨兵）、治理（PROJECT_STATE 降级历史快照等）。
+
+== 关键代码证据（摘录）==
+1) relay 禁伪造+三闸 fail-closed（scripts/relay_autopilot.py admission_checks）:
+   candidate_commit 校验: 桥侧 CANDIDATE_MISMATCH 实测拦截（本次投审第 4 次尝试即被其捕获——手抄 sha 错一位即拒）。
+   require_gates=True 时 cost/context/lease 三闸任一异常或 not ok -> admitted=False（fail-closed），异常消息形如 "lease-gate error (fail-closed): ..."（该路径实测触发过，证明 fail-closed 真实生效而非摆设）。
+2) lease 门（runtime/controller_lease.py）:
+   acquire/renew/revoke 全部经 _lease_lock（os.O_CREAT|O_EXCL 自旋，STALE_LOCK_SECONDS=10 后 rename-steal 原子回收）；save_lease 先 fsync 再 os.replace；check_execute_right 顺序 revoked -> generation -> expires（畸形 expires_at 按过期 fail-closed）；renew 成功/失败均返回 {ok, reason, lease} 统一包装。
+3) 调度器（runtime/parallel_scheduler.py）:
+   _acquire_resources all-or-nothing：部分失败回滚已获锁（防两任务交叉持锁死锁）。
+   reap_stale 心跳超时判 STALE 时直接 ex._terminate()（此前孤儿 CLI 进程不受 _stop_event 控制继续运行，锁却被移交——§57 违规）。
+   accept_external_result 拒绝缺 epoch 的迟到结果（防 §40 STALE_EPOCH 绕过）。
+4) report 主回路（runtime/run.cmd :29-36 路由至 send_guard；runtime.py cmd_report 内部经模块全局调用 cmd_send，monkeypatch 后三闸真实生效）。
+
+== 测试证据（本候选真实重跑）==
+- runtime 目录 unittest discover：Ran 639 tests，OK，exit=0（含 36+1 例攻防矩阵真断言、5 例租约并发、7 例并发加固、2 例 state 哨兵）
+- tests 目录 unittest discover：Ran 219 tests，OK，exit=0
+- 内部盲审（独立子代理，未见施工自述）：APPROVE-WITH-NITS，3 个 P2（relay 锁接管 TOCTOU/effect-reconcile 未持锁/lease 同型）已全部修复（rename-steal/per-RUN RunLock/统一包装），修后全量回归仍全绿。
+
+== 通道限制披露 ==
+本通道为纯文本消息（无附件）。完整 diff 与证据文件在仓库副本 E:\WB\temp\review-batch-a-20260831（candidate 9655c967 可本地核验）；机器证据包 HE-BATCHA-HARDENING-20260831（manifest_check 8/8 valid + evidence_verify all_valid）位于 harness 目录。如需附件请明示，本次按纯文本请求裁决。
+
+== 输出要求 ==
+请给出独立裁决，第一行为三选一：
+===REVIEW_VERDICT=== APPROVE
+===REVIEW_VERDICT=== APPROVE-WITH-NITS
+===REVIEW_VERDICT=== REWORK
+随后附逐项发现（file:line + P0-P3）。若 REWORK 请给出可执行必改清单。
