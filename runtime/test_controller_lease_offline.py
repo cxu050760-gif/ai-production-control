@@ -72,7 +72,10 @@ class ControllerLeaseTests(unittest.TestCase):
         l1 = lease.acquire("controller-A", ttl_seconds=600, path=self.path, now=now)
         renewed = lease.renew("controller-A", l1["generation"], ttl_seconds=600, path=self.path,
                               now=now + datetime.timedelta(seconds=500))
-        self.assertEqual(renewed["generation"], l1["generation"])
+        # Unified envelope (hardening): success returns {ok, reason, lease}.
+        self.assertTrue(renewed["ok"])
+        self.assertEqual(renewed["reason"], lease.OK)
+        self.assertEqual(renewed["lease"]["generation"], l1["generation"])
         r = lease.check_execute_right("controller-A", l1["generation"], path=self.path,
                                       now=now + datetime.timedelta(seconds=700))
         self.assertTrue(r["ok"])

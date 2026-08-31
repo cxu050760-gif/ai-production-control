@@ -232,7 +232,9 @@ def renew(controller_id: str, generation: int, ttl_seconds: int = DEFAULT_LEASE_
         save_lease(new, path)
     finally:
         _release_lease_lock(fd, lock_path)
-    return new
+    # Success/failure return the same envelope (ok/reason/lease): callers
+    # branch on ok and must never parse a bare lease dict. (P3 fix)
+    return {"schema": SCHEMA, "ok": True, "reason": OK, "lease": new}
 
 
 def check_execute_right(controller_id: str, generation: int,

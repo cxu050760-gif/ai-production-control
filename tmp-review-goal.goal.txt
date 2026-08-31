@@ -1,0 +1,6 @@
+GOAL: 独立外部审核执衡 hardening 批次 A。
+1) 读 C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\docs\evidence\reviews\REVIEW-REQUEST-BATCH-A-EXTERNAL-20260831.md 全文。
+2) 按其"请重点独立验证"4 项，亲自查看仓库 diff（git log/diff 9a31e2c..HEAD，仓库在 C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1，只读）与指定测试文件。
+3) 给出裁决：APPROVE / APPROVE-WITH-NITS / REWORK，附逐项发现（file:line + P0-P3）。
+4) 将完整审核意见写入 E:\WB\outputs\ai-production-control\review-batch-a-external.txt（含裁决行"===REVIEW_VERDICT=== APPROVE|APPROVE-WITH-NITS|REWORK"）。
+范围红线：只读仓库；不改任何文件；不外发数据。
