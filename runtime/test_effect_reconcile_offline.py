@@ -57,6 +57,10 @@ def _make_run(root, env, *, run_status="HARD_BLOCKED", effect_status="OUTCOME_UN
     # at import time. Set the env seam FIRST, then load the module — otherwise
     # the fixture writes into the default (real) state root. Learned the hard
     # way in this very test run (leaked RUN dirs were purged); see GATE-3.
+    # v16 §4-A 修复：此处曾无条件 pop 该 env，把 discover 外层设置的隔离状态根
+    # 一并摧毁（audit hook 实证：后续 admission 用例因此回落仓根真实 lease）。
+    # 现改为保存/恢复外层值。
+    _prev_root = os.environ.get("APC_RUNTIME_STATE_ROOT")
     os.environ["APC_RUNTIME_STATE_ROOT"] = env["APC_RUNTIME_STATE_ROOT"]
     try:
         rt = _load_module(HERE / "runtime.py", "apc_runtime_core_reconcile_fixture")
@@ -81,7 +85,10 @@ def _make_run(root, env, *, run_status="HARD_BLOCKED", effect_status="OUTCOME_UN
         rt.save_state(state)
         return run_id
     finally:
-        os.environ.pop("APC_RUNTIME_STATE_ROOT", None)
+        if _prev_root is None:
+            os.environ.pop("APC_RUNTIME_STATE_ROOT", None)
+        else:
+            os.environ["APC_RUNTIME_STATE_ROOT"] = _prev_root
 
 
 def _evidence_file(root, payload=None):

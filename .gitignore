@@ -30,6 +30,7 @@ state/cost_router_state.json
 state/controller_lease.json
 state/goals/
 state/self_heal_evidence/
+state/drive-review-log.txt
 tmp*/
 
 tmp-review-*

@@ -136,5 +136,48 @@ class LeaseAtomicityTests(unittest.TestCase):
         self.assertIsNotNone(outs["acquire"])
 
 
+class StateRootSeamTests(unittest.TestCase):
+    """GATE-3 补强回归钉（v16 §4-A 欠账清零 2026-08-31）。
+
+    controller_lease 曾恒解析仓根真实 state/controller_lease.json（audit hook
+    实证全套件回归中 admission 用例对真实租约续约写入，时间依赖性污染）。
+    现约定与 runtime.py/harness_verify.py 一致：设 APC_RUNTIME_STATE_ROOT 时
+    lease 落 env 根；不设时保持仓根默认（生产行为不变）。
+    """
+
+    def test_s1_env_root_isolates_lease_ops(self):
+        real_path = Path(cl.default_lease_path())
+        # 前置：真实仓根文件 mtime 指纹
+        before = real_path.stat().st_mtime_ns if real_path.exists() else None
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        old = os.environ.get("APC_RUNTIME_STATE_ROOT")
+        os.environ["APC_RUNTIME_STATE_ROOT"] = td.name
+        self.addCleanup(lambda: (os.environ.pop("APC_RUNTIME_STATE_ROOT", None),
+                                 old and os.environ.__setitem__("APC_RUNTIME_STATE_ROOT", old)))
+        try:
+            self.assertEqual(Path(cl.default_lease_path()),
+                             Path(td.name) / "state" / "controller_lease.json")
+            res = cl.acquire("controller-seam", path=None)  # 走 default → env 根
+            self.assertGreaterEqual(int(res["generation"]), 1)
+            self.assertEqual(res["holder"], "controller-seam")
+            self.assertTrue((Path(td.name) / "state" / "controller_lease.json").exists())
+        finally:
+            if before is not None:
+                self.assertEqual(real_path.stat().st_mtime_ns, before,
+                                 "真实仓根 lease 文件被测试触碰")
+            else:
+                self.assertFalse(real_path.exists(),
+                                 "真实仓根 lease 文件被测试创建")
+
+    def test_s2_no_env_keeps_repo_default(self):
+        old = os.environ.pop("APC_RUNTIME_STATE_ROOT", None)
+        self.addCleanup(lambda: old and os.environ.__setitem__(
+            "APC_RUNTIME_STATE_ROOT", old))
+        p = Path(cl.default_lease_path())
+        self.assertEqual(p.name, "controller_lease.json")
+        self.assertEqual(p.parent.name, "state")
+
+
 if __name__ == "__main__":
     unittest.main()

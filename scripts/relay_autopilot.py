@@ -691,7 +691,13 @@ def cmd_drive(args):
                     print("LEASE_REJECTED: " + str(chk.get("error")), file=sys.stderr)
                     return 2
         except Exception as exc:  # noqa: BLE001
-            ledger("lease_check_warn", "lease gate skipped: " + str(exc), ok=False)
+            # P1-4 (hardening batch A 补内审): drive 是真实执行器，与 submit 侧
+            # require_gates 语义对齐 —— lease 门坏了不许"跳过门"继续执行
+            # (fail-closed)。旧行为 catch-and-skip 会在状态文件损坏/权限故障时
+            # 无授权推进状态机，与 GATE-1#4 纪律相悖。
+            ledger("drive", "lease-gate error (fail-closed): " + str(exc), ok=False)
+            print("LEASE_GATE_ERROR: " + str(exc), file=sys.stderr)
+            return 2
     token = acquire_lock()
     if token is None:
         ledger("drive", "SKIP_LOCKED another autopilot drive holds the lock", ok=False)
@@ -782,7 +788,8 @@ def cmd_reset_sandbox(args):
     return 0
 
 
-def main():
+def build_parser():
+    """构建 CLI 解析器（抽出以便离线测试验证参数面，行为不变）。"""
     parser = argparse.ArgumentParser(description="A1 中继自动调度闭环接线")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -817,7 +824,11 @@ def main():
 
     p_reset = sub.add_parser("reset-sandbox", help="清空 autopilot 沙箱")
     p_reset.set_defaults(func=cmd_reset_sandbox)
+    return parser
 
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
     try:
         return args.func(args)

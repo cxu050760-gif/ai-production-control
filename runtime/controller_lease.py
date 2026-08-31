@@ -70,6 +70,14 @@ def _utc_from_iso(s: str) -> datetime.datetime:
 
 
 def default_lease_path() -> str:
+    # GATE-3 补强（v16 §4-A 欠账清零 2026-08-31）：遵守 APC_RUNTIME_STATE_ROOT
+    # 测试缝（与 runtime.py/harness_verify.py 同约定）。此前本模块恒解析仓根真实
+    # state/controller_lease.json，导致全套件回归中 admission 用例对真实租约做
+    # 读/续约（audit hook 实证 24 次访问、600s 过期后真实 renew 写入——时间依赖
+    # 性 state 污染）。生产/自动化服务不设该 env，行为与此前完全一致。
+    env_root = os.environ.get("APC_RUNTIME_STATE_ROOT")
+    if env_root:
+        return os.path.join(env_root, LEASE_FILE)
     return os.path.join(str(_repo_root()), LEASE_FILE)
 
 

@@ -57,3 +57,32 @@
 - **8-30（主脑裁决批 1）**：MAINBRAIN_RULING_E1-E4_BATCH 入仓（D018）：E1 封印后置/E2 release 维持 PRODUCT_NOT_READY/E3 master 后移/E4 累积清单逐项（B-5 勘误 6 处、G-2 ROADMAP 入仓+PROJECT_STATE 登记、P0 备份 7 项 260MB 至 E:\WBackups\、C-1 沙箱破坏演练恢复案例 FULL、C-3 矩阵 v3 §56/§63/§65 降级 41/35/1、W-1 方案只出稿、S-02/03/06 轮换清单业主执行）。
 - **8-30（第二团审计）**：AUDIT_REPORT_2026-08-30 16 项 15 PASS/1 REWORK/0 BLOCKED（D019，commit 5e4f86d）；REWORK 项 = 计数口径不一致（真实 GOAL 8/5/4/3 四处、REWORK 轮次 11 vs 实测 12），非实质缺陷。
 - **8-30（主脑裁决批 2 = 本口径批）**：MAINBRAIN_RULING_COUNT_CALIBRATION_AND_SIGN_ROADMAP 入仓（D020）：B-1 真实 GOAL 权威口径 = 累计 8（第一批 3 + 第二批 5）全 DONE+PASS，术语表 docs/governance/GLOSSARY.md；B-2 返工轮次 = reply 中 ===REVIEW_VERDICT=== REWORK 判定计数，重数全部 8 个 RUN = 16 轮（4+12，与审计实测一致）；B-3 本 journal 补记 + capsule 计数 9→13；§74 签字路线图（口径批→封印→签字→master 汇合→ARCHIVE）。
+
+## 2026-08-31 FINAL_PROMPT v16 收官会话检查点（actor=CatPaw 施工主代理；强制落盘纪律 §0.6）
+
+- **开工序列**：四份必读文档全读（ASSET_MAP_20260831 / ASSET_INVENTORY_FINAL / ZHIHENG_ANTI_MISLEADING_HANDOFF_20260828 / 06_NEW_AI_BOOTSTRAP + 03_CAPABILITY_REGISTRY）；git 现场核验 HEAD=73913cc（eede20c 祖先检查通过，符合"HEAD 预期 eede20c 或更新"）、分支 hardening/p0-gates-20260831、remote 全串==白名单、工作树初始干净、worktree×2（chat-1 禁 checkout 遵守）。
+- **现场与地图冲突分流（§1-3）**：
+  ①【实测】ASSET_MAP 记 hardening head=cd12347 已过时（实际 73913cc）——属代码状态类，以现场 git log 为准，不改地图历史值；
+  ②【实测】state_doctor 报 DRIFT=hardening 分支未登记 branch_registry（fail-closed SPECULATIVE）→ 正向修正：登记 hardening/p0-gates-20260831（role=ACTIVE，head=73913cc，依据=仓内 HARDENING-PLAN-20260831）+ 同步 v1.1-blackbox head 02e2e894→21352f2；复跑 state_doctor=**DRIFT_FREE**；
+  ③【实测】STATUS.md "2 wiring tests fail...fix in progress" 已过时（wiring 套件实跑全绿）→ 待一致性提交刷新。
+- **回归入口解释器钉死发现（关键教训，owner-notice 待写）**：git bash 裸 `python` 解析到 CatPaw 运行时 Python312.13（无 litellm/playwright）→ 第 1 次回归 runtime 6 假失败（test_r_adapter_d1_offline×5 = LITELLM_NOT_INSTALLED 路径 + test_browser_adapter_d3_offline 1 = playwright ImportError→False）；用生产解释器全路径 C:\Users\17838\AppData\Local\Programs\Python\Python312\python.exe 复跑定性=真绿。**回归三元锚定必须扩为四元（+解释器全路径），否则对账代理亲跑会踩同一坑误判 REWORK。**
+- **第 1 轮全量回归（主代理直录 r1p，解释器钉死）**：runtime 639 OK（71.7s）+ tests 219 OK（22.4s）= 858 例全绿，RC 双 0，总 95s；APC_RUNTIME_STATE_ROOT=E:\WB\temp\zhiheng_final_20260831\tmpstate_r1p 隔离；state/ json 指纹前后 diff=CLEAN（零污染）；日志 E:\WB\temp\zhiheng_final_20260831\regression_{runtime,tests}_r1p.log。
+- **3 连绿预算（§1-6）**：单轮实测 95s → 3 轮（主代理 2 直录+对账亲跑 1）预算 15min（含 clone 与重跑裕量）；REWORK 时 time-box 重置。
+- **欠账清单（继承 SELF-AUDIT-HARDENING-20260831 + FINAL_PROMPT §4-A）**：
+  - P1-1 admission lease 续约分支零测试 → 补测（已知起点①）
+  - P1-2 relay_autopilot --repo-path/--review-packet/--evidence-path 三参数+build_event 零测试 → 补测（已知起点②）
+  - P0-2 HEAD 增量 41e80e3..HEAD（059afe8/878da28/f5836de/294ce2e/9655c96/341d01e 六代码提交）未被任何审查覆盖 → 补内审（盲审独立子代理）
+  - P1-4 cmd_drive 内联 lease 检查 catch-and-skip 与 submit 侧不对称 → 本批修复为 fail-closed 一致
+  - P1-5 tmp-review-* 三件套+drive-review-log 碎片出仓（git mv 至 docs/evidence/reviews/ 归档，git 版本化改写不算删除）
+  - P1-6 acceptance_transcript 补记 2 次 UPLOAD_FAIL 事件
+- **任务依赖图（v16 §4 顺序）**：欠账清零（补测+出仓+一致性提交）→ HEAD 增量补内审 → 3 轮回归（2 直录+对账亲跑）→ delivery 定稿（RUN-<id>，6 类+MANIFEST，V07 口径 packet+HE 证据附件绑定 HEAD-FROZEN）→ 桥投 R（逐项裁决）→ spawn Delivery 盲审+对账代理 → 双 APPROVE → 推送 origin（先 §2.1 代理探测）→ GATE-5 → GATE-6 → E2 Canonical 75 节分批实现（每批重走 §4-A 顺序图）→ §4-F 总收官报告+达成矩阵。
+- **禁改清单复述**：master 只读；冻结资产（桥冻结部分/Runtime 冻结部分/审计证据/E:\执衡、E:\WB 现役程序）不改；等效破坏全禁；递归删除全禁。
+- **欠账清零执行（同会话续）**：
+  - P1-1 ✅ runtime/test_relay_submit_params_offline.py 续约分支 4 例（R1 renewed 同代续约/R2 renew-denied fail-closed/R3 check-OK 落 checks.lease 的 KeyError 回归钉/R4 LEASE_REVOKED 不触发 renew）；
+  - P1-2 ✅ 同文件三参数 7 例（E1-E4 build_event 注入/回落语义、E5 cmd_submit getattr 接线、E6 build_parser 参数面）；main() 抽出 build_parser()（纯重构，行为不变）；
+  - P1-4 ✅ cmd_drive lease 门 catch-and-skip → fail-closed（异常即 return 2，不再无授权推进）+ D1 测试钉；
+  - P1-5 ✅ state/drive-review-log.txt 出索引+.gitignore（文件保留磁盘，git 版本化改写）；tmp-review-* 三件套此前 cd12347 已隔离，复核确认；
+  - P1-6 ✅ docs/evidence/reviews/BATCH-A-EXTERNAL-TRANSCRIPT-SUPPLEMENT-20260831.md 补录 EV-161509/163849 两次 UPLOAD_FAIL（账本原文转录，不动隔离区）；
+  - **【新发现·GATE-3 系统性测试隔离缺陷】**audit hook（sys.addaudithook）实证：全套件回归对**仓根真实 state/controller_lease.json** 有 24 次访问、600s 过期后发生真实 renew 写入（时间依赖性，r1p 轮 CLEAN 纯属租约未过期运气）。双根因：①controller_lease.default_lease_path() 无视 APC_RUNTIME_STATE_ROOT 测试缝（runtime.py/harness_verify.py 均遵守，唯它例外）；②test_effect_reconcile_offline._make_run 的 finally 无条件 pop 该 env，摧毁 discover 外层隔离。两处已修（生产默认路径不变；env 保存/恢复式），新增 StateRootSeamTests 2 例缝回归钉；write-mode 审计复放=0 真实写入；
+  - **【假失败定性（§6）】**audit-hook 开销下并发用例 1 次时序抖动失败，标准入口连续 2 轮复现 0 失败 → 定性为观测工具开销假失败，非产品缺陷；
+  - **新基线**：runtime 639→652（+11 三参数/续约 +2 缝钉）、tests 219 不变，858→871；对账口径"≥基线 639+219"仍满足，增量声明须列明 +13。

@@ -272,8 +272,14 @@
   {
    "name": "v1.1-blackbox",
    "role": "ACTIVE",
-   "head": "02e2e894",
-   "note": "V1.1 blackbox dev line; R1/R2/R3/A1/D1-D6 all completed+reviewed 2026-08-31; matrix v4 67/10/0 (L3 pending owner)"
+   "head": "21352f2",
+   "note": "V1.1 blackbox dev line; R1/R2/R3/A1/D1-D6 all completed+reviewed 2026-08-31; matrix v4 67/10/0 (L3 pending owner); head synced 2026-08-31 (governance-only 21352f2 on top of 02e2e894)"
+  },
+  {
+   "name": "hardening/p0-gates-20260831",
+   "role": "ACTIVE",
+   "head": "73913cc",
+   "note": "P0 hardening construction line per docs/evidence/HARDENING-PLAN-20260831.md (created from v1.1-blackbox@21352f2); batch A GATE-1/2/3 + P2 fixes committed; registered 2026-08-31 by FINAL_PROMPT v16 session (state_doctor DRIFT fix)"
   }
  ]
 }

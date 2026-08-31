@@ -262,8 +262,12 @@ spawn 后第一动作=复制其全部输入到各自可写域快照（盲审→r
   regression log 关键行与亲跑结果数字对照**——不一致=REWORK"材料与仓库不符" ③"3 连绿"亲验：
   **亲跑 1 轮直录（入口三元锚定：工作目录=<clone>（**仓根**，覆盖 runtime\+tests\ 双入口）；
   状态根环境变量 APC_RUNTIME_STATE_ROOT=<clone>\tmp\state\；入口命令=Git bash 下
-  在 runtime\ 与 tests\ 各跑一次 `python -m unittest discover -s . -p "test_*.py"`
-  （两次合计；unittest 重复 -s 只取末值，禁单命令双 -s）**+亲验用例计数≥基线
+  用**生产解释器全路径** `C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe`
+  在 runtime\ 与 tests\ 各跑一次 `python -m unittest discover -s . -p "test_*.py"`（两次合计；
+  unittest 重复 -s 只取末值，禁单命令双 -s；**禁裸 `python`**——本机 PATH 裸 python 会解析到
+  CatPaw 运行时 Python312.13（无 litellm/playwright），致 test_r_adapter_d1_offline×5 与
+  test_browser_adapter_d3×1 假失败，8-31 实测教训，锚定由三元扩为四元：工作目录/状态根/
+  入口命令/解释器）**+亲验用例计数≥基线
   （runtime 639+tests 219）**+核对主代理 2 轮直录日志存在与
   MANIFEST 哈希一致**（转录伪造不可穿）④断言真实性抽查 10 条（抽样=零测试清单+失败重灾区
   定向+随机（种子=开始时间戳），方法与种子写入裁定书）⑤**基线哈希三方核对：任务书第 4 槽
@@ -357,9 +361,11 @@ owner-notice，可见不可藏）
   三方核对+双书四槽互校（末步轮询，缺件按 §5 救援流程））：
   {"任务":"只读核对 §8-1/3/6：状态一致性、增量声明全量比对+内容级核对、3 连绿亲验（入口三元
   锚定：工作目录=<clone>（仓根，覆盖 runtime\+tests\ 双入口）；状态根环境变量
-  APC_RUNTIME_STATE_ROOT=<clone>\tmp\state\；入口命令=Git bash 下分别对 runtime\ 与 tests\
-  各跑 unittest discover 后合计用例数，亲验计数≥基线 639+219）、断言真实性抽 10 条（种子=
-  开始时间戳）、防调包三核、基线三方核对（git show 已提交版）、双书四槽互校（末步轮询
+APC_RUNTIME_STATE_ROOT=<clone>\tmp\state\；入口命令=Git bash 下用生产解释器全路径
+`C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe`（禁裸 python，四元锚定见 §5③）
+分别对 runtime\ 与 tests\
+各跑 unittest discover 后合计用例数，亲验计数≥基线 639+219）、断言真实性抽 10 条（种子=
+开始时间戳）、防调包三核、基线三方核对（git show 已提交版）、双书四槽互校（末步轮询
   blind-verdict.md ≤10min，缺件按救援流程）、注入扫描、git status 洁净校验、
   **⑧达成矩阵逐节证据核验**（每节“满足”标注的机械验收命令重放通过+证据指针有效）",
   "读":"仓库（只读 git）、delivery 顶层、reviews\blind-verdict.md（及 _r<n> 归档）与 inputs\、

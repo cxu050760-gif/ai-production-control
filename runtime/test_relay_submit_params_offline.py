@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""Hardening batch A 欠账补测（FINAL_PROMPT v16 §4-A 零测试扫描已知起点）。
+
+Covers:
+  R1  admission lease 续约分支成功路径（自己持有的过期租约同代续约 → renewed,
+      admitted=True）—— P1-1：wiring 假 check 恒 OK，renew 从未被测试执行
+  R2  续约被拒（期间被接管/吊销）→ renew-denied 且 admitted=False（fencing 不弱化）
+  R3  check-OK 路径必须落 checks["lease"]（P3 KeyError 修复回归钉）
+  R4  LEASE_REVOKED（非过期类拒绝）不得触发 renew（不可借续约复活已撤销权）
+  E1  build_event --repo-path 注入 → event.repo_path 为注入值（GATE-5 硬编码消除）
+  E2  build_event --review-packet 注入 → event.review_packet 为注入值；不存在的
+      注入路径回落 REVIEW_PACKET_ROOT 目录（existsSync 语义）
+  E3  build_event --evidence-path 多值注入 → event.evidence_paths 保序透传
+  E4  build_event 全默认且注入路径不存在 → 回落遗留常量/允许根
+  E5  cmd_submit argparse→build_event 接线：getattr 链把三参数正确传给 build_event
+  E6  build_parser 参数面：--repo-path/--review-packet/--evidence-path 存在且 dest 正确
+  D1  cmd_drive lease 门异常 → fail-closed 返回 2（P1-4：旧 catch-and-skip
+      fail-open 已消除，drive 不再无授权推进）
+
+All offline: 全部闸门/收件箱/账本以 mock 注入，不触真实 relay 状态、不写真实 state/。
+"""
+import argparse
+import contextlib
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+HERE = Path(__file__).resolve().parent
+SCRIPTS = HERE.parent / "scripts"
+for p in (str(HERE), str(SCRIPTS)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+import relay_autopilot as ra  # noqa: E402
+
+GOAL = {"goal_id": "G-PARAM-1", "title": "Param test", "objective": "Do it."}
+
+
+def _isolate_non_lease_gates():
+    """把 cost/context 两闸钉在放行值，使被测分支只剩 lease 门逻辑。"""
+    return (
+        mock.patch.object(ra.cost_router, "load_policy", return_value={}),
+        mock.patch.object(ra.cost_router, "load_registry_costs", return_value={}),
+        mock.patch.object(ra.cost_router, "load_state", return_value={}),
+        mock.patch.object(ra.cost_router, "do_route",
+                          return_value={"verdict": "ALLOWED"}),
+        mock.patch.object(ra.context_sufficiency, "route",
+                          return_value={"decision": "PROCEED"}),
+    )
+
+
+class LeaseRenewBranchTests(unittest.TestCase):
+    """P1-1：admission lease 续约分支（878da28/294ce2e 引入，零测试欠账）。"""
+
+    def _run(self, lease, check, renew=None):
+        """在隔离沙箱中执行 admission_checks(require_gates=True)。
+
+        返回 (admission 结果, renew 的 MagicMock 或 None——None 表示未挂 renew 桩,
+        可用 assertIsNone 判定"未触发续约")。
+        """
+        old_wiring = ra._WIRING_AVAILABLE
+        ra._WIRING_AVAILABLE = True
+        self.addCleanup(setattr, ra, "_WIRING_AVAILABLE", old_wiring)
+        renew_m = None
+        with contextlib.ExitStack() as stack:
+            for p in _isolate_non_lease_gates():
+                stack.enter_context(p)
+            stack.enter_context(mock.patch.object(
+                ra.controller_lease, "load_lease", return_value=lease))
+            stack.enter_context(mock.patch.object(
+                ra.controller_lease, "check_execute_right", return_value=check))
+            if renew is not None:
+                renew_m = mock.MagicMock(return_value=renew)
+                stack.enter_context(mock.patch.object(
+                    ra.controller_lease, "renew", renew_m))
+            res = ra.admission_checks(GOAL, require_gates=True)
+        return res, renew_m
+
+    def test_r1_renew_success_admits(self):
+        lease = {"generation": 3, "holder": "relay_autopilot",
+                 "expires_at": "2020-01-01T00:00:00Z"}
+        res, renew_m = self._run(
+            lease,
+            {"ok": False, "reason": "LEASE_EXPIRED"},
+            renew={"ok": True, "lease": {"generation": 3, "holder": "relay_autopilot"}})
+        self.assertTrue(res["admitted"], res)
+        self.assertEqual(renew_m.call_count, 1)
+        renew_m.assert_called_with("relay_autopilot", 3)   # 同代续约
+        chk = res["checks"]["lease"]
+        self.assertEqual(chk.get("action"), "renewed")
+        self.assertTrue(chk.get("ok"))
+        self.assertEqual(chk.get("generation"), 3)
+
+    def test_r2_renew_denied_fails_closed(self):
+        lease = {"generation": 3, "holder": "relay_autopilot",
+                 "expires_at": "2020-01-01T00:00:00Z"}
+        res, _renew_m = self._run(
+            lease,
+            {"ok": False, "reason": "LEASE_EXPIRED"},
+            renew={"ok": False, "reason": "LEASE_TAKEN_OVER"})
+        self.assertFalse(res["admitted"])
+        chk = res["checks"]["lease"]
+        self.assertEqual(chk.get("action"), "renew-denied")
+        self.assertFalse(chk.get("ok"))
+        self.assertEqual(chk.get("reason"), "LEASE_TAKEN_OVER")
+        self.assertTrue(any("lease-gate" in r for r in res["reasons"]), res["reasons"])
+
+    def test_r3_check_ok_lands_checks_entry(self):
+        """KeyError 回归钉：check-OK 路径必须先落 checks["lease"]（P3 修复锚）。"""
+        lease = {"generation": 9, "holder": "relay_autopilot",
+                 "expires_at": "2099-01-01T00:00:00Z"}
+        res, renew_m = self._run(lease, {"ok": True, "reason": "OK"})
+        self.assertTrue(res["admitted"])
+        self.assertIsNone(renew_m)                       # 未挂 renew 桩亦不应触发
+        self.assertEqual(res["checks"]["lease"], {"ok": True, "reason": "OK"})
+
+    def test_r4_revoked_never_renews(self):
+        """已撤销权不可借续约复活：非 LEASE_EXPIRED 拒绝不走 renew。"""
+        lease = {"generation": 5, "holder": "relay_autopilot",
+                 "expires_at": "2099-01-01T00:00:00Z"}
+        res, renew_m = self._run(lease, {"ok": False, "reason": "LEASE_REVOKED"},
+                                 renew={"ok": True, "lease": {"generation": 5}})
+        self.assertFalse(res["admitted"])
+        self.assertIsNotNone(renew_m)
+        renew_m.assert_not_called()                      # renew 未被调用
+        self.assertEqual(res["checks"]["lease"], {"ok": False, "reason": "LEASE_REVOKED"})
+
+
+class BuildEventParamTests(unittest.TestCase):
+    """P1-2：--repo-path/--review-packet/--evidence-path 三参数与 build_event 接线。"""
+
+    def _patches(self, exists=None):
+        ps = [
+            mock.patch.object(ra, "load_relay_config",
+                              return_value={"project_id": "P-TEST",
+                                            "automation": {"current_milestone": "V1.1"}}),
+            mock.patch.object(ra, "load_builder_binding",
+                              return_value={"provider": "prov", "model": "mod",
+                                            "conversation_id": "conv", "generation": 7}),
+        ]
+        if exists is not None:
+            ps.append(mock.patch.object(ra.os.path, "exists", return_value=exists))
+        return ps
+
+    def _build(self, **kwargs):
+        exists = kwargs.pop("_exists", None)
+        with contextlib.ExitStack() as stack:
+            for p in self._patches(exists=exists):
+                stack.enter_context(p)
+            return ra.build_event(GOAL, 42, None, **kwargs)
+
+    def test_e1_repo_path_injected(self):
+        ev = self._build(repo_path="X:\\real\\repo")
+        self.assertEqual(ev["repo_path"], "X:\\real\\repo")
+
+    def test_e2_review_packet_injected_and_fallback(self):
+        import os as _os
+        with tempfile.TemporaryDirectory() as d:
+            real = Path(d) / "packet_exists.txt"
+            real.write_text("packet", encoding="utf-8")
+            ev = self._build(review_packet=str(real))
+            self.assertEqual(ev["review_packet"], str(real))
+        # 不存在的注入路径 → 回落 packet 允许根目录（existsSync 语义，目录亦可）
+        self.assertFalse(_os.path.exists("X:\\pk\\missing.txt"))
+        ev2 = self._build(review_packet="X:\\pk\\missing.txt")
+        self.assertEqual(ev2["review_packet"], ra.REVIEW_PACKET_ROOT)
+
+    def test_e3_evidence_paths_passthrough(self):
+        evs = ["X:\\ev\\one", "X:\\ev\\two"]
+        ev = self._build(evidence_paths=evs)
+        self.assertEqual(ev["evidence_paths"], evs)
+
+    def test_e4_defaults_fall_back_when_missing(self):
+        ev = self._build(_exists=False)
+        self.assertEqual(ev["repo_path"], ra.ALLOWED_REPO_ROOT)
+        self.assertEqual(ev["review_packet"], ra.REVIEW_PACKET_ROOT)
+        self.assertEqual(ev["evidence_paths"], [ra.ALLOWED_EVIDENCE_ROOT])
+
+
+class SubmitWiringTests(unittest.TestCase):
+    """cmd_submit 的 getattr 链 + build_parser 参数面（P1-2 接线钉）。"""
+
+    def test_e5_cmd_submit_passes_three_params_to_build_event(self):
+        args = argparse.Namespace(
+            goal_file="g.json", mode="mock", candidate_commit=None,
+            repo_path="X:\\real\\repo", review_packet="X:\\pk\\p.txt",
+            evidence_path=["X:\\e1", "X:\\e2"])
+        captured = {}
+
+        def fake_build_event(goal, seq, commit, relay_mode=False, **kw):
+            captured.update(kw)
+            captured["relay_mode"] = relay_mode
+            captured["commit"] = commit
+            return {"event_id": "EV-T", "run_id": "RUN-T", "task_id": "TASK-T"}
+
+        with tempfile.TemporaryDirectory() as inbox:
+            with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+                 mock.patch.object(ra, "admission_checks",
+                                   return_value={"admitted": True, "checks": {}, "reasons": []}), \
+                 mock.patch.object(ra, "build_event", side_effect=fake_build_event), \
+                 mock.patch.object(ra, "save_json", return_value=None) as sj, \
+                 mock.patch.object(ra, "ledger", return_value=None), \
+                 mock.patch.object(ra, "SANDBOX_INBOX", inbox):
+                rc = ra.cmd_submit(args)
+        self.assertEqual(rc, 0)
+        self.assertEqual(captured.get("repo_path"), "X:\\real\\repo")
+        self.assertEqual(captured.get("review_packet"), "X:\\pk\\p.txt")
+        self.assertEqual(captured.get("evidence_paths"), ["X:\\e1", "X:\\e2"])
+        self.assertFalse(captured.get("relay_mode"))
+        sj.assert_called_once()
+
+    def test_e6_parser_surface(self):
+        parser = ra.build_parser()
+        hex40 = "a" * 40
+        ns = parser.parse_args([
+            "submit", "--goal-file", "g.json", "--mode", "relay",
+            "--candidate-commit", hex40,
+            "--repo-path", "X:\\r", "--review-packet", "X:\\p",
+            "--evidence-path", "X:\\e1", "--evidence-path", "X:\\e2"])
+        self.assertIs(ns.func, ra.cmd_submit)
+        self.assertEqual(ns.repo_path, "X:\\r")
+        self.assertEqual(ns.review_packet, "X:\\p")
+        self.assertEqual(ns.evidence_path, ["X:\\e1", "X:\\e2"])
+        self.assertEqual(ns.candidate_commit, hex40)
+        self.assertEqual(ns.mode, "relay")
+
+
+class DriveLeaseGateFailClosedTests(unittest.TestCase):
+    """P1-4：cmd_drive lease 门异常必须 fail-closed（旧 catch-and-skip 已消除）。"""
+
+    def test_d1_gate_error_returns_2_without_lock(self):
+        args = argparse.Namespace(watch=False, mode_review="PASS", max_reworks=8,
+                                  interval=0.0, max_wait=0.0)
+        boom = mock.MagicMock(side_effect=RuntimeError("state corrupted"))
+        # acquire_lock 若被触达即响亮失败（不得在门坏后继续执行）
+        with mock.patch.object(ra, "_WIRING_AVAILABLE", True), \
+             mock.patch.multiple(ra.controller_lease,
+                                 load_lease=boom,
+                                 check_execute_right=mock.MagicMock(),
+                                 renew=mock.MagicMock()), \
+             mock.patch.object(ra, "acquire_lock",
+                               side_effect=AssertionError("must not reach acquire_lock")), \
+             mock.patch.object(ra, "ledger", return_value=None):
+            rc = ra.cmd_drive(args)
+        self.assertEqual(rc, 2)
+        self.assertEqual(boom.call_count, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
