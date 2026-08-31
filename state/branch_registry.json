@@ -278,8 +278,8 @@
     {
       "name": "hardening/p0-gates-20260831",
       "role": "ACTIVE",
-      "head": "fc6ac71e",
-      "note": "P0 hardening construction line (from v1.1-blackbox@21352f2); batch A closed (external PASS + dual APPROVE + push), batch B/C GATE-5/6 landed + blind-review APPROVE + P2 dispositions, E2 achievement matrix (69 met/7 partial/0 gaps); head synced 2026-09-01 governance-only"
+      "head": "18bcb348",
+      "note": "P0 hardening construction line (from v1.1-blackbox@21352f2); batch A closed (external PASS + dual APPROVE + push), batch B/C GATE-5/6 landed + blind-review APPROVE + P2 dispositions, E2 achievement matrix (71 met/5 partial/0 gaps after batch D: §45+§71 met, blind-review REWORK->PASS); head synced 2026-09-01 governance-only"
     }
   ]
 }
