@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from strategic_brain_contract import build_proposal
+from task_graph import brain_pick as _brain_pick
 
 SCHEMA = "v0.7-brain-bridge-taskgraph"
 MAX_GOAL = 256
@@ -105,6 +106,11 @@ def build_taskgraph(goal: str) -> Dict[str, Any]:
         "proposal_id": proposal["proposal_id"],
         "constraints": constraints,
         "tasks": tasks,
+        # GATE-6 转真（批次 C）：brain 选型在契约边界显式挂接。当前 v0.7 proposal
+        # 契约无 brain 绑定字段 → brain_pick 走显式标注的规则模式（mode="rule"）；
+        # 契约升级携带 brain 绑定后，同一调用点自动翻转为 mode="contract"（真实
+        # 契约路径优先于规则分档，见 task_graph.brain_pick）。
+        "brain_selection": _brain_pick(goal, proposal=proposal),
         "human_view": _human_view(goal, tasks),
         "non_authority": True,
         "origin": "strategic-brain-bridge",

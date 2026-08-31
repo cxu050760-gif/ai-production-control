@@ -432,15 +432,46 @@ def classify_complexity(goal_text: str) -> str:
 
 
 def brain_pick(goal_text: str, registry_path: Optional[str] = None,
-               costs_path: Optional[str] = None) -> Dict[str, Any]:
-    """按任务复杂度从 registry brains 节选 Brain（规则式：简单->弱、复杂->强）。
+               costs_path: Optional[str] = None,
+               proposal: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """按任务复杂度从 registry brains 节选 Brain。
 
-    选型映射（D2 路由语义）：
+    GATE-6 转真标注（HARDENING-PLAN 批次 C）：本函数默认为**规则模式**
+    （mode="rule"，关键词分档选型，非 brain_bridge 真实契约）；真实契约路径=
+    brain_bridge.build_taskgraph→strategic 契约 proposal——调用方传入
+    proposal（含 brain 绑定）时本函数优先采用契约绑定（mode="contract"），
+    规则分档仅作为无 proposal 时的回退。
+
+    规则选型映射（D2 路由语义）：
       low   -> 主脑回退链最弱可用（默认 brain-workbuddy-deepseek-v4-flash）
       mid   -> 中等（默认 brain-codex-local）
       high  -> 主脑（默认 brain-chatgpt-web）
     若 registry 缺失/为空则用默认映射；cost 从 registry costs 节只读取。
     """
+    # GATE-6：真实契约优先——proposal（strategic brain 契约产物）自带 brain
+    # 绑定时直接采用，规则分档不参与（去 stub 语义：规则仅是显式标注的回退）。
+    if isinstance(proposal, dict):
+        binding = proposal.get("brain") or proposal.get("brain_binding") or {}
+        brain_id = binding.get("brain_id") if isinstance(binding, dict) else None
+        if brain_id:
+            return {
+                "schema": "v1.1-d5-brain-pick",
+                "brain_id": brain_id,
+                "complexity": classify_complexity(goal_text),
+                "mode": "contract",
+                "proposal_id": proposal.get("proposal_id"),
+                "reason": f"brain bound by strategic contract proposal {proposal.get('proposal_id')}"
+                          "（真实契约路径，非规则分档）",
+                "unit_cost_per_call": None,
+                "non_authority": True,
+                "trace": {
+                    "model": brain_id,
+                    "ai": "contract-brain-pick",
+                    "tool": "task_graph.py brain-pick",
+                    "reason_retry": None,
+                    "cost": None,
+                },
+            }
     complexity = classify_complexity(goal_text)
     registry = _load_registry(registry_path)
     brains = (registry.get("sections") or {}).get("brains") or []
@@ -470,7 +501,8 @@ def brain_pick(goal_text: str, registry_path: Optional[str] = None,
         "schema": "v1.1-d5-brain-pick",
         "brain_id": chosen,
         "complexity": complexity,
-        "reason": f"goal complexity={complexity}; selected brain {chosen}",
+        "mode": "rule",
+        "reason": f"goal complexity={complexity}; selected brain {chosen}（规则模式，非真实契约）",
         "unit_cost_per_call": unit_cost,
         "non_authority": True,
         "trace": {

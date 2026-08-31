@@ -376,9 +376,20 @@ def default_state() -> Dict[str, Any]:
     }
 
 
+def _default_state_path() -> Path:
+    # GATE-3/6 补强（同 controller_lease 2026-08-31 修复，GATE-6 relay 执行器
+    # 真链实测再发现）：尊重 APC_RUNTIME_STATE_ROOT 测试缝——否则全套件回归
+    # 中 admission 的 cost 闸会对仓根真实 state/cost_router_state.json 做读/
+    # 写（r6a/r6b state 指纹 DIRTY 实证）。生产不设 env，行为不变。
+    env_root = os.environ.get("APC_RUNTIME_STATE_ROOT")
+    if env_root:
+        return Path(env_root) / _DEFAULT_STATE
+    return _repo_root() / _DEFAULT_STATE
+
+
 def load_state(path: Optional[str] = None) -> Dict[str, Any]:
     """读状态文件；不存在 -> 默认状态；非法 JSON -> 备份后重建默认状态。"""
-    p = Path(path) if path else (_repo_root() / _DEFAULT_STATE)
+    p = Path(path) if path else _default_state_path()
     if not p.exists():
         return default_state()
     try:
@@ -403,7 +414,7 @@ def load_state(path: Optional[str] = None) -> Dict[str, Any]:
 
 def save_state(state: Dict[str, Any], path: Optional[str] = None) -> Path:
     """写状态文件（目录自动创建）。"""
-    p = Path(path) if path else (_repo_root() / _DEFAULT_STATE)
+    p = Path(path) if path else _default_state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     state["updated_at"] = _now_iso()
     p.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")

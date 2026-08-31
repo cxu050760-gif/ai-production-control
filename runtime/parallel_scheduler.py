@@ -629,6 +629,185 @@ class CliWorkerExecutor:
             pass
 
 
+class RelaySubmitExecutor:
+    """GATE-6 转真（批次 C）：relay_autopilot 主链真执行器。
+
+    经子进程调用 scripts/relay_autopilot.py submit，把任务送入真实主链：
+    admission 三闸（cost/context/lease，require_gates 按模式）+ 显式输入
+    契约（repo/packet/evidence 存在性）+ candidate_commit Git 对象校验。
+    任务配置 task['relay']：
+      mode            "mock"（零真实额度，走同一主链与闸门）| "relay"
+      repo_path       仓库根（relay 必填且必须存在）
+      review_packet   审查包路径（relay 必填且必须存在）
+      evidence_paths  证据路径列表（relay 必填，至少一项且全部存在）
+      candidate_commit 40-hex（relay 必须为 repo 内真实 Git 提交对象）
+      timeout_sec     超时（缺省 scheduler.timeout_sec）
+
+    红线：mode="relay" 需环境变量 APC_RELAY_REAL=1（真实额度属 L3 业主；
+    主链内 §61 cost 门仍会独立拦截）；未设即拒派（fail-closed），mock 不受限。
+    退出码映射：0 -> SUCCESS；非零 -> FAILURE（闸门/契约拒绝）；超时/被杀 ->
+    OUTCOME_UNKNOWN（§38 不猜测）。
+    """
+
+    def __init__(self, scheduler: "ParallelScheduler", task: Dict[str, Any]):
+        self.scheduler = scheduler
+        self.task = task
+        self.proc: Optional[subprocess.Popen] = None
+        self._monitor_stop = threading.Event()
+        self._monitor: Optional[threading.Thread] = None
+        self.timeout_sec = float((task.get("relay") or {}).get("timeout_sec")
+                                 or scheduler.timeout_sec)
+
+    def _command(self) -> List[str]:
+        relay = self.task.get("relay") or {}
+        mode = _safe_text(relay.get("mode"), 16) or "mock"
+        if mode not in ("mock", "relay"):
+            raise RuntimeError(f"RELAY_MODE_INVALID: {mode}")
+        if mode == "relay" and os.environ.get("APC_RELAY_REAL") != "1":
+            raise RuntimeError(
+                "RELAY_REAL_NOT_ARMED: mode=relay 需 APC_RELAY_REAL=1（真实额度属 L3 业主）")
+        script = Path(__file__).resolve().parent.parent / "scripts" / "relay_autopilot.py"
+        if not script.exists():
+            raise FileNotFoundError(f"relay_autopilot.py not found: {script}")
+        work_dir = Path(self.task["work_dir"])
+        goal_file = work_dir / "goal.txt"
+        cmd = [sys.executable, "-B", str(script), "submit",
+               "--goal-file", str(goal_file), "--mode", mode]
+        if relay.get("repo_path"):
+            cmd += ["--repo-path", str(relay["repo_path"])]
+        if relay.get("review_packet"):
+            cmd += ["--review-packet", str(relay["review_packet"])]
+        for p in (relay.get("evidence_paths") or []):
+            cmd += ["--evidence-path", str(p)]
+        if relay.get("candidate_commit"):
+            cmd += ["--candidate-commit", str(relay["candidate_commit"])]
+        return cmd
+
+    def _write_goal_file(self) -> Path:
+        # relay_autopilot 主链的 goal 契约是 JSON（goal_id/title/objective），
+        # 与 CLI 执行器的纯文本 goal 不同——此处写结构化 goal。
+        work_dir = Path(self.task["work_dir"])
+        work_dir.mkdir(parents=True, exist_ok=True)
+        goal_file = work_dir / "goal.txt"
+        goal_text = _safe_text(self.task.get("goal", ""), 4000)
+        payload = {
+            "goal_id": f"GOAL-{self.task['task_id']}",
+            "title": goal_text[:80] or "relay task",
+            "objective": goal_text,
+        }
+        goal_file.write_text(json.dumps(payload, ensure_ascii=False, indent=1),
+                             encoding="utf-8")
+        return goal_file
+
+    def _monitor_loop(self, proc: subprocess.Popen) -> None:
+        stop = self.task.get("_stop_event")
+        while not self._monitor_stop.is_set():
+            if stop is not None and stop.is_set():
+                self._terminate()
+                break
+            if proc.poll() is not None:
+                break
+            self.scheduler._touch_heartbeat(self.task)
+            time.sleep(DEFAULT_HEARTBEAT_INTERVAL)
+        self.scheduler._touch_heartbeat(self.task)
+
+    def _terminate(self) -> None:
+        if self.proc is None or self.proc.poll() is not None:
+            return
+        try:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait(timeout=2)
+        except OSError:
+            pass
+
+    def run(self) -> Dict[str, Any]:
+        work_dir = Path(self.task["work_dir"])
+        work_dir.mkdir(parents=True, exist_ok=True)
+        self._write_goal_file()
+        try:
+            cmd = self._command()
+        except RuntimeError as exc:
+            # L3 武装门/模式校验拒绝：fail-closed，不 spawn 子进程。
+            return {
+                "schema": SCHEMA, "ok": False, "exit_code": None,
+                "timed_out": False, "outcome": VERDICT_FAILURE,
+                "result": {"error": str(exc)},
+                "stdout_tail": "", "stderr_tail": str(exc),
+                "elapsed_sec": 0.0,
+                "worker_id": _safe_text(self.task.get("worker_id"), 128),
+                "command": None,
+                "note": "Relay 执行器：L3 武装门/模式校验拒绝（未 spawn 子进程）。",
+                "non_authority": True,
+            }
+        start = time.monotonic()
+        timed_out = False
+        stdout = ""
+        stderr = ""
+        exit_code: Optional[int] = None
+        try:
+            self.proc = subprocess.Popen(
+                cmd, cwd=str(work_dir), stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, encoding="utf-8", errors="replace",
+            )
+            self._monitor = threading.Thread(target=self._monitor_loop,
+                                             args=(self.proc,), daemon=True)
+            self._monitor.start()
+            try:
+                stdout, stderr = self.proc.communicate(timeout=self.timeout_sec)
+                exit_code = int(self.proc.returncode)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                self._terminate()
+                stdout, stderr = self.proc.communicate(timeout=5)
+                exit_code = int(self.proc.returncode) if self.proc.returncode is not None else None
+        except OSError as exc:
+            stderr = f"spawn failed: {exc}"
+            exit_code = None
+        finally:
+            self._monitor_stop.set()
+            if self._monitor is not None:
+                self._monitor.join(timeout=1)
+        self.scheduler._touch_heartbeat(self.task)
+
+        result: Any = None
+        if stdout.strip():
+            try:
+                result = json.loads(stdout)
+            except json.JSONDecodeError:
+                result = {"text": _safe_text(stdout, 4000)}
+        if exit_code is None or (timed_out and not stdout.strip()):
+            return {
+                "schema": SCHEMA, "ok": False, "exit_code": exit_code,
+                "timed_out": timed_out, "outcome": VERDICT_OUTCOME_UNKNOWN,
+                "result": result,
+                "stdout_tail": _safe_text(stdout, 2000),
+                "stderr_tail": _safe_text(stderr, 2000),
+                "elapsed_sec": round(time.monotonic() - start, 4),
+                "worker_id": _safe_text(self.task.get("worker_id"), 128),
+                "command": cmd,
+                "note": "Relay 执行器：子进程被杀/超时无明确结果 -> OUTCOME_UNKNOWN（§38 不猜测）。",
+                "non_authority": True,
+            }
+        outcome = VERDICT_SUCCESS if exit_code == 0 else VERDICT_FAILURE
+        return {
+            "schema": SCHEMA, "ok": exit_code == 0, "exit_code": exit_code,
+            "timed_out": timed_out, "outcome": outcome,
+            "result": result,
+            "stdout_tail": _safe_text(stdout, 2000),
+            "stderr_tail": _safe_text(stderr, 2000),
+            "elapsed_sec": round(time.monotonic() - start, 4),
+            "worker_id": _safe_text(self.task.get("worker_id"), 128),
+            "command": cmd,
+            "note": "GATE-6 转真：relay_autopilot 主链（admission 三闸+显式输入契约+"
+                    "candidate_commit 存在性校验）；mock 模式零真实额度，relay 模式需 APC_RELAY_REAL=1。",
+            "non_authority": True,
+        }
+
+
 # ---------------------------------------------------------------------------
 # 并行调度器（§56/§57/§58/§16/§23/§41/§40/§30/§38）
 # ---------------------------------------------------------------------------
@@ -716,7 +895,10 @@ class ParallelScheduler:
     def submit(self, spec: Dict[str, Any]) -> Dict[str, Any]:
         """提交任务。spec 字段：
           task_id, goal, worker_id, resources(list), epoch(可空=自动),
-          mock{...} 或 cli{command,timeout_sec}, wait_initial(bool)
+          mock{...} 或 cli{command,timeout_sec} 或 relay{mode,repo_path,
+          review_packet,evidence_paths,candidate_commit,timeout_sec}
+          （GATE-6：relay_autopilot 主链真执行器；mode=relay 需
+          APC_RELAY_REAL=1，真实额度属 L3 业主）, wait_initial(bool)
         返回 TaskRecord。
         """
         with self._guard:
@@ -748,6 +930,9 @@ class ParallelScheduler:
                 "detail": "",
                 "mock": dict(spec.get("mock") or {}),
                 "cli": dict(spec.get("cli") or {}),
+                # GATE-6（批次 C）：relay 真执行器配置（relay_autopilot 主链，
+                # 真实额度属 L3 业主，APC_RELAY_REAL 武装门在执行器内）。
+                "relay": dict(spec.get("relay") or {}),
                 "_stop_event": threading.Event(),
             }
             if spec.get("wait_initial"):
@@ -1003,6 +1188,8 @@ class ParallelScheduler:
         return changed
 
     def _make_executor(self, task: Dict[str, Any]):
+        if task.get("relay"):
+            return RelaySubmitExecutor(self, task)
         if self.mode == "cli" or task.get("cli"):
             return CliWorkerExecutor(self, task, self.worker_config)
         return MockWorkerExecutor(self, task)

@@ -54,8 +54,12 @@ import time
 
 # --------------------------------------------------------------------------
 # 常量（与 R1 guard 同源；只读引用真实中继状态，绝不修改）
+# GATE-6（批次 C）：APC_RELAY_STATE_ROOT 测试缝——并行调度器的 Relay 真执行
+# 器以子进程跑本模块，测试需把沙箱/账本根隔离到 tmp（与 APC_RUNTIME_STATE_
+# ROOT 同约定，见 controller_lease GATE-3 补强）。生产/自动化服务不设该 env，
+# 行为与此前完全一致。
 # --------------------------------------------------------------------------
-STATE_ROOT = r"E:\WB\state\ai-production-control\construction-relay"
+STATE_ROOT = os.environ.get("APC_RELAY_STATE_ROOT") or r"E:\WB\state\ai-production-control\construction-relay"
 RELAY_CONFIG = os.path.join(STATE_ROOT, "relay.config.json")
 BUILDER_BINDING = os.path.join(STATE_ROOT, "bindings", "builder.json")
 REAL_INBOX = os.path.join(STATE_ROOT, "inbox")
