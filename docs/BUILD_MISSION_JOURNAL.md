@@ -97,3 +97,9 @@
   - 盲审 APPROVE 项（无发现）复核通过：fencing 正确/KeyError 回归钉/包装无破坏调用方/RunLock 防崩/阈值合规/生产默认路径不变/13 例新测试真断言。
 - **盲审处置后两轮直录**：r2f=runtime 658 OK+tests 219 OK（154s，CLEAN）；r2g=658+219 OK（153s，CLEAN）——REWORK 修复生效，877 例全绿。
 - **测试健壮性两处（r2a/r2c/r2e 假失败定性后处置，非产品改动）**：n2 等待条件扩为"executor 注册且 proc 已创建"（产品侧 _executors 注册先于 run() 内 proc 创建，parallel_scheduler.py:1013-1016 真实异步窗口）+等待窗 5s→20s；并行墙钟阈值 0.26→0.285（顺序 0.30 的 95%，0.266 负载越线属假失败）。
+- **外审投递实录（§4-B）**：
+  - delivery 组装：RUN-20260831-003802-4282（6 类+MANIFEST，HEAD-FROZEN=ac8a226，10 文件）；
+  - runtime RUN-20260901-003847-860f 附件投递 ×2（1+3 重试）全 UPLOAD_FAIL=ATTACHMENT_NOT_READY（会话健康）→ HARD_BLOCKED（RESUME 被拒：HARD_BLOCKED 非 PAUSED）→ §7 降级：分片纯文本授权路径；
+  - runtime RUN-20260901-004509-dad6 分片投递（10 片/总 59880B/sha=da0eb734…）片 1 即 SEND_OK（text-only 通畅），R 基于片 1+会话既有材料直接给出**逐项实质裁决**（5064B）：4 项"已核验通过"（含 rename-steal 复验/seam/三闸 fail-closed/run.cmd report 回路/effect-reconcile 前置）+ **REWORK 必改 3 条**：P1-1 repo/evidence 显式缺失未 fail-closed、P1-2 负例缺失、P2-1 epoch 正常路径 or 链恒真断言——全部合法无红线冲突，已全数处置（33f7e7f）；
+  - **P2-1 处置时新发现**：or 链掩盖的真实语义=mock 已跑完任务后正确 epoch 迟到结果被 TASK_NOT_ACTIVE 拒（产品行为正确）；新增 n3b 真接受路径用例（QUEUED+正确 epoch→ACCEPT_OK）补齐 R 要的"证明结果真的 ok"；
+  - R 明示：无附件可读时 658+219 只能视为主代理自证——重投递材料将含完整直录日志文本。

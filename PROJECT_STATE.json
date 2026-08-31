@@ -15,14 +15,14 @@
  "baselines": {
   "current_development_head": {
    "branch": "hardening/p0-gates-20260831",
-   "head": "09d8a1ce8fd728be04f1f2d5cdddd573a51e077d",
+   "head": "33f7e7fcc0baf595c9fa60eb5335da99e24a1bab",
    "verdict": "IN_DEVELOPMENT",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "09d8a1ce8fd728be04f1f2d5cdddd573a51e077d"
+    "value": "33f7e7fcc0baf595c9fa60eb5335da99e24a1bab"
    },
-   "note": "synced 2026-08-31 by FINAL_PROMPT v16 session (governance-only commit per blind-review P2-1; hardening line per docs/evidence/HARDENING-PLAN-20260831.md)"
+   "note": "synced 2026-08-31/09-01 governance-only (external R-REWORK disposition round; hardening line per docs/evidence/HARDENING-PLAN-20260831.md)"
   },
   "current_accepted_base": {
    "branch": "v0.8-integrate/adapter-final-4",
