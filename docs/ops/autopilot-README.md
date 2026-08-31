@@ -114,6 +114,24 @@ inbox 事件 --claim--> CLAIMED --work--> WORKING --work done--> REPORTED
    - C REWORK → 重排队；最终 PASS 模式收敛，双 run WRAPPED（各 rework=1）；
    - 全程同时最多 1 个 REVIEWING/WAITING_REVIEW（R 并发度 1）。
 
+## mock_work / mock_review 边界与替换计划（B1）
+
+- `mock_work`（`relay_autopilot.py` `mock_work()`）：沙箱接缝，只生成合成
+  `evidence.json`/`report.json`，**不触发真实弱模型、不消耗额度**。L2 用它
+  验证状态机关联行为（claim -> work -> report 产物链）。
+- `mock_review`（`mock_review()`）：产出与真实 `validateReviewResult` 形状一致
+  的 `review-result.json`，判定由 `--mock-review PASS|REWORK` 驱动。L2 用它
+  验证 R 门控、REWORK 重排队、ABORTED 分支，**不消耗 R 审查额度**。
+- 替换计划（L3）：生产链关闭两个 mock——真实 watcher（R1 守护拉起）从真实
+  inbox 认领事件后由 builder 执行真实 work/report；真实 R 审查由 R-PROD 通道
+  （`--mode relay` + 可用 `chatgpt_bridge`）完成。本脚本的 mock 与 relay 两条
+  路径共享同一状态机，替换只换 work/review 实现，不换流转逻辑。
+- 沙箱越界：`claim_inbox` 校验 `run_id` 必须匹配 `ID_RE`
+  （`^[A-Za-z0-9][A-Za-z0-9._-]{2,119}$`），含 `../`、`\` 等路径逃逸字符的
+  `run_id` 直接拒绝（`claim_skip` 记账），避免在 `RUNS_DIR` 之外建目录。
+  测试：`runtime/test_relay_autopilot_offline.py`（13 用例，覆盖单实例锁三态 /
+  状态机全迁移 / R 并发度 1 / 沙箱越界拦截）。
+
 ## 已知边界
 
 - `--mode relay` 提交的真实 inbox 事件由真实 watcher 认领后走真实 R 审查；

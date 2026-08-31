@@ -301,6 +301,9 @@ def claim_inbox():
             ledger("claim_skip", f"{name}: not BUILDER_READY", ok=False)
             continue
         run_id = ev.get("run_id")
+        if not run_id or not ID_RE.match(str(run_id)):
+            ledger("claim_skip", f"{name}: run_id escapes sandbox or invalid: {run_id!r}", ok=False)
+            continue
         if any(r["run_id"] == run_id for r in q["runs"]):
             ledger("claim_skip", f"{run_id}: duplicate", ok=False)
             continue
