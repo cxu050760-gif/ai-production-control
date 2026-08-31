@@ -346,9 +346,14 @@ set "LOCK_STALE=0"
 if "!LOCK_OWNER_TOKEN!"=="MISSING" set "LOCK_STALE=1"
 if "!LOCK_STALE!"=="0" if "!LOCK_AGE!"=="-1" set "LOCK_STALE=1"
 if "!LOCK_STALE!"=="0" if !LOCK_AGE! GTR %LOCK_STALE_SECS% set "LOCK_STALE=1"
+REM GATE-2#9 (2026-08-31): MISSING lock.json is a claimable state (the lock
+REM file itself is the atomic claim in the matching Python implementation).
+REM Take over directly with non-recursive deletion only (lock dir holds
+REM lock.json alone; rmdir without /s fails closed if anything else lives there).
 if "!LOCK_STALE!"=="1" (
     echo [%NOW_ISO%] [ACTION] guard_lock: stale lock takeover owner_token=!LOCK_OWNER_TOKEN! age=!LOCK_AGE!s
-    rmdir /s /q "%LOCK_DIR%" 2>nul
+    del /q "%LOCK_DIR%\lock.json" 2>nul
+    rmdir "%LOCK_DIR%" 2>nul
     mkdir "%LOCK_DIR%" 2>nul
     if errorlevel 1 (
         set "LOCK_HELD=0"

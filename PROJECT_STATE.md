@@ -1,3 +1,6 @@
+> ⚠️ **历史快照（V1.0 收口时点 2026-08-30）** — 本文件已停更；唯一权威 = `PROJECT_STATE.json`（`scripts/state_doctor.py` 校验对象）。
+> 下文内容仅反映 V1.0 收口时点（master@793fa41, tag v1.0-engineering-close），不反映 v1.1-blackbox 开发线进展。
+
 # PROJECT_STATE — 执衡 / ai-production-control
 
 > 本文件与 `PROJECT_STATE.json` 是项目状态的**唯一权威**（二者必须一致，由

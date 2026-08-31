@@ -245,13 +245,35 @@ class RunLock:
         self.acquired = True
         return True
 
+    def _unlink_quiet(self) -> None:
+        """GATE-2#8: unlink races on Windows raise PermissionError (an OSError)
+        when another process holds the lock file open — leave it for the next
+        cycle instead of crashing the whole command with a pseudo
+        RUNTIME_ERROR."""
+        try:
+            self.lock_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
     def _break_if_stale(self) -> None:
         try:
-            data = json.loads(self.lock_path.read_text(encoding="utf-8"))
-            if time.time() - float(data.get("ts", 0)) > LOCK_STALE_SEC:
-                self.lock_path.unlink(missing_ok=True)
+            raw = self.lock_path.read_text(encoding="utf-8")
+            data = json.loads(raw) if raw.strip() else {}
+            ts = float(data.get("ts", 0)) or self.lock_path.stat().st_mtime
+            if time.time() - ts > LOCK_STALE_SEC:
+                self._unlink_quiet()
         except (OSError, ValueError):
-            self.lock_path.unlink(missing_ok=True)
+            # GATE-2#8: a JUST-CREATED empty lock (owner between O_CREAT and
+            # its pid/ts write) must NOT be broken — an unparsable file proves
+            # nothing; only AGE can prove staleness. Previously the empty-file
+            # ValueError path unlinked unconditionally, deleting another
+            # process's fresh lock and letting two holders run at once.
+            try:
+                if self.lock_path.exists() and \
+                   time.time() - self.lock_path.stat().st_mtime > LOCK_STALE_SEC:
+                    self._unlink_quiet()
+            except OSError:
+                pass
 
     def __enter__(self) -> "RunLock":
         deadline = time.time() + 30

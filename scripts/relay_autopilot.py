@@ -251,35 +251,58 @@ def save_queue(q):
 
 
 def acquire_lock():
-    """drive 单实例锁（mkdir 原子 + token），避免两个 driver 并行。"""
+    """drive 单实例锁（GATE-2#9: lock.json 本身 O_EXCL 原子认领）。
+
+    旧实现 mkdir 成功后再写 lock.json，两步之间的窗口让并发者把"刚建好
+    还没写 json"的锁当陈旧锁 rmtree 掉 -> 覆盖写回 -> 双持有者。新实现
+    直接对 lock.json 做 O_CREAT|O_EXCL 创建作为认领动作（原子，无窗口）：
+    - 创建成功 = 认领成功，随后写 token；
+    - 已存在 = 读内容判定：新鲜（0<=age<=300）-> SKIP_LOCKED；
+      stale/损坏 -> 删除后重试一次独占创建（接管）。
+    空目录（无 lock.json）无害：任何人可认领。release_lock 语义不变。
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
     token = f"{stamp()}-{random.randint(1000, 9999)}{random.randint(1000, 9999)}"
     try:
         os.mkdir(LOCK_DIR)
     except FileExistsError:
-        info = load_json(os.path.join(LOCK_DIR, "lock.json"))
-        if info:
+        pass
+    lock_json = os.path.join(LOCK_DIR, "lock.json")
+    for _ in range(2):
+        try:
+            fd = os.open(lock_json, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            info = load_json(lock_json)
+            if info is None:
+                # 损坏/半写的认领文件（前主崩溃残留）：删除后重试一次。
+                # Windows 上对仍被打开的文件 unlink 会 PermissionError
+                # -> return None（绝不误删活跃持有者的锁）。
+                try:
+                    os.remove(lock_json)
+                except OSError:
+                    return None
+                continue
             try:
-                age = (datetime.datetime.now(datetime.timezone.utc) -
-                       datetime.datetime.fromisoformat(info["at"].replace("Z", "+00:00"))).total_seconds()
+                age = (now - datetime.datetime.fromisoformat(
+                    str(info.get("at", "")).replace("Z", "+00:00"))).total_seconds()
             except Exception:
                 age = -1
-            # 新鲜锁（0<=age<=300）：另一实例持有 -> SKIP_LOCKED，绝不覆盖他人锁
-            if age is not None and 0 <= age <= 300:
+            # 新鲜锁（0<=age<=300）：另一实例持有 -> SKIP_LOCKED，绝不覆盖
+            if 0 <= age <= 300:
                 return None
-            # stale（age>300）或异常（解析失败 age=-1 / 未来时间 age<0）-> 回收重建
-            shutil.rmtree(LOCK_DIR, ignore_errors=True)
+            # stale（age>300）或解析失败/未来时间 -> 接管
             try:
-                os.mkdir(LOCK_DIR)
-            except FileExistsError:
+                os.remove(lock_json)
+            except OSError:
                 return None
+            continue
         else:
-            shutil.rmtree(LOCK_DIR, ignore_errors=True)
-            try:
-                os.mkdir(LOCK_DIR)
-            except FileExistsError:
-                return None
-    save_json(os.path.join(LOCK_DIR, "lock.json"), {"token": token, "at": utcnow()})
-    return token
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump({"token": token, "at": utcnow()}, fh, ensure_ascii=False)
+                fh.flush()
+                os.fsync(fh.fileno())
+            return token
+    return None
 
 
 def release_lock(token):

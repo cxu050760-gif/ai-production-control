@@ -528,7 +528,16 @@ class CliWorkerExecutor:
         return goal_file
 
     def _monitor_loop(self, proc: subprocess.Popen) -> None:
+        stop = self.task.get("_stop_event")
         while not self._monitor_stop.is_set():
+            # GATE-2#7: reap_stale() sets _stop_event; the monitor is the only
+            # component positioned to actually terminate a stale CLI child.
+            # Previously nothing consumed _stop_event for CLI workers, so a
+            # heartbeat-dead worker kept running while reap_stale had already
+            # released its resource locks to other tasks (§57 breached).
+            if stop is not None and stop.is_set():
+                self._terminate()
+                break
             if proc.poll() is not None:
                 break
             self.scheduler._touch_heartbeat(self.task)
@@ -912,9 +921,25 @@ class ParallelScheduler:
         return None
 
     def _acquire_resources(self, task: Dict[str, Any]) -> bool:
+        """GATE-2#7: all-or-nothing resource acquisition.
+
+        Previously a failed second lock left the task HOLDING the first one
+        while LOCK_WAITING; two tasks requesting the same two resources in
+        opposite order could then deadlock (each holds one, each waits for
+        the other, and nothing rolls back). Partial failure now releases
+        everything taken before returning False.
+        """
+        taken = []
         for r in task.get("resources") or []:
-            if not self.locks.acquire(r, task["task_id"]):
-                return False
+            if self.locks.acquire(r, task["task_id"]):
+                taken.append(r)
+                continue
+            for r2 in taken:
+                try:
+                    self.locks.release(r2, task["task_id"])
+                except ValueError:
+                    pass
+            return False
         return True
 
     def _release_resources(self, task: Dict[str, Any]) -> None:
@@ -1125,7 +1150,15 @@ class ParallelScheduler:
                 return {"ok": False, "error": REJECT_TASK_NOT_FOUND,
                         "detail": f"task not found: {task_id}"}
             result = dict(result or {})
-            result.setdefault("epoch", int(task["epoch"]))
+            # GATE-2#7: a straggler result WITHOUT an epoch was previously
+            # bound to the CURRENT epoch via setdefault — validating a result
+            # that may predate a revoke/rollback (§40 STALE_EPOCH bypass).
+            # External results must carry their own epoch.
+            if "epoch" not in result:
+                return {"ok": False, "error": "STALE_EPOCH",
+                        "detail": ("external result must carry its own epoch "
+                                   "(§40); binding to current epoch would "
+                                   "validate a possibly-revoked result")}
             result.setdefault("task_id", task_id)
             return self._accept_result(task, result)
 
@@ -1168,6 +1201,18 @@ class ParallelScheduler:
                                       f"{self.stale_after_sec:.2f}s（§30）")
                     task["_stop_event"].set()
                     self._record_event(task["task_id"], TASK_STALE, f"age={age:.2f}")
+                    # GATE-2#7: heartbeat death usually means the worker's own
+                    # monitor thread is dead/stuck too — setting _stop_event
+                    # alone had NO consumer for CLI workers, so the orphaned
+                    # child kept running while its locks were handed to other
+                    # tasks (§57 breached). Terminate the child here directly;
+                    # _stop_event stays set for executor types that poll it.
+                    ex = self._executors.get(task["task_id"])
+                    if ex is not None and hasattr(ex, "_terminate"):
+                        try:
+                            ex._terminate()
+                        except Exception:  # noqa: BLE001 — already dead/racing
+                            pass
                     self._release_resources(task)
                     self._persist_task(task)
                     changed += 1

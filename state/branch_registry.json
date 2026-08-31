@@ -21,7 +21,7 @@
    "name": "master",
    "role": "TRUNK",
    "head": "e409253",
-   "note": "V1.0 engineering close baseline (frozen); dev line = v1.1-blackbox"
+   "note": "code-frozen@793fa41 (tag v1.0-engineering-close); governance/docs commits continue on master — see HARDENING-PLAN-20260831 (docs/evidence/); dev line = v1.1-blackbox"
   },
   {
    "name": "v0.9-b2/authority-effect-evidence",

@@ -118,7 +118,9 @@ class FixletTests(unittest.TestCase):
     def test_t08_sh001_applies_to_pre_fix_file(self):
         pre = (REPO / "docs" / "evidence" / "d5" / "test_v09_attack_matrix_offline_PRE_FIX.py")
         if not pre.exists():
-            self.skipTest("pre-fix backup not present")
+            # GATE-3：前置缺失不是跳过的理由——静默 skip 是假绿，必须显式 FAIL
+            self.fail("前置缺失不是跳过的理由：docs/evidence/d5/"
+                      "test_v09_attack_matrix_offline_PRE_FIX.py 不存在")
         text = pre.read_text(encoding="utf-8")
         fixlet = self_heal.FIXLETS["SH-001"]
         self.assertFalse(fixlet.already_fixed(text))
@@ -131,7 +133,9 @@ class FixletTests(unittest.TestCase):
     def test_t09_sh001_idempotent(self):
         pre = (REPO / "docs" / "evidence" / "d5" / "test_v09_attack_matrix_offline_PRE_FIX.py")
         if not pre.exists():
-            self.skipTest("pre-fix backup not present")
+            # GATE-3：前置缺失不是跳过的理由——静默 skip 是假绿，必须显式 FAIL
+            self.fail("前置缺失不是跳过的理由：docs/evidence/d5/"
+                      "test_v09_attack_matrix_offline_PRE_FIX.py 不存在")
         text = pre.read_text(encoding="utf-8")
         fixlet = self_heal.FIXLETS["SH-001"]
         patched = fixlet.apply(text)
@@ -140,11 +144,14 @@ class FixletTests(unittest.TestCase):
             fixlet.apply(patched)
 
     def test_t10_apply_fixlet_dry_run(self):
+        pre = (REPO / "docs" / "evidence" / "d5" / "test_v09_attack_matrix_offline_PRE_FIX.py")
+        if not pre.exists():
+            # GATE-3：前置缺失不是跳过的理由——静默 skip 是假绿，必须显式 FAIL
+            self.fail("前置缺失不是跳过的理由：docs/evidence/d5/"
+                      "test_v09_attack_matrix_offline_PRE_FIX.py 不存在")
         td = tempfile.TemporaryDirectory()
         src = Path(td.name) / "probe.py"
-        src.write_text(
-            (REPO / "docs" / "evidence" / "d5" / "test_v09_attack_matrix_offline_PRE_FIX.py")
-            .read_text(encoding="utf-8"), encoding="utf-8")
+        src.write_text(pre.read_text(encoding="utf-8"), encoding="utf-8")
         r = self_heal.apply_fixlet("SH-001", str(src), dry_run=True)
         self.assertTrue(r["applied"])
         self.assertEqual(r["replacements"], 5)

@@ -83,12 +83,30 @@ Faithful probe (carried over from the b1 re-measurement, V09_CLOSE_BUILD_SPEC.md
 §2 CASE V09-R34 and 用户裁决 4): R34 is additionally exercised with the unknown
 effect_type on BOTH the authorization and the intent, because the plain matrix
 pass measures a type *mismatch* rather than the unknown-type attack.
+
+GATE-3 hardening (2026-08-31, test-debt repayment)
+--------------------------------------------------
+The 36-case matrix plus the R34 faithful probe are additionally exposed as a
+real ``unittest.TestCase`` (``V09AttackMatrixB1CoreTests``): every case asserts
+``expected == observed``, so ANY MISMATCH turns the suite red (the previous
+CLI-only harness was always green). ``main()`` keeps its CLI contract -- it
+still prints the MATCH/MISMATCH summary and supports ``--jsonl`` -- but now
+returns 1 instead of a constant 0 when any case mismatches. State-root
+hygiene: ``APC_RUNTIME_STATE_ROOT`` is pointed at a sandbox directory BEFORE
+the core modules are loaded (runtime modules read that variable at import
+time) and around every test case, and is restored afterwards; no run touches
+a real state root (every Fixture already carries its own tmp state root).
 """
 from __future__ import annotations
 
 import argparse
+import atexit
+import importlib
 import json
+import os
 import sys
+import tempfile
+import unittest
 from dataclasses import asdict
 from pathlib import Path
 
@@ -98,9 +116,24 @@ for _p in (str(ROOT / "src"), str(RUNTIME_DIR)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import test_v09_attack_matrix_offline as mx  # noqa: E402
-
-from aicontrol.controller import Controller  # noqa: E402
+# ---------------------------------------------------------------------------
+# GATE-3 state-root hygiene: set the sandbox env BEFORE the runtime/core modules
+# are imported (they may read APC_RUNTIME_STATE_ROOT at import time), then
+# restore the caller's environment after loading.
+# ---------------------------------------------------------------------------
+_IMPORT_STATE_TMP = tempfile.TemporaryDirectory(prefix="v09-b1-core-import-state-")
+_PREV_STATE_ROOT = os.environ.get("APC_RUNTIME_STATE_ROOT")
+os.environ["APC_RUNTIME_STATE_ROOT"] = str(Path(_IMPORT_STATE_TMP.name) / "state")
+try:
+    mx = importlib.import_module("test_v09_attack_matrix_offline")  # noqa: E402
+    Controller = importlib.import_module("aicontrol.controller").Controller  # noqa: E402
+finally:
+    if _PREV_STATE_ROOT is None:
+        os.environ.pop("APC_RUNTIME_STATE_ROOT", None)
+    else:
+        os.environ["APC_RUNTIME_STATE_ROOT"] = _PREV_STATE_ROOT
+    del _PREV_STATE_ROOT
+atexit.register(_IMPORT_STATE_TMP.cleanup)
 
 PROTOCOL = "V09_ATTACK_RESULT_JSONL_1"
 CORE_UNDER_TEST = "v0.9-b1/authority-effect-core"
@@ -341,31 +374,91 @@ CASE_OVERRIDES = {
 }
 
 
+def _case_entry(case):
+    """Run one frozen case through the adapted harness; never raise, always report."""
+    runner = CASE_OVERRIDES.get(case["id"])
+    try:
+        if runner is not None:
+            obs = runner(case)
+        else:
+            obs = mx.run_case(case)
+        return asdict(obs) | {"matched": obs.matched, "harness": "ok", "adaptation": runner is not None}
+    except Exception as exc:
+        return {
+            "test_id": case["id"],
+            "owner_case": case["owner_case"],
+            "expected_outcome": R18_ADJUDICATED_EXPECTATION if case["id"] == "V09-R18" else case["expected_outcome"],
+            "observed_outcome": "HARNESS_ERROR",
+            "detail": f"{type(exc).__name__}: {exc}",
+            "matched": False,
+            "harness": "error",
+            "adaptation": case["id"] in CASE_OVERRIDES,
+        }
+
+
 def run_matrix():
     matrix = mx.load_matrix()
     spec_anchor = matrix.get("spec_anchor")
-    results = []
-    for case in matrix["cases"]:
-        runner = CASE_OVERRIDES.get(case["id"])
-        try:
-            if runner is not None:
-                obs = runner(case)
-            else:
-                obs = mx.run_case(case)
-            entry = asdict(obs) | {"matched": obs.matched, "harness": "ok", "adaptation": runner is not None}
-        except Exception as exc:
-            entry = {
-                "test_id": case["id"],
-                "owner_case": case["owner_case"],
-                "expected_outcome": R18_ADJUDICATED_EXPECTATION if case["id"] == "V09-R18" else case["expected_outcome"],
-                "observed_outcome": "HARNESS_ERROR",
-                "detail": f"{type(exc).__name__}: {exc}",
-                "matched": False,
-                "harness": "error",
-                "adaptation": case["id"] in CASE_OVERRIDES,
-            }
-        results.append(entry)
+    results = [_case_entry(case) for case in matrix["cases"]]
     return matrix, spec_anchor, results
+
+
+class V09AttackMatrixB1CoreTests(unittest.TestCase):
+    """GATE-3: 真断言包装——36 例 + R34 忠实探针，任何 MISMATCH/HARNESS_ERROR 即红。"""
+
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.matrix = mx.load_matrix()
+        cls.cases_by_id = {case["id"]: case for case in cls.matrix["cases"]}
+        if len(cls.cases_by_id) != 36:
+            raise RuntimeError(f"attack matrix must contain 36 cases, got {len(cls.cases_by_id)}")
+
+    def setUp(self):
+        # 每个 case 期间把 state root env 指到 tmp 沙箱（用例中途被 import 的
+        # runtime 模块只能看到沙箱），用完恢复调用方环境。
+        self._state_tmp = tempfile.TemporaryDirectory(prefix="v09-b1-case-state-")
+        self.addCleanup(self._state_tmp.cleanup)
+        prev = os.environ.get("APC_RUNTIME_STATE_ROOT")
+
+        def _restore_env():
+            if prev is None:
+                os.environ.pop("APC_RUNTIME_STATE_ROOT", None)
+            else:
+                os.environ["APC_RUNTIME_STATE_ROOT"] = prev
+
+        self.addCleanup(_restore_env)
+        os.environ["APC_RUNTIME_STATE_ROOT"] = str(Path(self._state_tmp.name) / "state")
+
+    def _assert_case(self, case_id: str) -> None:
+        entry = _case_entry(self.cases_by_id[case_id])
+        self.assertEqual(
+            entry["harness"], "ok",
+            f"{case_id}: harness error: {entry.get('detail', '')}")
+        self.assertTrue(
+            entry["matched"],
+            f"{case_id}: MISMATCH expected={entry['expected_outcome']} "
+            f"observed={entry['observed_outcome']} detail={entry.get('detail', '')}")
+
+    def test_v09_r34_faithful_probe(self):
+        extra = r34_faithful_probe()
+        self.assertTrue(
+            extra["matched"],
+            f"{extra['test_id']}: MISMATCH expected={extra['expected_outcome']} "
+            f"observed={extra['observed_outcome']} detail={extra.get('detail', '')}")
+
+
+def _make_case_test(case_id: str):
+    def _test(self: V09AttackMatrixB1CoreTests) -> None:
+        self._assert_case(case_id)
+    _test.__doc__ = f"V09 attack case {case_id}: expected == observed (any MISMATCH is red)"
+    return _test
+
+
+for _case in mx.load_matrix()["cases"]:
+    setattr(V09AttackMatrixB1CoreTests, f"test_{_case['id']}", _make_case_test(_case["id"]))
+del _case
 
 
 def main(argv=None) -> int:
@@ -377,6 +470,7 @@ def main(argv=None) -> int:
     matrix, spec_anchor, results = run_matrix()
     extra = r34_faithful_probe()
     matched = sum(1 for r in results if r["matched"])
+    extra_red = 0 if extra["matched"] else 1
     summary = {
         "protocol": PROTOCOL,
         "core_under_test": CORE_UNDER_TEST,
@@ -388,6 +482,8 @@ def main(argv=None) -> int:
         "case_count": len(results),
         "matched": matched,
         "red": len(results) - matched,
+        "faithful_probe": extra["test_id"],
+        "faithful_probe_matched": extra["matched"],
     }
     if args.jsonl:
         out = Path(args.jsonl)
@@ -406,7 +502,8 @@ def main(argv=None) -> int:
     flag = "MATCH " if extra["matched"] else "MISMATCH"
     print(f"{extra['test_id']:18s} exp={extra['expected_outcome']:12s} obs={extra['observed_outcome']:12s} {flag} | {extra['detail'][:88]}")
     print(f"jsonl={'written to ' + args.jsonl if args.jsonl else 'not requested'}")
-    return 0
+    # GATE-3: exit code now reflects the matrix result (was a constant 0).
+    return 0 if (len(results) == matched and extra_red == 0) else 1
 
 
 if __name__ == "__main__":
