@@ -103,3 +103,8 @@
   - runtime RUN-20260901-004509-dad6 分片投递（10 片/总 59880B/sha=da0eb734…）片 1 即 SEND_OK（text-only 通畅），R 基于片 1+会话既有材料直接给出**逐项实质裁决**（5064B）：4 项"已核验通过"（含 rename-steal 复验/seam/三闸 fail-closed/run.cmd report 回路/effect-reconcile 前置）+ **REWORK 必改 3 条**：P1-1 repo/evidence 显式缺失未 fail-closed、P1-2 负例缺失、P2-1 epoch 正常路径 or 链恒真断言——全部合法无红线冲突，已全数处置（33f7e7f）；
   - **P2-1 处置时新发现**：or 链掩盖的真实语义=mock 已跑完任务后正确 epoch 迟到结果被 TASK_NOT_ACTIVE 拒（产品行为正确）；新增 n3b 真接受路径用例（QUEUED+正确 epoch→ACCEPT_OK）补齐 R 要的"证明结果真的 ok"；
   - R 明示：无附件可读时 658+219 只能视为主代理自证——重投递材料将含完整直录日志文本。
+- **15 片全量投递实录（RUN-20260831-010843-6123 材料版，总 89793B/sha=b3a5a042…）**：
+  - 传输规律实测：小消息秒回；6KB 片首 4-6 发顺畅后进入传输退化（TIMEOUT×4→HARD_BLOCKED）；recv 探针始终可用；冷却+限速（片间 180s）可恢复。通道共 4 个 RUN：d8f7（片2后阻断）/1573（片3-4后阻断）/3a53（片6-9后阻断）/b87c（限速版，片 10-15 全 SENT_OK）；
+  - R 行为记录：片 1-2 到达后即给出第一轮逐项裁决（REWORK 3 条）；中段两次在材料未全时提前给 PASS（被主代理拒绝采纳、继续补投）；15/15 到齐后终裁=REWORK（candidate_commit 需真实 Git 对象校验+负例+新 HEAD 回归）；
+  - 终裁 REWORK 处置（e32f78c）：cmd_submit 前置 git cat-file -e 校验（伪造 40-hex 拒于 admission 前 rc=2）+build_event relay 防御 ValueError+负例 n7+n6 升级真 git 仓正向；r5a/r5b 双直录 666+219=885 全绿 CLEAN×2。
+- **教训沉淀**：R 的提前 PASS 不可采信（材料未全）；主代理必须核对"R 所见分片集合"与"R 裁决所依据材料"的一致性；传输退化用限速+冷却恢复，禁止为投递成功改变证据形态（§7 红线，全程未破）。

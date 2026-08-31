@@ -278,8 +278,8 @@
   {
    "name": "hardening/p0-gates-20260831",
    "role": "ACTIVE",
-   "head": "33f7e7f",
-   "note": "P0 hardening construction line per docs/evidence/HARDENING-PLAN-20260831.md (created from v1.1-blackbox@21352f2); batch A GATE fixes + debt clearing (fa5406f) + blind-review REWORK fixes (09d8a1c) + external R-REWORK fixes (33f7e7f) committed; head synced 2026-09-01 governance-only"
+   "head": "e32f78c",
+   "note": "P0 hardening construction line per docs/evidence/HARDENING-PLAN-20260831.md (created from v1.1-blackbox@21352f2); batch A GATE fixes + debt clearing (fa5406f) + blind-review REWORK fixes (09d8a1c) + external R-REWORK fixes (33f7e7f) + final-adjudication commit-existence gate (e32f78c) committed; head synced 2026-09-01 governance-only"
   }
  ]
 }
