@@ -272,7 +272,7 @@
   {
    "name": "v1.1-blackbox",
    "role": "ACTIVE",
-   "head": "db4e5517",
+   "head": "9e51faa2",
    "note": "V1.1 blackbox dev line; R1/R2/R3/A1/D1-D6 all completed+reviewed 2026-08-31; matrix v4 67/10/0 (L3 pending owner)"
   }
  ]
