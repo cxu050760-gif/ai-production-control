@@ -454,14 +454,27 @@ def build_event(goal, seq, candidate_commit=None, relay_mode=False, repo_path=No
 
     commit = _resolve_commit(goal, seq, candidate_commit, relay_mode)
 
+    # P1-1（外审 R-REWORK 20260901）：relay 模式三项参数统一显式输入契约——
+    # 缺任一项或任一路径不存在一律 fail-closed，禁止回退遗留默认根
+    # （原实现 repo_path or ALLOWED_REPO_ROOT 会把不存在的路径原样入事件、
+    # evidence 可携带任意不存在路径 = fail-open）。mock 模式保留旧容错。
+    if relay_mode:
+        if not repo_path or not os.path.exists(repo_path):
+            raise ValueError("REPO_PATH_REQUIRED_AND_MUST_EXIST (relay): " + str(repo_path))
+        if not evidence_paths:
+            raise ValueError("EVIDENCE_PATHS_REQUIRED (relay): 显式 evidence 至少一项")
+        _missing_ev = [p for p in evidence_paths if not os.path.exists(p)]
+        if _missing_ev:
+            raise ValueError("EVIDENCE_PATH_NOT_FOUND (relay): " + ", ".join(_missing_ev))
     packet = review_packet or DEFAULT_REVIEW_PACKET
     if not os.path.exists(packet):
-        if review_packet:
-            # P2-3（盲审 fa5406f）：显式注入的 packet 不存在必须 fail-closed。
-            # 静默回落 REVIEW_PACKET_ROOT（round18 遗留根）正是 341d01e 要
-            # 消除的"按旧任务裁决"串台风险；默认路径缺失回落保留。
+        if review_packet or relay_mode:
+            # P2-3（盲审 fa5406f）+P1-1（外审 R-REWORK）：显式注入的 packet 不
+            # 存在必须 fail-closed；relay 模式下连默认回落也禁止（显式输入
+            # 契约）。静默回落 REVIEW_PACKET_ROOT（round18 遗留根）正是
+            # 341d01e 要消除的"按旧任务裁决"串台风险。
             raise ValueError("REVIEW_PACKET_NOT_FOUND: " + str(review_packet))
-        packet = REVIEW_PACKET_ROOT  # 目录也可通过 existsSync
+        packet = REVIEW_PACKET_ROOT  # 仅 mock：目录也可通过 existsSync
     verdict_path = os.path.join(REVIEW_PACKET_ROOT, f"autopilot-verdict-{run_id}.txt")
     evidence = list(evidence_paths or []) or [DEFAULT_EVIDENCE if os.path.exists(DEFAULT_EVIDENCE) else ALLOWED_EVIDENCE_ROOT]
 
@@ -506,10 +519,30 @@ def cmd_submit(args):
     if not (goal.get("objective") or goal.get("title")):
         ledger("submit", "goal must have objective or title", ok=False)
         return 2
-    # P2-3（盲审 fa5406f）：显式注入的 review-packet 不存在 → fail-closed，
-    # 禁止静默回落遗留 round18 根（会话串台根因）。
+    # P2-3（盲审 fa5406f）+P1-1（外审 R-REWORK）：路径参数校验必须在
+    # admission/build_event/投递之前完成（fail-closed 前置）。
+    _mode = getattr(args, "mode", "mock")
     _packet_arg = getattr(args, "review_packet", None)
-    if _packet_arg and not os.path.exists(_packet_arg):
+    _repo_arg = getattr(args, "repo_path", None)
+    _ev_args = getattr(args, "evidence_path", None)
+    if _mode == "relay":
+        problems = []
+        if not _repo_arg or not os.path.exists(_repo_arg):
+            problems.append("--repo-path 必填且必须存在: " + str(_repo_arg))
+        if not _packet_arg or not os.path.exists(_packet_arg):
+            problems.append("--review-packet 必填且必须存在: " + str(_packet_arg))
+        if not _ev_args:
+            problems.append("--evidence-path 必填（至少一项）")
+        else:
+            _miss = [p for p in _ev_args if not os.path.exists(p)]
+            if _miss:
+                problems.append("--evidence-path 不存在: " + ", ".join(_miss))
+        if problems:
+            ledger("submit", "relay explicit-input contract violated (fail-closed)", ok=False)
+            for _p in problems:
+                print("RELAY_INPUT_CONTRACT: " + _p, file=sys.stderr)
+            return 2
+    elif _packet_arg and not os.path.exists(_packet_arg):
         ledger("submit", "review-packet not found (fail-closed): " + str(_packet_arg), ok=False)
         print("REVIEW_PACKET_NOT_FOUND: " + str(_packet_arg), file=sys.stderr)
         return 2

@@ -128,6 +128,124 @@ class LeaseRenewBranchTests(unittest.TestCase):
         self.assertEqual(res["checks"]["lease"], {"ok": False, "reason": "LEASE_REVOKED"})
 
 
+class RelayExplicitInputContractTests(unittest.TestCase):
+    """P1-1/P1-2（外审 R-REWORK 20260901）：relay 三项参数显式输入契约。
+
+    缺任一项或任一路径不存在必须 rc=2，且失败必须发生在
+    admission/build_event/投递之前；mock 模式不受影响。
+    """
+
+    def _relay_args(self, mode="relay", repo=None, packet=None, evidence=None):
+        return argparse.Namespace(
+            goal_file="g.json", mode=mode, candidate_commit="a" * 40,
+            repo_path=repo, review_packet=packet, evidence_path=evidence)
+
+    def _run(self, args, tmp):
+        repo = Path(tmp) / "repo"
+        repo.mkdir(exist_ok=True)
+        pkt = Path(tmp) / "packet.txt"
+        pkt.write_text("p", encoding="utf-8")
+        ev1 = Path(tmp) / "ev1.json"
+        ev1.write_text("{}", encoding="utf-8")
+        args.repo_path = args.repo_path if args.repo_path != "@tmp_repo" else str(repo)
+        args.review_packet = args.review_packet if args.review_packet != "@tmp_pkt" else str(pkt)
+        if args.evidence_path == "@tmp_ev":
+            args.evidence_path = [str(ev1)]
+        elif isinstance(args.evidence_path, list) and "@tmp_ev" in args.evidence_path:
+            args.evidence_path = [
+                str(ev1) if e == "@tmp_ev" else e for e in args.evidence_path]
+        admission_m = mock.MagicMock(
+            return_value={"admitted": True, "checks": {}, "reasons": []})
+        with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+             mock.patch.object(ra, "admission_checks", admission_m), \
+             mock.patch.object(ra, "ledger", return_value=None):
+            rc = ra.cmd_submit(args)
+        return rc, admission_m
+
+    def test_n1_relay_repo_missing_rejected_before_admission(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rc, adm = self._run(self._relay_args(repo="X:\\no\\such\\repo",
+                                                 packet="@tmp_pkt", evidence="@tmp_ev"), tmp)
+        self.assertEqual(rc, 2)
+        adm.assert_not_called()
+
+    def test_n2_relay_evidence_absent_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rc, adm = self._run(self._relay_args(repo="@tmp_repo",
+                                                 packet="@tmp_pkt", evidence=None), tmp)
+        self.assertEqual(rc, 2)
+        adm.assert_not_called()
+
+    def test_n3_relay_mixed_evidence_missing_one_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rc, adm = self._run(self._relay_args(
+                repo="@tmp_repo", packet="@tmp_pkt",
+                evidence=["@tmp_ev", "X:\\no\\such\\ev.json"]), tmp)
+        self.assertEqual(rc, 2)
+        adm.assert_not_called()
+
+    def test_n4_relay_packet_absent_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rc, adm = self._run(self._relay_args(repo="@tmp_repo",
+                                                 packet=None, evidence="@tmp_ev"), tmp)
+        self.assertEqual(rc, 2)
+        adm.assert_not_called()
+
+    def _build(self, **kwargs):
+        """与 BuildEventParamTests._build 同构（本类本地副本）。"""
+        exists = kwargs.pop("_exists", None)
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.object(
+                ra, "load_relay_config",
+                return_value={"project_id": "P-TEST",
+                              "automation": {"current_milestone": "V1.1"}}))
+            stack.enter_context(mock.patch.object(
+                ra, "load_builder_binding",
+                return_value={"provider": "prov", "model": "mod",
+                              "conversation_id": "conv", "generation": 7}))
+            if exists is not None:
+                stack.enter_context(mock.patch.object(
+                    ra.os.path, "exists", return_value=exists))
+            return ra.build_event(GOAL, 42, None, **kwargs)
+
+    def test_n5_build_event_relay_contract_enforced(self):
+        with self.assertRaises(ValueError):
+            self._build(relay_mode=True)          # 全缺省
+        with self.assertRaises(ValueError):
+            self._build(relay_mode=True, repo_path="X:\\no\\repo",
+                        review_packet=None, evidence_paths=None)
+        with self.assertRaises(ValueError):
+            self._build(relay_mode=True, repo_path="X:\\no\\repo",
+                        review_packet=None,
+                        evidence_paths=["X:\\no\\ev.json"])
+
+    def test_n6_relay_all_valid_passes_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            pkt = Path(tmp) / "packet.txt"
+            pkt.write_text("p", encoding="utf-8")
+            ev1 = Path(tmp) / "ev1.json"
+            ev1.write_text("{}", encoding="utf-8")
+            args = self._relay_args(repo=str(repo), packet=str(pkt),
+                                    evidence=[str(ev1)])
+            admission_m = mock.MagicMock(
+                return_value={"admitted": True, "checks": {}, "reasons": []})
+            build_m = mock.MagicMock(return_value={
+                "event_id": "EV-T", "run_id": "RUN-T", "task_id": "TASK-T"})
+            with tempfile.TemporaryDirectory() as inbox:
+                with mock.patch.object(ra, "load_json", return_value=dict(GOAL)), \
+                     mock.patch.object(ra, "admission_checks", admission_m), \
+                     mock.patch.object(ra, "build_event", build_m), \
+                     mock.patch.object(ra, "save_json", return_value=None), \
+                     mock.patch.object(ra, "ledger", return_value=None), \
+                     mock.patch.object(ra, "SANDBOX_INBOX", inbox):
+                    rc = ra.cmd_submit(args)
+            self.assertEqual(rc, 0)
+            admission_m.assert_called_once()
+            build_m.assert_called_once()
+
+
 class BuildEventParamTests(unittest.TestCase):
     """P1-2：--repo-path/--review-packet/--evidence-path 三参数与 build_event 接线。"""
 

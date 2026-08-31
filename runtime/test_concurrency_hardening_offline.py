@@ -116,8 +116,25 @@ class ExternalEpochTests(unittest.TestCase):
         epoch = fx.current_epoch("T-EX")
         res2 = fx.accept_external_result(
             "T-EX", {"outcome": "SUCCESS", "ok": True, "epoch": epoch})
-        self.assertTrue(res2.get("ok", False) or "error" not in res2 or res2.get("ok") is True,
-                        res2)
+        # P2-1（外审 R-REWORK 20260901）：原 or 链（ok or "error" not in res2 or …）
+        # 恒真，不能证明任何事。本 fixture 中任务已被 mock 跑至终态(COMPLETED)，
+        # 正确 epoch 的迟到结果的确定性语义 = 通过 epoch 门(不再 STALE_EPOCH)、
+        # 到达下一道门 TASK_NOT_ACTIVE 拒绝；真正接受路径另见 n3b。
+        self.assertNotEqual(res2.get("error"), "STALE_EPOCH", res2)
+        self.assertEqual(res2.get("reason"), "TASK_NOT_ACTIVE", res2)
+
+    def test_n3b_correct_epoch_active_task_accepts(self):
+        """真接受路径：非终态任务 + 正确 epoch 外部结果 → ACCEPT_OK。"""
+        fx = ps.ParallelScheduler(state_root=str(Path(tempfile.mkdtemp()) / "ps"))
+        fx.submit({"task_id": "T-AC", "goal": "g",
+                   "mock": {"sleep_sec": 30, "result": {"ok": 1}}})
+        # 不运行 mock（保持 QUEUED 非终态）：外部结果走完整裁决链
+        epoch = fx.current_epoch("T-AC")
+        res = fx.accept_external_result(
+            "T-AC", {"outcome": "SUCCESS", "ok": True, "epoch": epoch})
+        self.assertEqual(res.get("verdict"), ps.ACCEPT_OK, res)
+        self.assertEqual(res.get("reason"), ps.ACCEPT_OK, res)
+        self.assertEqual(fx.tasks["T-AC"]["state"], ps.TASK_COMPLETED)
 
 
 class RunLockAgeTests(unittest.TestCase):
