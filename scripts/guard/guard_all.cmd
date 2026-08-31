@@ -30,10 +30,12 @@ set "LEDGER=%STATE_ROOT%\guard-actions.ndjson"
 set "BSK_EXE=E:\WB\tools\bsk-file-bridge\dist\bsk-dev.exe"
 set "BSK_HOME=E:/WB/tools/bsk-file-bridge/bsk-home"
 REM BSK_PORT is resolved dynamically from daemon.json ws_port by
-REM :read_bsk_port (the daemon rewrites daemon.json on every start;
-REM the port drifted 52900 -> 52800 on 2026-08-30). This value is
-REM only a fallback used when daemon.json is missing/unreadable.
-set "BSK_PORT=52800"
+REM :read_bsk_port (the daemon rewrites daemon.json on every start).
+REM Canonical port is 52900 = production blackbox runtime.py hardcodes it
+REM (daemon start --port 52900; extension bakes ws://127.0.0.1:52900).
+REM 52800 is the bsk-crate DEFAULT_WS_PORT and must NOT be used:
+REM daemon would drift off the blackbox port and R transport breaks.
+set "BSK_PORT=52900"
 set "STALE_SECS=300"
 
 REM ---------- single-instance lock (D2) ----------
@@ -223,8 +225,8 @@ exit /b 0
 REM ============================================================
 REM  b) bsk daemon probe -> restart if down
 REM     Port is read dynamically from daemon.json ws_port because
-REM     the daemon picks the port at start time (52900 -> 52800
-REM     drift observed; 52900 may be taken by playwright-cdp).
+REM     the daemon rewrites daemon.json every start; we launch it with
+REM     --port 52900 (canonical blackbox port) so it can never drift.
 REM ============================================================
 :bsk_check
 set "G_ACTION=bsk_check"
@@ -236,7 +238,7 @@ if errorlevel 1 (
     echo [%NOW_ISO%] [ACTION] bsk_check: port %BSK_PORT% DOWN - starting daemon
     pushd "E:\WB\tools\bsk-file-bridge"
     set "BSK_HOME=E:/WB/tools/bsk-file-bridge/bsk-home"
-    start "" /b "%BSK_EXE%" daemon start >> "%BSK_HOME%\zhg-bsk-start-%STAMP%.log" 2>&1
+    start "" /b "%BSK_EXE%" daemon start --port 52900 >> "%BSK_HOME%\zhg-bsk-start-%STAMP%.log" 2>&1
     popd
     set "G_ACTION=bsk_start"
     ping -n 3 127.0.0.1 >nul
@@ -262,8 +264,8 @@ exit /b 0
 REM ---------- resolve bsk ws_port from daemon.json (non-locking read) ----------
 :read_bsk_port
 set "BSK_PORT="
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "$f='E:/WB/tools/bsk-file-bridge/bsk-home/daemon.json'; try { $fs=[System.IO.File]::Open($f,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete); try { $sr=New-Object System.IO.StreamReader($fs); $txt=$sr.ReadToEnd() } finally { $sr.Close(); $fs.Close() }; $j=$txt | ConvertFrom-Json; if ($null -ne $j.ws_port) { $j.ws_port } else { '52800' } } catch { '52800' }"`) do set "BSK_PORT=%%A"
-if not defined BSK_PORT set "BSK_PORT=52800"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "$f='E:/WB/tools/bsk-file-bridge/bsk-home/daemon.json'; try { $fs=[System.IO.File]::Open($f,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete); try { $sr=New-Object System.IO.StreamReader($fs); $txt=$sr.ReadToEnd() } finally { $sr.Close(); $fs.Close() }; $j=$txt | ConvertFrom-Json; if ($null -ne $j.ws_port) { $j.ws_port } else { '52900' } } catch { '52900' }"`) do set "BSK_PORT=%%A"
+if not defined BSK_PORT set "BSK_PORT=52900"
 exit /b 0
 
 REM ============================================================

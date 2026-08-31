@@ -64,7 +64,7 @@
       "daemon",
       "start"
      ],
-     "note": "桥依赖 bsk daemon（端口以 bsk-home/daemon.json ws_port 为准；当前实测 52800）。仅打印建议，不自动执行"
+     "note": "桥依赖 bsk daemon（端口以 bsk-home/daemon.json ws_port 为准；当前实测 52900）。仅打印建议，不自动执行"
     },
     "cost": {
      "cost_per_call": null,
@@ -789,7 +789,7 @@
      "host": "127.0.0.1",
      "port": 52900,
      "timeout_sec": 2,
-     "note": "playwright-cdp 类监听端口（与 bsk daemon 无关，勿与 bsk 的 52800 混淆）；探测结果反映 playwright 可用性，2026-08-30 复核时无监听"
+     "note": "playwright-cdp 类监听端口（独立于 bsk daemon 52900，勿混淆）；探测结果反映 playwright 可用性，2026-08-30 复核时无监听"
     },
     "launch": {
      "kind": "command",
@@ -798,7 +798,7 @@
       "daemon",
       "start"
      ],
-     "note": "playwright-cdp 的 52900 监听与 bsk daemon（52800）相互独立；此处 bsk daemon 为桥传输依赖，仅打印建议，不自动执行"
+     "note": "playwright-cdp 的探测与 bsk daemon（52900）相互独立；此处 bsk daemon 为桥传输依赖，仅打印建议，不自动执行"
     },
     "cost": {
      "cost_per_call": null,
@@ -845,9 +845,9 @@
     "health_check": {
      "kind": "port",
      "host": "127.0.0.1",
-     "port": 52800,
+     "port": 52900,
      "timeout_sec": 2,
-     "note": "bsk daemon ws_port；端口从 bsk-home/daemon.json 动态读取为准，此处为当前实测值（2026-08-30）"
+     "note": "bsk daemon ws_port；端口从 bsk-home/daemon.json 动态读取为准，此处为当前实测值（2026-08-31，52900）"
     },
     "launch": {
      "kind": "command",
@@ -1255,9 +1255,9 @@
     "health_check": {
      "kind": "port",
      "host": "127.0.0.1",
-     "port": 52800,
+     "port": 52900,
      "timeout_sec": 2,
-     "note": "bsk daemon ws_port；端口从 bsk-home/daemon.json 动态读取为准，此处为当前实测值（2026-08-30）"
+     "note": "bsk daemon ws_port；端口从 bsk-home/daemon.json 动态读取为准，此处为当前实测值（2026-08-31，52900）"
     },
     "launch": {
      "kind": "command",
@@ -1685,7 +1685,7 @@
       "search"
      ],
      "cwd": "C:/Users/17838/Documents/Qoder/2026-08-28/031cb4e3/b1",
-     "note": "D3 交付 2026-08-31；search/fetch/download；登录态敏感站走 bsk（52800）互补"
+     "note": "D3 交付 2026-08-31；search/fetch/download；登录态敏感站走 bsk（52900）互补"
     },
     "health_check": {
      "kind": "command",
@@ -2902,7 +2902,7 @@
       "daemon",
       "start"
      ],
-     "note": "WS 52800（以 bsk-home/daemon.json ws_port 为准，当前实测）"
+     "note": "WS 52900（以 bsk-home/daemon.json ws_port 为准，当前实测）"
     },
     "contract": "BSK_DAEMON",
     "source": "config/production.json: browser",
