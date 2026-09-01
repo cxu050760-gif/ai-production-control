@@ -57,3 +57,46 @@
 - 本报告仅做清点与结论建议，**未执行任何删除**。
 - 任何删除动作须在审查（Reviewer）裁决后由授权方执行，遵守"禁止破坏性操作"纪律。
 - 相关待裁决项已登记：`PROJECT_STATE.json` open_questions Q6。
+
+
+---
+
+## 阶段 D 执行记录（2026-09-01，合并后主线 merge/hardening-20260901@76f2188 为基准）
+
+### 本地分支删除（已执行）
+对 `git branch --merged merge/hardening-20260901` 确认完全合入的本地分支执行 `git branch -d`。已删除 7 个：
+
+| 分支 | 原 head | 说明 |
+|---|---|---|
+| docs/state-sync-20260901 | a33b6d4 | 上一轮状态同步分支，已 fast-forward 合入 master |
+| v0.6-b/ec-failclosed | 7e25ddf | 已合入主线 |
+| v0.6-c/telemetry-replay2 | 9d94dd4 | 已合入主线 |
+| v0.6-c/telemetry-replay3 | fd99281 | 已合入主线 |
+| v0.6-int/relay-merge | fd99281 | 已合入主线 |
+| v0.7-c/c-correction-1 | cad2977 | 已合入主线 |
+| v0.7-sb/strategic-brain-1 | 576756a | 已合入主线 |
+
+### 本地分支保留（因 worktree 占用，无法删除）
+以下 5 个分支确认 merged 但被 `E:/WB/temp/` 下的 git worktree 占用（`git branch -d` 拒绝），**保留并需人工先移除 worktree 再删除**：
+- review-result-return（worktree E:/WB/temp/review_result_return/worktree）
+- slice-c/goal-contract-lite-v2（E:/WB/temp/slice_c_v2/worktree）
+- slice-i/effect-safety-lite（E:/WB/temp/slice_i/worktree）
+- transport-recovery-lite（E:/WB/temp/transport_recovery_lite/worktree）
+- v0.7-sr/strategic-reuse-1（E:/WB/temp/slice_j2/worktree）
+
+### 本地分支保留（未合入）
+以下分支 `git branch --no-merged merge/hardening-20260901` 确认有未合入提交，**保留并在报告中说明**：
+- slice-j2/send-guard、slice-v0.6/ec-lite、v0.5-b/pass-invalidation、v0.5-c/evidence-registry、v0.5-c/evidence-registry-replay1、v0.5-int/relay-merge、v0.6-c/telemetry-replay、v0.7-int/relay-merge
+
+### 保留的安全/主干分支
+- master、merge/hardening-20260901（当前）、backup/master-pre-hardening-merge（合并前备份指针）
+
+### 远端分支（计划）
+任务书授权远端删除仅限 origin/tmp-* 三个：
+- origin/tmp-unused、origin/tmp-unused2：**已确认 merged（master 祖先 da6ab1e，无独有提交）→ 计划删除**
+- origin/tmp-v09-ignore：**未合入（4 个独有提交，workflow 文件）→ 保留，需人工确认**
+
+### branch_registry 对齐（已更新）
+- 删除 7 个已删分支条目；master head → 76f2188；hardening/p0-gates-20260831 → ARCHIVE（head cce2ca6）；v1.1-blackbox → ARCHIVE；追加 merge/hardening-20260901（TRUNK_CANDIDATE）、backup/master-pre-hardening-merge（ARCHIVE）。
+
+> 本执行记录遵循任务书纪律：仅删 `--merged` 确认完全合入的分支；未合入一律保留；远端删除仅限 tmp-unused/tmp-unused2（tmp-v09-ignore 保留待裁决）。
