@@ -15,14 +15,14 @@
  "baselines": {
   "current_development_head": {
    "branch": "hardening/p0-gates-20260831",
-   "head": "18bcb3486c5abd2a4764498afb534fb54dfac7a0",
+   "head": "0d68a49bdaa1083073cdd7b7dc109bbae80df69b",
    "verdict": "IN_DEVELOPMENT",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "18bcb3486c5abd2a4764498afb534fb54dfac7a0"
+    "value": "0d68a49bdaa1083073cdd7b7dc109bbae80df69b"
    },
-   "note": "synced 2026-09-01 governance-only (batch D: SS45+SS71 met, matrix 71/5/0); hardening line per docs/evidence/HARDENING-PLAN-20260831.md"
+   "note": "synced 2026-09-01 governance-only (batch E: §74 gate finalized cross-check regime, matrix 71/5/0); hardening line per docs/evidence/HARDENING-PLAN-20260831.md"
   },
   "current_accepted_base": {
    "branch": "v0.8-integrate/adapter-final-4",
