@@ -37,6 +37,10 @@ import effect_safety_lite as effect_lite  # noqa: E402
 
 MATRIX_PATH = HERE / "fixtures" / "v09_authority_effect_attack_cases.json"
 ACCEPTED_V08_BASE = "e8c53d4a2d6d6ce1d57a34472170c01577e15d6c"
+# AD-5 (BUILDER_RULING_R18 sect 3, mirrors test_v09_attack_matrix_on_b1_core):
+# slot is an identity component, not a uniqueness container; same slot + different
+# payload = distinct logical effect, scored as ALLOW_DISTINCT_EFFECT.
+R18_ADJUDICATED_EXPECTATION = "ALLOW_DISTINCT_EFFECT"
 
 
 @dataclass
@@ -122,15 +126,37 @@ class Fixture:
         effect_type: str = "AI_MESSAGE",
         max_effect_count: int = 3,
     ) -> dict[str, Any]:
-        return self.controller.scoped_authorization(
-            task_id=self.task_id,
+        """Mint authority through the external controlled-entry path (AD-1/AD-3).
+
+        Controller self-grant is forbidden by design (V14 sect A64 / controller.py
+        scoped_authorization is a read-only lookup). The only lawful way to obtain
+        an authorization for an attack fixture is to route through the decision
+        nonce + grant_authorization controlled entry, mirroring
+        test_v09_attack_matrix_on_b1_core.patched_authorization.
+        """
+        resource = "resource-a"
+        identity = self.controller.controller_instance_id
+        scope = {
+            "provider": provider,
+            "destination": destination,
+            "resource": resource,
+            "purpose": purpose,
+            "effect_type": effect_type,
+            "data_classes": ["PUBLIC"],
+            "identity": identity,
+        }
+        nonce = self.controller.store.issue_decision_nonce(
+            self.task_id, scope, user_decision_reference="external-authority:v09-close"
+        )
+        return self.controller.store.grant_authorization(
+            self.task_id,
+            nonce["decision_nonce"],
+            scope,
             provider=provider,
-            destination=destination,
+            resource=resource,
             purpose=purpose,
             effect_type=effect_type,
-            data_classes=["PUBLIC"],
             max_effect_count=max_effect_count,
-            user_decision_reference="fake-human-reference-v09",
         )
 
     def intent(
@@ -146,6 +172,8 @@ class Fixture:
         reversibility: str = "REVERSIBLE",
         effect_scope: str = "EXTERNAL",
         critical_params: dict[str, Any] | None = None,
+        effect_type: str = "AI_MESSAGE",
+        data_classification: str = "PUBLIC",
     ) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
@@ -162,6 +190,8 @@ class Fixture:
             "impact": impact,
             "reversibility": reversibility,
             "effect_scope": effect_scope,
+            "effect_type": effect_type,
+            "data_classification": data_classification,
         }
 
     def execute(
@@ -361,6 +391,14 @@ def _crown_unknown(fx: Fixture, *, slot: str) -> tuple[dict[str, Any], Reservati
     return auth, _reservation_for_slot(fx, slot), reality
 
 
+def _restart_fixture(fx: Fixture) -> Fixture:
+    """AD-4: give the fixture a brand new Controller instance over the same state root."""
+    fx.controller.close()
+    fx.controller = Controller(fx.config_path)
+    fx.lease = fx.controller.acquire_lease()
+    return fx
+
+
 def _unknown_before_effect(fx: Fixture, *, slot: str, external_state: str) -> tuple[dict[str, Any], Reservation, CountedExternalReality]:
     auth = fx.authorization(max_effect_count=3)
     reality = CountedExternalReality()
@@ -533,6 +571,9 @@ def run_case(case: dict[str, Any]) -> AttackObservation:
             return _obs(case, observed, external_effect_count=reality.real_effect_count,
                         final_effect_status=str(replay["reservation"].status), authorization_identity=auth["authorization_id"])
         if cid == "V09-R18":
+            # AD-5: scored against the adjudicated expectation with identity proofs.
+            case = dict(case)
+            case["expected_outcome"] = R18_ADJUDICATED_EXPECTATION
             reality = CountedExternalReality()
             fx.execute(auth=auth, intent=fx.intent(slot="same-slot-diff", payload="payload-one"),
                        adapter=reality.succeed, resource_id="conflict-r1")
@@ -541,7 +582,28 @@ def run_case(case: dict[str, Any]) -> AttackObservation:
                            adapter=reality.succeed, resource_id="conflict-r2")
             except GateDenied as exc:
                 return _obs(case, "CONFLICT_OR_DENY", external_effect_count=reality.real_effect_count, detail=str(exc))
-            return _obs(case, "ALLOW", external_effect_count=reality.real_effect_count)
+            rows = fx.controller.store.connection.execute(
+                "SELECT logical_effect_id, logical_effect_slot, attempt_id, effect_intent_hash,"
+                " COUNT(*) OVER (PARTITION BY logical_effect_id) AS copies"
+                " FROM actions WHERE task_id=?",
+                (fx.task_id,),
+            ).fetchall()
+            distinct_ids = {row["logical_effect_id"] for row in rows}
+            same_slot = {row["logical_effect_slot"] for row in rows}
+            distinct_hashes = {row["effect_intent_hash"] for row in rows}
+            independent = len(rows) == 2 and all(row["copies"] == 1 for row in rows)
+            ok = (
+                reality.real_effect_count == 2
+                and len(distinct_ids) == 2
+                and len(distinct_hashes) == 2
+                and len(same_slot) == 1
+                and independent
+            )
+            return _obs(case, "ALLOW_DISTINCT_EFFECT" if ok else "ALLOW_NOT_DISTINCT",
+                        external_effect_count=reality.real_effect_count,
+                        detail=f"AD-5 identity proof: slots={sorted(same_slot)} "
+                               f"logical_effect_ids={len(distinct_ids)} intent_hashes={len(distinct_hashes)} "
+                               f"action_rows={len(rows)} independent_reservations={independent}")
         if cid == "V09-R19":
             auth2, reservation, reality = _crown_unknown(fx, slot="crown-r19")
             status = fx.action_status(reservation)
@@ -563,12 +625,20 @@ def run_case(case: dict[str, Any]) -> AttackObservation:
                         detail=f"ordinary retry returned deduplicated={replay.get('deduplicated')}")
         if cid == "V09-R21":
             auth2, reservation, reality = _crown_unknown(fx, slot="crown-r21")
-            replay = fx.execute(auth=auth2, intent=fx.intent(slot="crown-r21"), adapter=reality.succeed,
+            # AD-4: replay must be issued by a NEW Controller instance over the same state root.
+            # A same-instance ordinary retry is correctly denied by the store as
+            # "reconciliation required first" (V14 sect 27A); the R21 measurement is the
+            # cross-instance replay, matching test_v09_attack_matrix_on_b1_core AD-4.
+            _restart_fixture(fx)
+            replay_auth = fx.authorization(max_effect_count=4)
+            replay = fx.execute(auth=replay_auth, intent=fx.intent(slot="crown-r21"), adapter=reality.succeed,
                                 resource_id="crown-r21-restart")
             observed = "RECONCILE_FIRST" if (replay.get("reconciliation_required") is True and
                                              reality.real_effect_count == 1) else "DEDUPLICATED_WITHOUT_RECONCILE"
             return _obs(case, observed, external_effect_count=reality.real_effect_count,
-                        final_effect_status=fx.action_status(reservation), reconciliation_result="REQUIRED")
+                        final_effect_status=fx.action_status(reservation), reconciliation_result="REQUIRED",
+                        authorization_identity=replay_auth["authorization_id"],
+                        detail="AD-4: replay issued by a new Controller instance over the same state root")
         if cid in ("V09-R22", "V09-R23", "V09-R24"):
             if cid == "V09-R22":
                 auth2, reservation, reality = _crown_unknown(fx, slot="crown-r22")
@@ -634,8 +704,20 @@ def run_case(case: dict[str, Any]) -> AttackObservation:
                 return _obs(case, "FAIL_CLOSED", detail=f"{type(exc).__name__}: {exc}")
             return _obs(case, "ALLOW")
         if cid == "V09-R34":
-            weird_auth = fx.authorization(effect_type="TOTALLY_UNKNOWN_EFFECT_TYPE", max_effect_count=1)
             reality = CountedExternalReality()
+            grant_error: Exception | None = None
+            try:
+                weird_auth = fx.authorization(effect_type="TOTALLY_UNKNOWN_EFFECT_TYPE", max_effect_count=1)
+            except Exception as exc:
+                grant_error = exc
+                weird_auth = None
+            if grant_error is not None:
+                # AD-7 (matches test_v09_attack_matrix_on_b1_core): closed effect model
+                # refuses the unknown effect_type at issuance (store.grant_authorization),
+                # which is itself fail-closed. Attribution records the closure side.
+                side = "issuance_side(store.grant_authorization)"
+                return _obs(case, "FAIL_CLOSED", external_effect_count=reality.real_effect_count,
+                            detail=f"AD-7 closed at {side}: {type(grant_error).__name__}: {grant_error}")
             try:
                 fx.execute(auth=weird_auth, intent=fx.intent(slot="unknown-effect-type"), adapter=reality.succeed)
             except Exception as exc:
