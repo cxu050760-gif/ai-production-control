@@ -307,12 +307,35 @@ yz_acquire_conv() {
       fi
     fi
   fi
-  # 模式请求路径:复用/新建会话 → 新对话页选模式 → 落 flag(发送后收尾产出新 URL)
+  # 模式请求路径(2026-09-01 首炮修正): 优先续用种子会话——审查上下文(角色初始化+GOAL)
+  # 都在种子对话里,拆了即丢上下文。仅当种子不可达/模式不符/非空闲时,
+  # 才去新对话页选模式开新会话(落 flag,发送后收尾产出新 URL)。
   if [ -n "$mode" ]; then
     if [ -z "$sid" ] || ! "$DEV" session list 2>/dev/null | grep -qE "^${sid}[[:space:]]"; then
       sid=$(timeout 45 "$DEV" session start 2>&1 | tr -d '\r' | grep -oE '^[a-z]{4}$' | head -1)
       [ -z "$sid" ] && sid=$(timeout 45 "$DEV" session start 2>&1 | tr -d '\r' | grep -oE '^[a-z]{4}$' | head -1)
       [ -z "$sid" ] && { echo ""; return 1; }
+    fi
+    "$DEV" navigate "$conv_url" --session "$sid" >/dev/null 2>&1
+    sleep 6
+    # 双采样防误回退: evaluate 瞬时失败/渲染慢会把健康种子误判成不可用,
+    # 重演丢上下文事故——首验未过隔 3 秒复读一次再定。
+    local seed_url="" seed_pm="" seed_gs="" seed_ok=NO try
+    for try in 1 2; do
+      seed_url=$("$DEV" evaluate --session "$sid" "location.href" 2>/dev/null | tr -d '\r\n')
+      seed_pm=$(yz_ds_page_mode "$sid")
+      seed_gs=$(yz_gen_state "$sid")
+      if [ "$seed_url" = "$conv_url" ] && [ "$seed_pm" = "$mode" ] && [ "$seed_gs" = "IDLE" ]; then
+        seed_ok=YES; break
+      fi
+      [ "$try" = "1" ] && sleep 3
+    done
+    if [ "$seed_ok" = "YES" ]; then
+      # 种子会话健康且模式匹配 → 原地续用(不开新对话、不落 flag,RUN 保持原 r_url)
+      echo "ds" > "/tmp/yz_sid_host_${sid}.txt" 2>/dev/null
+      echo "$sid" > "$mapfile" 2>/dev/null
+      yz_ds_discover_clip "$sid"
+      echo "$sid"; return 0
     fi
     "$DEV" navigate "https://chat.deepseek.com/" --session "$sid" >/dev/null 2>&1
     sleep 5
