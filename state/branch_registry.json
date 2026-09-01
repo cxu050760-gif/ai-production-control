@@ -1,7 +1,7 @@
 {
  "schema": "BRANCH_REGISTRY_1",
  "updated_at": "2026-09-01",
- "updated_by": "WA (stage D final alignment, merge-branch head unset as active working ref)",
+ "updated_by": "WA (final micro-task: tmp-v09-ignore deleted per user authorization)",
  "policy": [
   "Unregistered branches are treated as SPECULATIVE (fail-closed: unknown = untrusted).",
   "Role transitions require an entry in DECISION_LEDGER with actor.",
@@ -226,12 +226,6 @@
    "role": "DELETE_CANDIDATE",
    "head": "da6ab1e5",
    "note": "merged into master (ancestor da6ab1e); pending remote deletion (stage D)"
-  },
-  {
-   "name": "tmp-v09-ignore",
-   "role": "DELETE_CANDIDATE",
-   "head": "f9ffbb3f",
-   "note": "NOT merged (4 unique commits, workflow file); KEEP pending human adjudication"
   },
   {
    "name": "v1.1-blackbox",

@@ -100,3 +100,14 @@
 - 删除 7 个已删分支条目；master head → 76f2188；hardening/p0-gates-20260831 → ARCHIVE（head cce2ca6）；v1.1-blackbox → ARCHIVE；追加 merge/hardening-20260901（TRUNK_CANDIDATE）、backup/master-pre-hardening-merge（ARCHIVE）。
 
 > 本执行记录遵循任务书纪律：仅删 `--merged` 确认完全合入的分支；未合入一律保留；远端删除仅限 tmp-unused/tmp-unused2（tmp-v09-ignore 保留待裁决）。
+
+
+---
+
+## 处置记录（2026-09-01 终局收尾）
+
+**origin/tmp-v09-ignore 已删除**（用户授权，终局微任务）：
+- 前置核验：本报告第 3 节已记录其 4 个独有提交（f9ffbb3/41b6984/692df25/14578be，v0.9 时代猜测性 CI workflow）；主线已由其他路径合并，验证方式已被矩阵 v4 取代。
+- 执行：本地无该分支（仅有远端跟踪，无需 git branch -D）；远端 `git push origin --delete tmp-v09-ignore` → 输出 `- [deleted] tmp-v09-ignore`；`git fetch origin --prune` 后 origin/tmp-* 清空。
+- 至此 origin/tmp-unused、origin/tmp-unused2、origin/tmp-v09-ignore 三个废弃分支全部删除完毕（前两个在阶段 D 删除，本次删除最后一个）。
+- branch_registry 中 tmp-v09-ignore 条目同步移除。
