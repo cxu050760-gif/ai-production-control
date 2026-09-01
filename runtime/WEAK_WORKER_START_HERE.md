@@ -53,6 +53,17 @@ run start --goal "<GOAL>" --r-url "<R_URL>" --worker-id "<你的名字>"
 ```
 记下返回的 run_id；此后一切命令带 `--run-id <run_id>`。
 
+## 通道与模式（2026-09-01 起，你无需做任何额外动作）
+
+- R_URL 可以来自两个通道，由 URL 自动识别，调用方式完全相同：
+  ChatGPT `https://chatgpt.com/c/<id>`；DeepSeek `https://chat.deepseek.com/a/chat/s/<id>`。
+- DeepSeek 的三模式（快速/专家/识图）由 runtime **按任务内容自动路由**
+  （带图片附件→识图；难任务→专家；其余→快速），并在需要时自动开新对话。
+  你不需要、也不应该在正文里描述或请求模式；模式选择不是你的一部分。
+- 强制指定模式是**用户/宿主**的权力（环境变量 `APC_DS_MODE=fast|expert|vision`）；
+  弱模型不要自行设置环境变量。
+- 铁律 2 不变：模式切换、会话管理、上传、等待全部在 runtime 箱内完成，你只管 `send`/`recv`。
+
 ## 中途接班（压缩/重启/换 Worker/换模型后）
 
 不要相信自己的记忆。只读两个文件恢复：
