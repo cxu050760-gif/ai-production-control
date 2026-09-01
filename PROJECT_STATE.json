@@ -60,20 +60,20 @@
  "trunk_policy": {
   "master": {
    "branch": "master",
-   "head": "76f218808eb7196c07c8efd95821e040f9c13423",
+   "head": "509670655e0163a8177894dc2b2b3fca9bca9214",
    "status": "CURRENT",
-   "note": "2026-09-01: hardening/p0-gates-20260831 (114 commits, v1.1-blackbox line) merged into master via merge/hardening-20260901 76f2188; master-side DeepSeek increment (dual-channel three-mode, WB_DONE protocol, effect-safety triple, RECONCILE) preserved; prior history: V1.0 engineering close 793fa41/tag v1.0-engineering-close"
+   "note": "2026-09-01: hardening/p0-gates-20260831 merged into master (final push 5096706); master HEAD = 5096706; master-side DeepSeek increment preserved; prior history: V1.0 engineering close 793fa41/tag v1.0-engineering-close"
   }
  },
  "baselines": {
   "current_development_head": {
    "branch": "master",
-   "head": "76f218808eb7196c07c8efd95821e040f9c13423",
-   "verdict": "DEV_HEAD_SYNCED_2026_09_01_MERGED_HARDENING",
+   "head": "509670655e0163a8177894dc2b2b3fca9bca9214",
+   "verdict": "DEV_HEAD_SYNCED_2026_09_01_FINAL_PUSH",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "76f218808eb7196c07c8efd95821e040f9c13423"
+    "value": "509670655e0163a8177894dc2b2b3fca9bca9214"
    }
 
   },
