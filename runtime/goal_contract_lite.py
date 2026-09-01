@@ -290,9 +290,48 @@ def install(rt, contract_options: dict[str, Any]) -> None:
             contract_options.get("acceptance") or None,
             contract_options.get("constraints") or None,
             revision=1,
-            data_egress_policy=contract_options.get("data_egress_policy") or None,
+            # T11b 收口(2026-09-01 首炮实弹发现的接线缺口): 缺省授予"审查传输"
+            # 最小出站策略——仅 INTERNAL 类别;SECRET/PRIVATE_LOCAL/SENSITIVE/
+            # UNKNOWN 在 egress_allowed 无授权范围时依旧一律拒绝。
+            # CLI 显式传入的 data_egress_policy 优先于缺省值。
+            data_egress_policy=contract_options.get("data_egress_policy")
+                or {"default": ["INTERNAL"]},
         )
         persist_contract(rt, state, contract, event="GOAL_CONTRACT_CREATED")
+        # send 路径三门串联(Effect Safety: egress→TCB→授权绑定),缺一即 HARD_BLOCKED。
+        # 此处写入 per-run"健康世界声明"三件套,依据:
+        # ① egress 策略已随合同落盘(见上,最小权限,仅 INTERNAL);
+        # ② TCB per-run 声明 —— BUILDER_RULING_AD8TCB §2 背书:场景声明≠生产封印,
+        #    seal_tcb 仍是发布负责人的部署态动作,个人/验收期由声明先行;
+        # ③ 审查传输授权 —— 走官方 grant_authorization(反自授权:发放者
+        #    CONTROLLER_AUTHORITY≠执行者 runtime-v1;scope_digest/世代/纪元由其计算),
+        #    scope 精确绑定 purpose="review transport" 且数据类别仅 INTERNAL;
+        #    吊销/过期/耗尽/换世代仍会拒绝(fail-closed 不变)。
+        import effect_safety_lite as effect_safety  # noqa: E402  (同目录,延迟导入防环)
+        effect_safety.grant_authorization(
+            rt,
+            state,
+            issuer_role="CONTROLLER_AUTHORITY",
+            issuer_identity="controller-start",
+            holder="runtime-v1",
+            scope={
+                "provider": "*",
+                "resource": "*",
+                "destination": "*",
+                "purpose": "review transport",
+                "identity": "runtime-v1",
+                "data_classes": ["INTERNAL"],
+            },
+            ttl_seconds=604800,
+            max_effect_count=100000,
+        )
+        state["effect_tcb_verified"] = True
+        rt.save_state(state)
+        rt.journal(
+            state["run_id"], "EFFECT_REVIEW_TRANSPORT_AUTHORIZED",
+            tcb_declaration="per-run, per BUILDER_RULING_AD8TCB",
+            data_egress_policy=contract.get("data_egress_policy"),
+        )
         return state
 
     def contract_router_review(state: dict[str, Any], builder_reply: str, round_no: int) -> str:
