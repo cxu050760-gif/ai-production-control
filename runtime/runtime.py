@@ -129,6 +129,32 @@ def yz_mapfile_for(r_url: str) -> str:
     host, cid = conv_id_of(r_url)
     return f"/tmp/yz_conv_sid_ds_{cid}.txt" if host == "ds" else f"/tmp/yz_conv_sid_{cid}.txt"
 
+
+DS_MODES = ("fast", "expert", "vision")
+_DS_HARD_KW = ("架构", "设计", "根因", "重构", "审查", "评审", "排查", "诊断", "分析",
+               "评估", "对比", "推理", "方案", "规划", "原因", "为什么", "总结",
+               "diff", "review", "analyze", "root cause", "refactor", "design", "architecture")
+_DS_IMG_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+
+
+def route_ds_mode(task_text: str = "", files=None) -> str:
+    """DeepSeek 三模式路由(2026-09-01): 识图=图片附件, 专家=难任务(多关键词命中或长文本),
+    其余=快速。优先级: APC_DS_MODE 显式指定 > 自动路由(APC_DS_ROUTE=0 可关) > fast。
+    模式绑定会话且中途不可切:仅用于 ds host,在 acquire/reattach 阶段强制。"""
+    forced = os.environ.get("APC_DS_MODE", "").strip().lower()
+    if forced in DS_MODES:
+        return forced
+    if os.environ.get("APC_DS_ROUTE", "1").strip() == "0":
+        return "fast"
+    names = [Path(f).name.lower() for f in (files or [])]
+    if any(n.endswith(_DS_IMG_EXT) for n in names):
+        return "vision"
+    text = (task_text or "").lower()
+    hits = sum(1 for k in _DS_HARD_KW if k in text)
+    if len(text) > 600 or hits >= 2:
+        return "expert"
+    return "fast"
+
 INTERNAL_STRINGS = [
     YZ_LIB,
     YZ_LIB_DS,
@@ -773,7 +799,11 @@ def ensure_bridge_ready(force: bool = False) -> dict:
 # Transport scripts (encapsulated bridge access)
 # ---------------------------------------------------------------------------
 def send_script(r_url: str, msg_file_posix: str, files: list[str], reply_out_posix: str, timeout: int,
-                stored_sid: str = "") -> str:
+                stored_sid: str = "", ds_mode: str = "") -> str:
+    # DeepSeek 的回形针选择器是 CSS module 哈希且随 composer 形态/模式页变化,每次上传前
+    # 必须重发现;chooser 拦截在模式选择后偶发未就绪,ds 路径用 yz_ds_upload_once(内含
+    # 重发现+3s 重试),gpt 路径保持原直调字节不变
+    ds_upload = conv_id_of(r_url)[0] == "ds"
     uploads = []
     for f in files:
         leaf = Path(f).name
@@ -782,10 +812,16 @@ def send_script(r_url: str, msg_file_posix: str, files: list[str], reply_out_pos
         # keyword can fail to match even when the attachment is present. Match on
         # a short sanitized prefix instead (adapter-side; canonical lib untouched).
         kw = re.sub(r"[^A-Za-z0-9_.-]", "", stem)[:16] or re.sub(r"[^A-Za-z0-9_.-]", "", leaf)[:8]
-        uploads.append(
-            f'UPERR=$("$DEV" upload --session "$SID" --selector "$FILEINPUT" --file "{to_posix(f)}" 2>&1) '
-            f'|| {{ echo "RUNTIME_UPLOAD_FAIL={leaf} stage=upload raw=$(printf %s "$UPERR" | tr -d \'\\r\\n\' | tail -c 160)"; exit 0; }}'
-        )
+        if ds_upload:
+            uploads.append(
+                f'UPERR=$(yz_ds_upload_once "$SID" "{to_posix(f)}" 2>&1) '
+                f'|| {{ echo "RUNTIME_UPLOAD_FAIL={leaf} stage=upload raw=$(printf %s "$UPERR" | tr -d \'\\r\\n\' | tail -c 160)"; exit 0; }}'
+            )
+        else:
+            uploads.append(
+                f'UPERR=$("$DEV" upload --session "$SID" --selector "$FILEINPUT" --file "{to_posix(f)}" 2>&1) '
+                f'|| {{ echo "RUNTIME_UPLOAD_FAIL={leaf} stage=upload raw=$(printf %s "$UPERR" | tr -d \'\\r\\n\' | tail -c 160)"; exit 0; }}'
+            )
         if kw != stem:
             # full-stem first (diagnostic + exact), short prefix fallback (truncation)
             uploads.append(
@@ -821,20 +857,28 @@ if [ "$SU" = "$RURL" ] && [ "$G" = "GEN" ]; then
 fi
 RURLT=$(printf %s "$RURL" | tr -d ' ')
 if [ "$SU" != "$RURLT" ] || [ "$G" != "IDLE" ]; then
-  SID=$(yz_acquire_conv "$RURL")
+  SID=$(yz_acquire_conv "$RURL" "$DSMODE")
   ACQ_MODE=acquire
+fi
+if [ "$SU" = "$RURLT" ] && [ "$G" = "IDLE" ] && [ -n "$DSMODE" ]; then
+  ENS=$(yz_ds_ensure_mode "$SID" "$DSMODE")
+  case "$ENS" in
+    SWITCHED) ACQ_MODE=mode_switch ;;
+    FAIL) SID=$(yz_acquire_conv "$RURLT" "$DSMODE"); ACQ_MODE=acquire ;;
+  esac
 fi
 echo "RUNTIME_ACQ_MODE=$ACQ_MODE"
 echo "RUNTIME_DBG=su=$SU g=$G"
 """
     else:
-        acquire = ('SID=$(yz_acquire_conv "$RURL")\n'
+        acquire = ('SID=$(yz_acquire_conv "$RURL" "$DSMODE")\n'
                    'echo "RUNTIME_ACQ_MODE=acquire"\n'
                    'echo "RUNTIME_DBG=su=- g=-"\n')
     return f"""set -u
 {PATH_PROLOGUE}
 source {yz_lib_for(r_url)} >/dev/null 2>&1
 RURL='{r_url}'
+DSMODE='{ds_mode}'
 {acquire}echo "RUNTIME_SID=$SID"
 if [ -z "$SID" ]; then echo "RUNTIME_SEND=ACQUIRE_FAILED"; exit 0; fi
 {upload_block}
@@ -844,6 +888,13 @@ echo "RUNTIME_SEND=$RES"
 case "$RES" in DONE|DONE_NO_MARKER)
   yz_recv_last "$SID" "{reply_out_posix}"
   echo "RUNTIME_RECV_SID=$YZ_SID"
+  NURL=""; DPMODE=""
+  if [ -n "$DSMODE" ]; then
+    NURL=$(yz_ds_finalize_new_conv "$SID" "$RURL")
+    DPMODE=$(yz_ds_page_mode "$SID")
+  fi
+  echo "RUNTIME_NEW_URL=$NURL"
+  echo "RUNTIME_DS_MODE=$DPMODE"
 ;; esac
 exit 0
 """
@@ -1427,10 +1478,15 @@ def cmd_send(args) -> int:
         send_result = None
         markers: dict = {}
         stored_sid = (state.get("session") or {}).get("sid") or ""
+        # DeepSeek 三模式路由(仅 ds host):识图=图片附件,专家=难任务,其余=快速;
+        # 模式绑定会话,不匹配时由 ds lib 在 acquire/reattach 阶段转新对话并回写新 URL。
+        ds_mode = ""
+        if conv_id_of(state["r_url"])[0] == "ds":
+            ds_mode = route_ds_mode(args.message, [f for f, _ in delta_files])
         while True:
             script = send_script(state["r_url"], to_posix(str(msg_file)),
                                  [f for f, _ in delta_files], to_posix(str(reply_file)), args.timeout,
-                                 stored_sid=stored_sid)
+                                 stored_sid=stored_sid, ds_mode=ds_mode)
             t0 = time.time()
             try:
                 proc = bash_run(script, timeout=args.timeout + 240)
@@ -1523,6 +1579,15 @@ def cmd_send(args) -> int:
         # The bridge's short-reply fallback can hand back a different session or
         # leave intermediate orphan sessions; consolidation happens once at the
         # end (after requeries) so a conversation never accumulates sessions.
+        # DeepSeek 模式切换会开新会话:按 RUNTIME_NEW_URL 重定向 RUN 的 r_url,
+        # 后续 requery/recv/cleanup 全部走新会话。
+        new_r_url = markers.get("RUNTIME_NEW_URL", "")
+        if (new_r_url and conv_id_of(state["r_url"])[0] == "ds"
+                and R_URL_DS_RE.match(new_r_url) and new_r_url != state["r_url"]):
+            journal(args.run_id, "DS_MODE_RETARGET", old_r_url=state["r_url"], new_r_url=new_r_url,
+                    ds_mode=ds_mode)
+            state["r_url"] = new_r_url
+            save_state(state)
         main_sid = markers.get("RUNTIME_SID", "")
         recv_sid = markers.get("RUNTIME_RECV_SID", "")
         final_sid = recv_sid or main_sid
@@ -1535,6 +1600,7 @@ def cmd_send(args) -> int:
         _record_action(state, fingerprint)
         journal(args.run_id, "SEND_OK", result=send_result, files_uploaded=[Path(f).name for f, _ in delta_files],
                 files_skipped=skipped, sid=final_sid, acq_mode=markers.get("RUNTIME_ACQ_MODE", ""),
+                ds_mode=ds_mode, final_ds_mode=markers.get("RUNTIME_DS_MODE", ""),
                 dbg=markers.get("RUNTIME_DBG", ""), recv_sid=recv_sid)
 
         # verdict parsing with bounded auto-requery (weak Worker never guesses)
