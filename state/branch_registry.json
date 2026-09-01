@@ -1,7 +1,7 @@
 {
  "schema": "BRANCH_REGISTRY_1",
  "updated_at": "2026-09-01",
- "updated_by": "WA (stage D final alignment)",
+ "updated_by": "WA (stage D final alignment, head->09a2f32)",
  "policy": [
   "Unregistered branches are treated as SPECULATIVE (fail-closed: unknown = untrusted).",
   "Role transitions require an entry in DECISION_LEDGER with actor.",
@@ -248,8 +248,8 @@
   {
    "name": "merge/hardening-20260901",
    "role": "TRUNK_CANDIDATE",
-   "head": "6b51cf8",
-   "note": "stage B/C/D merge branch: hardening merge 76f2188 + stage C state 022042e + stage D cleanup 6b51cf8; to become master at stage E"
+   "head": "09a2f32",
+   "note": "stage B/C/D merge branch: hardening merge 76f2188 + stage C 022042e + stage D cleanup 09a2f32; to become master at stage E"
   },
   {
    "name": "backup/master-pre-hardening-merge",
