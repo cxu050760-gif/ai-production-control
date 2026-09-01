@@ -1402,6 +1402,12 @@ def cmd_directive(args) -> int:
                                     "follow next_action guidance before any resend."
                                     % (args.effect_id[:12], rec.get("status")))
         elif action == "USER_OVERRIDE":
+            # 用户权威重置: 解锁阻塞态之外,顺带重置 EC 熔断计数——语义=
+            # "用户确认已处理失败原因(如更换审查会话),给传输一个全新预算"。
+            # EC 防呆本身不变:新失败仍会照常累计并再次熔断(2026-09-01 终局:
+            # EC says CHANGE_TOOL/REQUEUE 但两者无指令入口,此处即其宿主接线)。
+            if isinstance(state.get("ec"), dict):
+                state["ec"]["consecutive_failures"] = 0
             if s in ("HARD_BLOCKED", "STOPPED"):
                 state["status"] = "RUNNING"
                 state["paused"] = False
