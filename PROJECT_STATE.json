@@ -1,26 +1,78 @@
 {
  "schema": "PROJECT_STATE_1",
- "generated_at": "2026-08-28",
+ "generated_at": "2026-09-01",
  "generated_by": "takeover-planning-session (actor=planner-brain, verified via repo clone + local test runs)",
  "release_status": "READY_FOR_USER_ACCEPTANCE",
  "current_stage": "V1_ENGINEERING_CLOSED",
+ "capabilities_2026_09_01": {
+ "deepseek_dual_channel_three_mode": {
+  "commits": [
+   {
+    "short": "9e1f99c",
+    "full": "9e1f99c7f100f1668747d579ae0a04fdca7a2755",
+    "msg": "feat(runtime): DeepSeek web channel + host-aware bridge hardening (2026-09-01)"
+   },
+   {
+    "short": "fffd0d3",
+    "full": "fffd0d327a9d4534f86e5ad7ca98c58815cdeae9",
+    "msg": "feat(runtime): DeepSeek three-mode routing (fast/expert/vision) with conversation-bound mode enforcement"
+   },
+   {
+    "short": "63208d5",
+    "full": "63208d5c3b19b62675f76b58aec85c46e25dfaa3",
+    "msg": "docs: teach the worker AI that DeepSeek is now a first-class channel"
+   }
+  ],
+  "summary": "DeepSeek dual-channel three-mode (fast/expert/vision); runtime auto-routes by task content and locks mode per conversation; R_URL accepts chatgpt.com/c/<id> and chat.deepseek.com/a/chat/s/<id>, same invocation"
+ },
+ "wb_done_neutral_protocol": {
+  "commits": [
+   {
+    "short": "8525138",
+    "full": "8525138b2b05bd79d8b9a8ce70fd38d2f4dd2440",
+    "msg": "refactor(protocol): rename completion marker to neutral ===WB_DONE=== across both channels"
+   }
+  ],
+  "summary": "completion marker renamed from CHATGPT_DONE to neutral ===WB_DONE=== on both channels"
+ },
+ "effect_safety_triple_wiring": {
+  "commits": [
+   {
+    "short": "2f1188a",
+    "full": "2f1188ad81a3a101cf23752a4d72895eab9ff0b2",
+    "msg": "fix(runtime): wire the review-transport effect triple at RUN start"
+   }
+  ],
+  "summary": "effect-safety triple wired at RUN start (runtime/goal_contract_lite.py): 1) minimal egress policy defaulting to INTERNAL only (explicit CLI policy wins); 2) per-run TCB declaration (endorsed by BUILDER_RULING_AD8TCB sect2; seal_tcb remains a deploy-time action); 3) review-transport authorization via grant_authorization (issuer=CONTROLLER_AUTHORITY, holder=runtime-v1, purpose=review transport, data_classes=INTERNAL, TTL 604800s); journal event EFFECT_REVIEW_TRANSPORT_AUTHORIZED"
+ },
+ "seed_session_preference": {
+  "commits": [
+   {
+    "short": "9e1f99c",
+    "full": "9e1f99c7f100f1668747d579ae0a04fdca7a2755",
+    "msg": "feat(runtime): DeepSeek web channel + host-aware bridge hardening (2026-09-01)"
+   }
+  ],
+  "summary": "seed session reused preferentially (runtime/lib/yz_ds_lib.sh: mode-request path reuses the healthy seed session first; double-sample guard against false negatives; opens another only when seed unreachable/mode-mismatch/busy, to keep review context)"
+ }
+},
  "trunk_policy": {
   "master": {
    "branch": "master",
-   "head": "793fa412c049ffc2dfba0293f397d447e67f7147",
+   "head": "2f1188ad81a3a101cf23752a4d72895eab9ff0b2",
    "status": "CURRENT",
-   "note": "merged v0.9-b1/authority-effect-core (V1.0 engineering close, FINAL_SIGNING_PACKAGE Part 3, 2026-08-30); tag v1.0-engineering-close"
+   "note": "merged v0.9-b1/authority-effect-core (V1.0 engineering close, FINAL_SIGNING_PACKAGE Part 3, 2026-08-30); tag v1.0-engineering-close; 2026-09-01 capability landing (DeepSeek dual-channel three-mode, WB_DONE neutral protocol, effect-safety triple wiring) tracked on HEAD 2f1188a"
   }
  },
  "baselines": {
   "current_development_head": {
    "branch": "master",
-   "head": "9407f49cced9b146346f6a7453387964fdd1c954",
-   "verdict": "ENGINEERING_CLOSED",
+   "head": "2f1188ad81a3a101cf23752a4d72895eab9ff0b2",
+   "verdict": "DEV_HEAD_SYNCED_2026_09_01",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "9407f49cced9b146346f6a7453387964fdd1c954"
+    "value": "2f1188ad81a3a101cf23752a4d72895eab9ff0b2"
    }
   },
   "current_accepted_base": {
@@ -213,7 +265,8 @@
   "Q2 spec/v0.9-b1 (authorization/effect separation variant): merge or abandon",
   "Q3 V0.10 first real goal class (proposal: local file/code tasks)",
   "Q4 when to rule deletion of 5 DELETE_CANDIDATE branches",
-  "Q5 backfill version mapping table for V0.2-V0.4 chat-era planning"
+  "Q5 backfill version mapping table for V0.2-V0.4 chat-era planning",
+  "Q6 whether to delete tmp-unused / tmp-unused2 / tmp-v09-ignore (cleanup report docs/ops/branch-cleanup-report.md written 2026-09-01; no deletion executed, pending adjudication)"
  ],
  "do_not_reopen": [
   "axiom layer (Canonical State / Effect WAL / Authority Journal) redesign",
