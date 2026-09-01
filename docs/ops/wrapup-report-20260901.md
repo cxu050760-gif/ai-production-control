@@ -69,3 +69,19 @@
 - 未 force push、未 reset --hard、未删未合入分支（branch -D 未用，全用 -d）
 - 现场库 E:\WB\workspace\2026-08-16-21-49-32\work\ 只读对照（未修改）
 - 环境摩擦：WSL 损坏（bash.exe→execvpe 失败，改用 Git bash 做语法检查）、DeepSeek 专家模式不支持附件（改为文本分次传送）——均已如实报告
+
+
+---
+
+## 终局微任务豁免记录（2026-09-01 · L3 未验收状态的如实镜像，非永久豁免）
+
+任务书要求"重跑 runtime 全部离线套件 50/50 全绿"。实际枚举（含子目录）：51 个离线套件中 **50 个 PASS**（49 顶层 + runtime/adapters/test_worker_adapter_d1_offline.py），1 个按用户豁免记录如下：
+
+| 要素 | 内容 |
+|---|---|
+| 套件名 | `runtime/adapters/test_r_adapter_d1_offline.py` |
+| UNCONFIGURED 原因 | 需真实 provider API key——`runtime/adapters/r_adapter.config.example.json` 已声明"施工环境无真实 key：UNCONFIGURED 即正确，真实调用留业主 L3"（`r_adapter.py` 499-502 行同文） |
+| 转绿条件 | 业主在 L3 验收时注入真实 provider key（`api_key_env` 对应环境变量）后自动转绿，届时 r_adapter 适配能力同时激活 |
+| 性质定性 | fail-closed 设计行为，**非缺陷** |
+
+**50/50 口径**：50 = 全部离线套件中应绿的 50 个（49 顶层 + worker_adapter）；test_r_adapter_d1_offline.py 因上述 L3 依赖豁免（用户 2026-09-01 终局微任务裁决），不计入 50/50 验收。豁免为"L3 未验收状态的如实镜像"，非永久豁免——L3 业主注入真实 key 后该套件自动转绿并激活 r_adapter 真实 Provider 能力。
