@@ -239,13 +239,20 @@ yz_send_text() {
       sleep 1
     fi
     yz_ds_click_send "$sid" >/dev/null 2>&1
-    for w in 1 2 3 4 5 6 7 8 9 10; do
+    # 气泡等待 30s(2026-09-01 3连发事故: 长会话慢页面下提交实际已落,
+    # 仅确认窗口不够→误判失败→重发成重复。加窗+终扫把"慢"与"败"分开。)
+    for w in $(seq 1 30); do
       uc=$("$DEV" evaluate --session "$sid" "document.body.innerText.includes('${task_id}')?'YES':'NO'" 2>/dev/null | tr -d '\r\n')
       [ "$uc" = "YES" ] && { sent=YES; break; }
       sleep 1
     done
     [ "$sent" = "YES" ] && break
   done
+  if [ "$sent" != "YES" ]; then
+    # 终扫: 放弃前最后一次确认,防止"迟到成功"被记成 OUTCOME_UNKNOWN
+    uc=$("$DEV" evaluate --session "$sid" "document.body.innerText.includes('${task_id}')?'YES':'NO'" 2>/dev/null | tr -d '\r\n')
+    [ "$uc" = "YES" ] && sent=YES
+  fi
   if [ "$sent" != "YES" ]; then echo "SEND_FAILED"; return 1; fi
   # 回复等待:marker 主判据 + 长度稳定 25s 容错
   local marker="===WB_DONE:${task_id}==="
@@ -259,7 +266,9 @@ yz_send_text() {
     case "$l" in ''|*[!0-9]*) l=0;; esac
     if [ "$l" -gt 0 ]; then
       if [ "$l" != "$last_len" ]; then last_len="$l"; stable_since=$(date +%s)
-      elif [ "$stable_since" -gt 0 ] && [ $(( $(date +%s) - stable_since )) -ge 25 ]; then
+      elif [ "$stable_since" -gt 0 ] && [ $(( $(date +%s) - stable_since )) -ge 45 ]; then
+        # 45s(2026-09-01): 专家模式长思考期长度可长时间不变,25s 会把"思考中"误判成
+        # "回复完成但缺标记"。45s 仍能在真完成后较快收敛。
         echo "DONE_NO_MARKER"; return 0
       fi
     else

@@ -93,7 +93,7 @@ MAX_BRIDGE_RETRIES = 3
 MAX_SESSION_RECOVERIES = 2
 MAX_UPLOAD_RETRIES = 2
 MAX_VERDICT_REQUERIES = 2
-DEFAULT_SEND_TIMEOUT = 300
+DEFAULT_SEND_TIMEOUT = 900
 LOCK_STALE_SEC = 180
 
 R_URL_RE = re.compile(r"^https://chatgpt\.com/c/[A-Za-z0-9-]{8,}$")
@@ -430,7 +430,7 @@ def allowed_actions(state: dict) -> list[str]:
     if s == "PAUSED":
         return ["status", "directive(RESUME|STOP|USER_OVERRIDE)"]
     if s == "HARD_BLOCKED":
-        return ["status", "metrics", "directive(USER_OVERRIDE)"]
+        return ["status", "metrics", "directive(RECONCILE|USER_OVERRIDE)"]
     if s == "STOPPED":
         return ["status", "metrics", "directive(USER_OVERRIDE)"]
     return ["status", "metrics"]
@@ -1287,7 +1287,7 @@ def cmd_step(args) -> int:
 
 def cmd_directive(args) -> int:
     action = args.action.upper()
-    if action not in ("PAUSE", "RESUME", "STOP", "R_URL_CHANGE", "CHANGE_SCOPE", "USER_OVERRIDE"):
+    if action not in ("PAUSE", "RESUME", "STOP", "R_URL_CHANGE", "CHANGE_SCOPE", "USER_OVERRIDE", "RECONCILE"):
         emit({"status": "INVALID_DIRECTIVE", "action": args.action})
         return EXIT_USAGE
     state, code = _load_or_fail(args.run_id)
@@ -1350,6 +1350,33 @@ def cmd_directive(args) -> int:
         elif action == "CHANGE_SCOPE":
             state["scope_notes"].append({"note": args.note or "", "at": utc_now()})
             state["next_action"] = "Scope changed by user directive; re-read goal + scope_notes before acting."
+        elif action == "RECONCILE":
+            # 用户对"结果不明"效果的正式对账(2026-09-01 首次实弹的运输层未知结果):
+            # 机制早已存在(reconcile_effect),此处接线暴露给用户。不改 RUN 状态——
+            # 解锁 HARD_BLOCKED 请另发 USER_OVERRIDE。
+            if not args.effect_id:
+                emit({"status": "MISSING_EFFECT_ID",
+                      "instruction": "RECONCILE requires --effect-id <logical_effect_id> "
+                                     "--observed occurred|not_occurred --note <evidence>."})
+                return EXIT_USAGE
+            if args.observed not in ("occurred", "not_occurred"):
+                emit({"status": "INVALID_OBSERVED", "instruction": "--observed must be occurred or not_occurred."})
+                return EXIT_USAGE
+            import types as _types
+            import effect_safety_lite as effect_safety  # noqa: E402  (同目录)
+            rt_shim = _types.SimpleNamespace(save_state=save_state, journal=journal)
+            try:
+                rec = effect_safety.reconcile_effect(
+                    rt_shim, state, args.effect_id,
+                    observed_succeeded=(args.observed == "occurred"),
+                    evidence={"note": args.note or "", "source": "user-directive", "decided_by": "user"},
+                )
+            except effect_safety.EffectSafetyError as exc:
+                emit({"status": "RECONCILE_DENIED", "reason": str(exc)})
+                return EXIT_DENIED
+            state["next_action"] = ("Effect %s reconciled by user directive (%s); "
+                                    "follow next_action guidance before any resend."
+                                    % (args.effect_id[:12], rec.get("status")))
         elif action == "USER_OVERRIDE":
             if s in ("HARD_BLOCKED", "STOPPED"):
                 state["status"] = "RUNNING"
@@ -2388,6 +2415,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--run-id", dest="run_id", required=True)
     s.add_argument("action")
     s.add_argument("--new-r-url", dest="new_r_url", default=None)
+    s.add_argument("--effect-id", dest="effect_id", default=None)
+    s.add_argument("--observed", dest="observed", default=None, choices=["occurred", "not_occurred"])
     s.add_argument("--note", default=None)
 
     s = sub.add_parser("send")
