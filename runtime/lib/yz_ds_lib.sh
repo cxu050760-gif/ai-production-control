@@ -210,30 +210,45 @@ yz_ds_click_send() {
   return 1
 }
 
+# textarea 当前长度(填充/提交核验用)
+yz_ds_ta_len() {
+  "$DEV" evaluate --session "$1" "(()=>{const ta=document.querySelector('textarea');return ta?(ta.value||'').length:-1;})()" 2>/dev/null | tr -d '\r\n'
+}
+
 # ---------------------------------------------------------------------------
-# 文本发送(与 ChatGPT 同一 task_id / ===CHATGPT_DONE=== marker 协议)
+# 文本发送(与 ChatGPT 同一 task_id / ===WB_DONE=== marker 协议;2026-09-01 起更名,原 ===CHATGPT_DONE===)
 # ---------------------------------------------------------------------------
 yz_send_text() {
   local sid="$1" text="$2" timeout="${3:-300}"
   local task_id; task_id=$(yz_new_task_id)
   YZ_TASK_ID="$task_id"
   local tag="[WB_TASK:${task_id}]"
-  local full="${tag} ${text} 最后一行必须严格单独输出：===CHATGPT_DONE:${task_id}==="
-  local sent=NO i v
-  for i in 1 2; do
+  local full="${tag} ${text} 最后一行必须严格单独输出：===WB_DONE:${task_id}==="
+  local sent=NO i v uc w
+  # 三层防护(2026-09-01 T5 空会话事故): 模式选择后 React 重挂载窗口内,fill 的 DOM value
+  # 可能未进入 React 状态,点击发送会提交"空消息"并创建空会话壳(textarea 清空+URL 变化
+  # 都会发生,但用户气泡不存在)。故: ①填充后核验长度,短了重填;②提交后核验页面出现
+  # 本任务唯一 task_id 的用户气泡(旧气泡/旧会话不含本 id,不误报);③未落地整轮重试。
+  for i in 1 2 3; do
     yz_ds_fill_react "$sid" "$full" >/dev/null 2>&1
+    sleep 1
+    v=$(yz_ds_ta_len "$sid"); case "$v" in ''|*[!0-9]*) v=0;; esac
+    if [ "$v" -lt 30 ]; then
+      sleep 2
+      yz_ds_fill_react "$sid" "$full" >/dev/null 2>&1
+      sleep 1
+    fi
     yz_ds_click_send "$sid" >/dev/null 2>&1
-    local dl=$(( $(date +%s) + 15 ))
-    while [ "$(date +%s)" -lt "$dl" ]; do
-      v=$("$DEV" evaluate --session "$sid" "(()=>{const ta=document.querySelector('textarea');return ta?(ta.value||'').length:-1;})()" 2>/dev/null | tr -d '\r\n')
-      if [ "$v" = "0" ]; then sent=YES; break; fi
-      sleep 0.8
+    for w in 1 2 3 4 5 6 7 8 9 10; do
+      uc=$("$DEV" evaluate --session "$sid" "document.body.innerText.includes('${task_id}')?'YES':'NO'" 2>/dev/null | tr -d '\r\n')
+      [ "$uc" = "YES" ] && { sent=YES; break; }
+      sleep 1
     done
     [ "$sent" = "YES" ] && break
   done
   if [ "$sent" != "YES" ]; then echo "SEND_FAILED"; return 1; fi
   # 回复等待:marker 主判据 + 长度稳定 25s 容错
-  local marker="===CHATGPT_DONE:${task_id}==="
+  local marker="===WB_DONE:${task_id}==="
   local start_ts hard_dl
   start_ts=$(date +%s)
   hard_dl=$(( start_ts + timeout ))

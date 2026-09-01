@@ -309,7 +309,7 @@ async function chatgpt() {
       return envelope(status, {url: page.url(), title: await page.title(), composer_counts, signals, screenshot, profile_identity_hash: profileIdentity(request.profile_path)});
     }
     const marker = `===CP_REQUEST:${request.logical_effect_id}:${request.outgoing_nonce}===`;
-    const done = `===CHATGPT_DONE:${request.task_id}:${request.response_nonce}===`;
+    const done = `===WB_DONE:${request.task_id}:${request.response_nonce}===`;
     const existingUser = page.locator('div[data-message-author-role="user"]', {hasText: marker});
     let submitted = (await existingUser.count()) > 0;
     if (!submitted) {

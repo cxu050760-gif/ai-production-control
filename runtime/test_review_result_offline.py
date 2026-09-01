@@ -127,7 +127,7 @@ def main() -> int:
     # ---- RR1: PASS verdict returns into durable state with full binding ----
     rr1 = work / "rr1"
     rr1.mkdir()
-    convs1 = {R1: {"sid": "rsid-rr1", "replies": ["===REVIEW_VERDICT=== PASS\n===CHATGPT_DONE:rr1==="]}}
+    convs1 = {R1: {"sid": "rsid-rr1", "replies": ["===REVIEW_VERDICT=== PASS\n===WB_DONE:rr1==="]}}
     cfg1, log1 = write_script(rr1, convs1)
     env1 = seam_env(wrap, cfg1)
     rid1 = start_run(rr1, env1)

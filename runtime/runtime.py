@@ -1004,7 +1004,7 @@ def parse_verdict(text: str) -> tuple[str | None, str]:
         if v in ("PASS", "REWORK", "BLOCKED"):
             verdict = v
     next_action = ""
-    m2 = re.search(r"===\s*NEXT_ACTION\s*===([\s\S]*?)(?:===CHATGPT_DONE|$)", text)
+    m2 = re.search(r"===\s*NEXT_ACTION\s*===([\s\S]*?)(?:===CHATGPT_DONE|===WB_DONE|$)", text)
     if m2:
         next_action = m2.group(1).strip()[:4000]
     return verdict, next_action

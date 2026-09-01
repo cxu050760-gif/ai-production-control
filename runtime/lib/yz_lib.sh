@@ -16,7 +16,7 @@ YZ_CONV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/YZ_WRITER_URL.txt"
 YZ_ASSISTANT_BEFORE=0
 # 当前 session（卡尾帧重 attach 后由 yz_recv_last 更新；调用方据此切换后续操作的 SID）
 YZ_SID=""
-# 当前任务唯一 ID（每次发送自动生成；回复以 ===CHATGPT_DONE:<YZ_TASK_ID>=== 结束）
+# 当前任务唯一 ID（每次发送自动生成；回复以 ===WB_DONE:<YZ_TASK_ID>=== 结束）
 YZ_TASK_ID=""
 # 最近一次等待期间是否见过 stop-button（诊断用，不作为 DONE 门槛）
 YZ_STOP_SEEN=0
@@ -197,7 +197,7 @@ yz_ds_send_text() {
   local task_id; task_id=$(yz_new_task_id)
   YZ_TASK_ID="$task_id"
   local tag="[WB_TASK:${task_id}]"
-  local full="${tag} ${text} 最后一行必须严格单独输出：===CHATGPT_DONE:${task_id}==="
+  local full="${tag} ${text} 最后一行必须严格单独输出：===WB_DONE:${task_id}==="
   local base; base=$(yz_ds_assistant_count "$sid")
   case "$base" in ''|*[!0-9]*) base=0;; esac
   local sent=NO i v
@@ -214,7 +214,7 @@ yz_ds_send_text() {
   done
   if [ "$sent" != "YES" ]; then echo "SEND_FAILED"; return 1; fi
   # 回复等待：marker 主判据 + 长度稳定 25s 容错（DeepSeek 思考期无 assistant 文本不误判）
-  local marker="===CHATGPT_DONE:${task_id}==="
+  local marker="===WB_DONE:${task_id}==="
   local start_ts hard_dl
 start_ts=$(date +%s)
 hard_dl=$(( start_ts + timeout ))
@@ -244,7 +244,7 @@ yz_ds_recv_last() {
 
 # ---------------------------------------------------------------------------
 # 核心：回复完成判定（marker 优先 + SLOW_WAIT）
-#   最高优先级：最后一条 assistant 出现 ===CHATGPT_DONE:<task_id>=== 即 DONE
+#   最高优先级：最后一条 assistant 出现 ===WB_DONE:<task_id>=== 即 DONE
 #   NORMAL_WAIT(normal秒)：高频轮询(0.8s)，期间没 marker 不判死
 #   SLOW_WAIT：normal 秒后进入低频轮询(6s)，保持原 task/conversation，不重发不新建
 #   HARD_TIMEOUT(hard秒)：从发送成功起总计超时才真正 TIMEOUT
@@ -259,7 +259,7 @@ yz_ds_recv_last() {
 # ---------------------------------------------------------------------------
 yz_wait_reply_done() {
   local sid="$1" normal="${2:-90}" hard="${3:-300}" task_id="$4" base_pre="${5:-}"
-  local marker="===CHATGPT_DONE:${task_id}==="
+  local marker="===WB_DONE:${task_id}==="
   local stop_seen=0
   YZ_STOP_SEEN=0
   YZ_SLOW_WAIT=0
@@ -405,7 +405,7 @@ yz_send_text() {
   local task_id; task_id=$(yz_new_task_id)
   YZ_TASK_ID="$task_id"
   local tag="[WB_TASK:${task_id}]"
-  local full="${tag} ${text} 最后一行必须严格单独输出：===CHATGPT_DONE:${task_id}==="
+  local full="${tag} ${text} 最后一行必须严格单独输出：===WB_DONE:${task_id}==="
   # 点击发送前采集 assistant 基线（修复快回复被吞进基线的竞态），作为第5参数传入 wait
   local base_acount; base_acount=$(yz_assistant_count "$sid")
   case "$base_acount" in ''|*[!0-9]*) base_acount=0;; esac
@@ -435,7 +435,7 @@ yz_send_file() {
   local kw="${leaf%.*}"
   yz_wait_attachment "$sid" "$kw" 30 || return 1
   local tag="[WB_TASK:${task_id}]"
-  local full="${tag} ${msg} 最后一行必须严格单独输出：===CHATGPT_DONE:${task_id}==="
+  local full="${tag} ${msg} 最后一行必须严格单独输出：===WB_DONE:${task_id}==="
   # 点击发送前采集 assistant 基线（修复快回复被吞进基线的竞态），作为第5参数传入 wait
   local base_acount; base_acount=$(yz_assistant_count "$sid")
   case "$base_acount" in ''|*[!0-9]*) base_acount=0;; esac

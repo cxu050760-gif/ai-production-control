@@ -158,7 +158,7 @@ def main() -> int:
                          "candidate v2: header fixed to 'Header'"]},
         R1: {"sid": "rsid-0001",
              "replies": ["===REVIEW_VERDICT=== REWORK\n===NEXT_ACTION=== Fix the header spelling.",
-                         "===REVIEW_VERDICT=== PASS\n===CHATGPT_DONE:round2==="]},
+                         "===REVIEW_VERDICT=== PASS\n===WB_DONE:round2==="]},
     }
     cfg2, log2 = write_script(s2, convs2)
     code, out, raw = run_cli(s2, ["router-run", "--goal-file", str(goal2), "--b-url", B1, "--r-url", R1,

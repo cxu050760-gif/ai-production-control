@@ -14,7 +14,7 @@
 - **R**＝ChatGPT 审查者。**R-PROD**＝生产审查会话；它的 url 只能从 `E:\执衡\05_资源\会话注册.json` 里取——打开文件找 `roles` → `R-PROD` → `url` 字段（以 `https://chatgpt.com/c/` 开头，不要拿别的字段）；**E-LAB**＝实验会话，当前未指派，它的 url 是 null/UNASSIGNED 属于**正常现象**，不要慌、不要自己填一个、不要新建会话。
 - **PASS / REWORK / BLOCKED**＝R 裁决的三种结果：通过／按它说的部分返工再交／停止并上报。
 - **桥（Bridge）**＝自动操作 ChatGPT 网页收发消息的整条链路；**bsk**＝桥的底层浏览器控制程序；**daemon**＝bsk 的后台服务（端口 52900，空闲会自己停，不用人工管）。
-- **marker**＝R 回复末尾的完成标记 `===CHATGPT_DONE:...===`；**DONE_NO_MARKER**＝回复完整但缺标记时的容错判定。
+- **marker**＝R 回复末尾的完成标记 `===WB_DONE:...===`（2026-09-01 起的中立命名，适配 ChatGPT/DeepSeek 双通道；此前历史记录中为 `===CHATGPT_DONE:...===`，旧证据文件不改）；**DONE_NO_MARKER**＝回复完整但缺标记时的容错判定。
 - **Runtime 黑盒**＝只用 run.cmd 的高层命令（work/report/status/health），底层桥的细节由它代管，你不用懂也不用碰。
 - **冻结**＝已验证并封存的资产：没有新失败证据 + 负责人授权，禁止修改。
 - **canonical / stale**＝唯一权威版本／已作废禁止使用的版本。
