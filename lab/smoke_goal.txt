@@ -1,0 +1,5 @@
+GOAL: 在 lab/ 目录创建 FINAL_RUNTIME_SMOKE_TEST.txt，内容严格三行：
+FINAL_RUNTIME_SMOKE_TEST
+37*24=888
+STATUS=READY_FOR_REVIEW
+创建后重新读取复核。然后通过 Runtime 把完成结果提交给 R 审查（R URL 见 --r-url）。严格按 Runtime 返回的 next_action/next_command 继续，完成 GOAL 后用 report 命令提交报告。仅在 R PASS + Runtime DONE 时完成。

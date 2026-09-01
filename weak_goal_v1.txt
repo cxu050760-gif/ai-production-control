@@ -1,0 +1,13 @@
+[WEAK_AI_RUNTIME_V1 最终验收任务]
+
+本 RUN 是 Weak-AI Runtime V1 的最终真实验收。请完成以下小任务：
+
+1. 创建文件 E:\WB\tools\ai-production-control\weak_acceptance_result.txt，内容为两行：
+   第一行：WEAK_ACCEPTANCE_OK
+   第二行：当前日期，格式 YYYYMMDD
+
+2. 第一次报告：只声明"文件已创建"，不要在报告正文中附文件内容，等待审阅方判定。
+
+3. 若审阅方要求返工（REWORK）：只做审阅方明确要求的最小修改，然后按 Runtime 给出的 next_command 再次报告。
+
+4. 直到 Runtime 输出 run_status=DONE（审阅方 PASS）才算完成。全程只通过 Runtime 入口行动。

@@ -60,6 +60,7 @@ GLOBAL_LOG = STATE_ROOT / "cli_log.jsonl"
 
 BASH = r"C:\Program Files\Git\bin\bash.exe"
 YZ_LIB = os.environ.get("APC_RUNTIME_YZ_LIB", "/e/WB/workspace/2026-08-16-21-49-32/work/yz_lib.sh")
+YZ_LIB_DS = os.environ.get("APC_RUNTIME_YZ_LIB_DS", "/e/WB/workspace/2026-08-16-21-49-32/work/yz_ds_lib.sh")
 BRIDGE_WRAPPER = os.environ.get("APC_RUNTIME_BRIDGE_WRAPPER", "/c/Users/17838/.local/bin/chatgpt_bridge")
 
 # Canonical browser bootstrap chain (P0-A). Per the frozen Bridge handover
@@ -99,9 +100,38 @@ R_URL_RE = re.compile(r"^https://chatgpt\.com/c/[A-Za-z0-9-]{8,}$")
 RUN_ID_RE = re.compile(r"^RUN-[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$")
 CONV_ID_RE = re.compile(r"/c/([A-Za-z0-9-]+)")
 CANDIDATE_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+R_URL_DS_RE = re.compile(r"^https://chat\.deepseek\.com/a/chat/s/[A-Za-z0-9-]{8,}$")
+
+
+def is_valid_r_url(url: str) -> bool:
+    """R_URL accepts either web host: ChatGPT or DeepSeek conversation."""
+    return bool(R_URL_RE.match(url or "") or R_URL_DS_RE.match(url or ""))
+
+
+def conv_id_of(r_url: str) -> tuple:
+    """(host, conv_id): host in {'gpt','ds'}; conv_id unique per conversation."""
+    m = CONV_ID_RE.search(r_url or "")
+    if m:
+        return "gpt", m.group(1)
+    m = re.search(r"/a/chat/s/([A-Za-z0-9-]+)", r_url or "")
+    if m:
+        return "ds", m.group(1)
+    return ("ds" if "deepseek.com" in (r_url or "") else "gpt"), "unknown"
+
+
+def yz_lib_for(r_url: str) -> str:
+    """Per-host bridge driver lib: DeepSeek RUNs load yz_ds_lib.sh."""
+    return YZ_LIB_DS if conv_id_of(r_url)[0] == "ds" else YZ_LIB
+
+
+def yz_mapfile_for(r_url: str) -> str:
+    """Canonical sid mapfile path for this conversation (must match the lib)."""
+    host, cid = conv_id_of(r_url)
+    return f"/tmp/yz_conv_sid_ds_{cid}.txt" if host == "ds" else f"/tmp/yz_conv_sid_{cid}.txt"
 
 INTERNAL_STRINGS = [
     YZ_LIB,
+    YZ_LIB_DS,
     BRIDGE_WRAPPER,
     "bsk-file-bridge",
     "bsk.exe",
@@ -533,10 +563,28 @@ def bash_run(script: str, timeout: float) -> subprocess.CompletedProcess:
         # Deterministic scripted-transport seam (Slice A): per-conversation
         # replies from APC_RUNTIME_INJECT_SCRIPT_FILE. Real bridge untouched.
         return _seam_script_run(script)
-    return subprocess.run(
+    # 2026-09-01 加固:原 subprocess.run(timeout) 超时仅杀 bash 本体,
+    # bsk 等孙进程继承管道句柄不关,run() 内部的无界 communicate 会永久阻塞
+    # (现场:python+3bash 僵尸 20 分钟)。改为 Popen + 超时后 taskkill /T /F 杀整树。
+    proc = subprocess.Popen(
         [BASH, "-c", script],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=timeout,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+    )
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                       capture_output=True)
+        try:
+            out, err = proc.communicate(timeout=15)
+        except subprocess.TimeoutExpired:
+            out, err = b"", b"RUNTIME_BASH_KILL_TREE_INCOMPLETE"
+    return subprocess.CompletedProcess(
+        [BASH], proc.returncode,
+        (out or b"").decode("utf-8", errors="replace"),
+        (err or b"").decode("utf-8", errors="replace"),
     )
 
 
@@ -785,7 +833,7 @@ echo "RUNTIME_DBG=su=$SU g=$G"
                    'echo "RUNTIME_DBG=su=- g=-"\n')
     return f"""set -u
 {PATH_PROLOGUE}
-source {YZ_LIB} >/dev/null 2>&1
+source {yz_lib_for(r_url)} >/dev/null 2>&1
 RURL='{r_url}'
 {acquire}echo "RUNTIME_SID=$SID"
 if [ -z "$SID" ]; then echo "RUNTIME_SEND=ACQUIRE_FAILED"; exit 0; fi
@@ -804,7 +852,7 @@ exit 0
 def recv_script(sid: str, r_url: str, reply_out_posix: str) -> str:
     return f"""set -u
 {PATH_PROLOGUE}
-source {YZ_LIB} >/dev/null 2>&1
+source {yz_lib_for(r_url)} >/dev/null 2>&1
 RURL='{r_url}'
 SID='{sid}'
 if [ -z "$SID" ]; then
@@ -820,14 +868,12 @@ exit 0
 
 
 def session_cleanup_script(sid: str, r_url: str) -> str:
-    conv = CONV_ID_RE.search(r_url)
-    conv_id = conv.group(1) if conv else "unknown"
     stop = f'"$DEV" session stop "{sid}" >/dev/null 2>&1' if sid else "true"
     return f"""set -u
 {PATH_PROLOGUE}
-source {YZ_LIB} >/dev/null 2>&1
+source {yz_lib_for(r_url)} >/dev/null 2>&1
 {stop}
-rm -f "/tmp/yz_conv_sid_{conv_id}.txt"
+rm -f "{yz_mapfile_for(r_url)}"
 echo "CLEANUP_OK"
 """
 
@@ -840,7 +886,7 @@ def session_is_healthy(sid: str, r_url: str) -> bool:
         return False
     script = f"""set -u
 {PATH_PROLOGUE}
-source {YZ_LIB} >/dev/null 2>&1
+source {yz_lib_for(r_url)} >/dev/null 2>&1
 "$DEV" session list 2>/dev/null | grep -qE "^{sid}[[:space:]]" || {{ echo "SESS_HEALTH=ABSENT"; exit 0; }}
 SU=$("$DEV" evaluate --session "{sid}" "location.href" 2>/dev/null | tr -d '\\r\\n')
 G=$(yz_gen_state "{sid}")
@@ -863,11 +909,10 @@ def session_hygiene_script(keep_sid: str, r_url: str) -> str:
     the one we keep, then point the canonical mapfile at the keeper. Only fires
     when the bridge's own short-reply fallback spawned extra sessions, so the
     steady-state fast path pays nothing. Never touches other conversations."""
-    conv = CONV_ID_RE.search(r_url)
-    conv_id = conv.group(1) if conv else ""
+    _host, conv_id = conv_id_of(r_url)
     return f"""set -u
 {PATH_PROLOGUE}
-source {YZ_LIB} >/dev/null 2>&1
+source {yz_lib_for(r_url)} >/dev/null 2>&1
 for s in $("$DEV" session list 2>/dev/null | grep -oE '^[a-z]{{4}}'); do
   u=$("$DEV" evaluate --session "$s" "location.href" 2>/dev/null | tr -d '\\r\\n')
   case "$u" in
@@ -876,7 +921,7 @@ for s in $("$DEV" session list 2>/dev/null | grep -oE '^[a-z]{{4}}'); do
     ;;
   esac
 done
-echo "{keep_sid}" > "/tmp/yz_conv_sid_{conv_id}.txt"
+echo "{keep_sid}" > "{yz_mapfile_for(r_url)}"
 echo "HYGIENE_OK"
 """
 
@@ -1047,9 +1092,10 @@ def cmd_start(args) -> int:
               "instruction": "Stop. Every new RUN requires an explicit R_URL from the user. "
                              "Do not inherit, guess, or create one. Ask the user for the R_URL."})
         return EXIT_MISSING_R_URL
-    if not R_URL_RE.match(args.r_url):
+    if not is_valid_r_url(args.r_url):
         emit({"status": "INVALID_R_URL", "r_url": args.r_url,
-              "instruction": "R_URL must look like https://chatgpt.com/c/<id>. Stop and ask the user."})
+              "instruction": "R_URL must be a ChatGPT (https://chatgpt.com/c/<id>) or DeepSeek "
+                             "(https://chat.deepseek.com/a/chat/s/<id>) conversation. Stop and ask the user."})
         return EXIT_MISSING_R_URL
     if not args.goal or not args.goal.strip():
         emit({"status": "MISSING_GOAL", "instruction": "start requires --goal."})
@@ -1199,7 +1245,7 @@ def cmd_directive(args) -> int:
     if action == "R_URL_CHANGE" and not args.new_r_url:
         emit({"status": "MISSING_R_URL", "instruction": "R_URL_CHANGE requires --new-r-url (explicitly provided by the user)."})
         return EXIT_MISSING_R_URL
-    if args.new_r_url and not R_URL_RE.match(args.new_r_url):
+    if args.new_r_url and not is_valid_r_url(args.new_r_url):
         emit({"status": "INVALID_R_URL", "r_url": args.new_r_url})
         return EXIT_MISSING_R_URL
     with RunLock(args.run_id):
@@ -1662,9 +1708,10 @@ def cmd_work(args) -> int:
               "instruction": "Stop. work requires --r-url explicitly provided by the user. "
                              "Do not inherit, guess, or create one. Ask the user for the R_URL."})
         return EXIT_MISSING_R_URL
-    if not R_URL_RE.match(args.r_url):
+    if not is_valid_r_url(args.r_url):
         emit({"status": "INVALID_R_URL", "r_url": args.r_url,
-              "instruction": "R_URL must look like https://chatgpt.com/c/<id>. Stop and ask the user."})
+              "instruction": "R_URL must be a ChatGPT (https://chatgpt.com/c/<id>) or DeepSeek "
+                             "(https://chat.deepseek.com/a/chat/s/<id>) conversation. Stop and ask the user."})
         return EXIT_MISSING_R_URL
     gf = Path(args.goal_file or "")
     if not gf.exists():
@@ -1795,8 +1842,9 @@ ROUTER_PHASES_PENDING = ("SEND_GOAL_TO_BUILDER", "SEND_TO_REVIEWER", "SEND_REWOR
 
 
 def _router_conv_id(url: str) -> str:
-    m = CONV_ID_RE.search(url or "")
-    return m.group(1) if m else ""
+    """Host-qualified conversation identity ('gpt:<id>'/'ds:<id>'); '' if unknown."""
+    host, cid = conv_id_of(url or "")
+    return f"{host}:{cid}" if cid != "unknown" else ""
 
 
 def _router_create(goal: str, b_url: str, r_url: str, worker_id: str, max_rounds: int) -> dict:
@@ -2007,18 +2055,20 @@ def _router_validate_urls(b_url: str | None, r_url: str | None) -> tuple[dict | 
                  "instruction": "Stop. router commands require --b-url explicitly provided (the frozen "
                                 "builder conversation). Do not inherit, guess, or create one."},
                 EXIT_MISSING_R_URL)
-    if not R_URL_RE.match(b_url):
+    if not is_valid_r_url(b_url):
         return ({"status": "INVALID_B_URL", "b_url": b_url,
-                 "instruction": "B_URL must look like https://chatgpt.com/c/<id>. Stop and ask the user."},
+                 "instruction": "B_URL must be a ChatGPT (https://chatgpt.com/c/<id>) or DeepSeek "
+                                "(https://chat.deepseek.com/a/chat/s/<id>) conversation. Stop and ask the user."},
                 EXIT_MISSING_R_URL)
     if not r_url:
         return ({"status": "MISSING_R_URL",
                  "instruction": "Stop. router commands require --r-url explicitly provided (the frozen "
                                 "reviewer conversation). Do not inherit, guess, or create one."},
                 EXIT_MISSING_R_URL)
-    if not R_URL_RE.match(r_url):
+    if not is_valid_r_url(r_url):
         return ({"status": "INVALID_R_URL", "r_url": r_url,
-                 "instruction": "R_URL must look like https://chatgpt.com/c/<id>. Stop and ask the user."},
+                 "instruction": "R_URL must be a ChatGPT (https://chatgpt.com/c/<id>) or DeepSeek "
+                                "(https://chat.deepseek.com/a/chat/s/<id>) conversation. Stop and ask the user."},
                 EXIT_MISSING_R_URL)
     cb, cr = _router_conv_id(b_url), _router_conv_id(r_url)
     if cb and cb == cr:

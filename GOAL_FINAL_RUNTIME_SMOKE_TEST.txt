@@ -1,0 +1,10 @@
+GOAL: 在当前工作空间 E:\WB\tools\ai-production-control 创建文件 lab\FINAL_RUNTIME_SMOKE_TEST.txt
+文件内容必须严格为三行（含换行）：
+FINAL_RUNTIME_SMOKE_TEST
+37*24=888
+STATUS=READY_FOR_REVIEW
+
+创建后重新读取该文件，确认三行内容完全一致。
+然后通过 Runtime 把完成结果提交给 R 审查（R_URL: https://chatgpt.com/c/6a846fbf-439c-83e8-aaa4-dfdfdf82332b）。
+完成 GOAL 后，把执行结果写入 UTF-8 报告文件，并使用 Runtime 返回的 report 命令提交给 R。
+目标完成状态：R PASS + Runtime DONE。

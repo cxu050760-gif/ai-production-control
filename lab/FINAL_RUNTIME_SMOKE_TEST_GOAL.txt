@@ -1,0 +1,6 @@
+在当前工作空间创建：lab\FINAL_RUNTIME_SMOKE_TEST.txt
+文件内容必须严格为三行：
+FINAL_RUNTIME_SMOKE_TEST
+37*24=888
+STATUS=READY_FOR_REVIEW
+创建后重新读取该文件，确认三行内容完全一致。然后通过 Runtime 把完成结果提交给 R 审查。
