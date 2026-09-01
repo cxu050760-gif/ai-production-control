@@ -1,273 +1,285 @@
 {
- "schema": "BRANCH_REGISTRY_1",
- "updated_at": "2026-08-30",
- "updated_by": "recovery-controller (FINAL_SIGNING_PACKAGE Part 3)",
- "policy": [
-  "Unregistered branches are treated as SPECULATIVE (fail-closed: unknown = untrusted).",
-  "Role transitions require an entry in DECISION_LEDGER with actor.",
-  "CANDIDATE_RED must never be registered as TRUNK without green evidence bound to the candidate SHA.",
-  "Physical deletion is never automatic; DELETE_CANDIDATE requires explicit user ruling."
- ],
- "roles_legend": {
-  "TRUNK": "merged official line (currently stale; master merge deferred)",
-  "CANDIDATE_RED": "development head, known-red, not promotable",
-  "ACCEPTED_BASE": "project-designated accepted base for the current version",
-  "ACTIVE": "decision pending, work may continue",
-  "ARCHIVE": "superseded/merged content; keep for history, no new work",
-  "DELETE_CANDIDATE": "awaiting explicit user ruling before physical deletion"
- },
- "branches": [
-  {
-   "name": "master",
-   "role": "TRUNK",
-   "head": "9407f49c",
-   "note": "CURRENT; V1.0 engineering close + successor master report (registry synced per pitfall 9)"
+  "schema": "BRANCH_REGISTRY_1",
+  "updated_at": "2026-08-31",
+  "updated_by": "successor-session (handoff sync)",
+  "policy": [
+    "Unregistered branches are treated as SPECULATIVE (fail-closed: unknown = untrusted).",
+    "Role transitions require an entry in DECISION_LEDGER with actor.",
+    "CANDIDATE_RED must never be registered as TRUNK without green evidence bound to the candidate SHA.",
+    "Physical deletion is never automatic; DELETE_CANDIDATE requires explicit user ruling."
+  ],
+  "roles_legend": {
+    "TRUNK": "merged official line (currently stale; master merge deferred)",
+    "CANDIDATE_RED": "development head, known-red, not promotable",
+    "ACCEPTED_BASE": "project-designated accepted base for the current version",
+    "ACTIVE": "decision pending, work may continue",
+    "ARCHIVE": "superseded/merged content; keep for history, no new work",
+    "DELETE_CANDIDATE": "awaiting explicit user ruling before physical deletion"
   },
-  {
-   "name": "v0.9-b2/authority-effect-evidence",
-   "role": "CANDIDATE_RED",
-   "head": "f74d48e2",
-   "note": "historical dev line (2026-08-28); superseded by v0.9-b1 merged into master (V1.0 engineering close)"
-  },
-  {
-   "name": "v0.9-b1/authority-effect-core",
-   "role": "ARCHIVE",
-   "head": "7c5669ae",
-   "note": "已合入 master，V1.0 工程收口 (merged into master at 793fa41, 2026-08-30)"
-  },
-  {
-   "name": "spec/v0.9-b1/authority-effect-core",
-   "role": "ACTIVE",
-   "head": "075480d3",
-   "note": "authorization/effect separation variant; OPEN QUESTION Q2: merge or abandon"
-  },
-  {
-   "name": "v0.8-integrate/adapter-final-4",
-   "role": "ACCEPTED_BASE",
-   "head": "e8c53d4a",
-   "note": "LAST_GREEN_BASE (repo-side tested green); pinned by v0.9 evidence module EXPECTED_BASE"
-  },
-  {
-   "name": "spec/v0.9-b2/authority-effect-evidence",
-   "role": "ARCHIVE",
-   "head": "ed15bd2a",
-   "note": "spec-side evidence artifact; superseded by v0.9-b2 publication"
-  },
-  {
-   "name": "spec/v0.8-final-candidate-anchor",
-   "role": "ARCHIVE",
-   "head": "b65a5126",
-   "note": "anchor spec for v0.8 final candidate"
-  },
-  {
-   "name": "v0.8-integrate/adapter-final-3",
-   "role": "DELETE_CANDIDATE",
-   "head": "0bb53362",
-   "note": "superseded by final-4"
-  },
-  {
-   "name": "v0.8-b1/adapter-core",
-   "role": "ARCHIVE",
-   "head": "a6634383",
-   "note": "content merged into integrate line"
-  },
-  {
-   "name": "v0.8-b2/adapter-registry",
-   "role": "ARCHIVE",
-   "head": "321db59f",
-   "note": "content merged into integrate line"
-  },
-  {
-   "name": "v0.8-b3/adapter-evidence",
-   "role": "ARCHIVE",
-   "head": "7860bd7e",
-   "note": "content merged into integrate line"
-  },
-  {
-   "name": "v0.8-b3/adapter-evidence-recovery-1",
-   "role": "ARCHIVE",
-   "head": "59c37944",
-   "note": "rework line, merged"
-  },
-  {
-   "name": "manual/v07-integrate2-core",
-   "role": "ARCHIVE",
-   "head": "027170c4",
-   "note": "v0.7 manual integration, superseded by v0.8 line"
-  },
-  {
-   "name": "manual/v07-integrate2-verify",
-   "role": "ARCHIVE",
-   "head": "5f4d7e99",
-   "note": "verification counterpart"
-  },
-  {
-   "name": "manual/v07-rework-core",
-   "role": "ARCHIVE",
-   "head": "0f1fee3d",
-   "note": "rework counterpart"
-  },
-  {
-   "name": "manual/v07-rework-verify",
-   "role": "ARCHIVE",
-   "head": "a184e2bd",
-   "note": "rework verification counterpart"
-  },
-  {
-   "name": "v0.7-int/relay-merge",
-   "role": "ARCHIVE",
-   "head": "c660d454",
-   "note": "inert strategic scaffold (disabled by default) merged forward"
-  },
-  {
-   "name": "v0.7-sb/strategic-brain-1",
-   "role": "ARCHIVE",
-   "head": "576756ae",
-   "note": "strategic brain contract line"
-  },
-  {
-   "name": "v0.7-sr/strategic-reuse-1",
-   "role": "ARCHIVE",
-   "head": "a9d4ba60",
-   "note": "strategic reuse contract line"
-  },
-  {
-   "name": "v0.7-c/c-correction-1",
-   "role": "ARCHIVE",
-   "head": "cad2977d",
-   "note": "route correction line"
-  },
-  {
-   "name": "v0.6-c/telemetry-replay",
-   "role": "ARCHIVE",
-   "head": "d84472d5",
-   "note": "EC telemetry slice D"
-  },
-  {
-   "name": "v0.6-c/telemetry-replay2",
-   "role": "ARCHIVE",
-   "head": "9d94dd4b",
-   "note": "replay iteration 2"
-  },
-  {
-   "name": "v0.6-c/telemetry-replay3",
-   "role": "ARCHIVE",
-   "head": "fd99281b",
-   "note": "replay iteration 3 (latest of line)"
-  },
-  {
-   "name": "v0.6-int/relay-merge",
-   "role": "ARCHIVE",
-   "head": "fd99281b",
-   "note": "same head as telemetry-replay3"
-  },
-  {
-   "name": "v0.6-b/ec-failclosed",
-   "role": "ARCHIVE",
-   "head": "7e25ddfe",
-   "note": "EC fail-closed gate per R NEXT_ACTION"
-  },
-  {
-   "name": "slice-v0.6/ec-lite",
-   "role": "ARCHIVE",
-   "head": "3da58bce",
-   "note": "EC lite origin"
-  },
-  {
-   "name": "v0.5-c/evidence-registry",
-   "role": "ARCHIVE",
-   "head": "b93ca1ad",
-   "note": "evidence registry lite (Slice C)"
-  },
-  {
-   "name": "v0.5-c/evidence-registry-replay1",
-   "role": "ARCHIVE",
-   "head": "1fb6f10e",
-   "note": "fail-closed single-snapshot hardening"
-  },
-  {
-   "name": "v0.5-int/relay-merge",
-   "role": "ARCHIVE",
-   "head": "1fb6f10e",
-   "note": "same head as replay1"
-  },
-  {
-   "name": "v0.5-b/pass-invalidation",
-   "role": "ARCHIVE",
-   "head": "d66e9146",
-   "note": "REWORK4 review-valid PASS binding"
-  },
-  {
-   "name": "slice-j2/send-guard",
-   "role": "ARCHIVE",
-   "head": "dd338394",
-   "note": "review-valid PASS binding validation"
-  },
-  {
-   "name": "slice-i/effect-safety-lite",
-   "role": "ARCHIVE",
-   "head": "0774fd0d",
-   "note": "authorization identity binding per effect reservation"
-  },
-  {
-   "name": "slice-c/goal-contract-lite-v2",
-   "role": "ARCHIVE",
-   "head": "26b187ef",
-   "note": "Goal Contract identity guard, v2"
-  },
-  {
-   "name": "slice-c/goal-contract-lite",
-   "role": "DELETE_CANDIDATE",
-   "head": "3065c423",
-   "note": "superseded by v2"
-  },
-  {
-   "name": "slice-b/unattended-harness-bootstrap",
-   "role": "ARCHIVE",
-   "head": "aeab79f2",
-   "note": "worker directory separation"
-  },
-  {
-   "name": "slice-b/entry-canonicalization",
-   "role": "ARCHIVE",
-   "head": "53f0d4ea",
-   "note": "entry checker false-positive fix"
-  },
-  {
-   "name": "bootstrap/builder-git-smoke",
-   "role": "ARCHIVE",
-   "head": "1f3b4300",
-   "note": "builder git write access proof"
-  },
-  {
-   "name": "review-result-return",
-   "role": "ARCHIVE",
-   "head": "61855bae",
-   "note": "R verdict durably bound into runtime state"
-  },
-  {
-   "name": "transport-recovery-lite",
-   "role": "ARCHIVE",
-   "head": "dec92bb1",
-   "note": "router-continue same-RUN phase continuation"
-  },
-  {
-   "name": "tmp-unused",
-   "role": "DELETE_CANDIDATE",
-   "head": "da6ab1e5",
-   "note": "declared unused by naming"
-  },
-  {
-   "name": "tmp-unused2",
-   "role": "DELETE_CANDIDATE",
-   "head": "da6ab1e5",
-   "note": "same head as tmp-unused"
-  },
-  {
-   "name": "tmp-v09-ignore",
-   "role": "DELETE_CANDIDATE",
-   "head": "f9ffbb3f",
-   "note": "declared ignore by naming"
-  }
- ]
+  "branches": [
+    {
+      "name": "master",
+      "role": "TRUNK",
+      "head": "e409253",
+      "note": "code-frozen@793fa41 (tag v1.0-engineering-close); governance/docs commits continue on master — see HARDENING-PLAN-20260831 (docs/evidence/); dev line = v1.1-blackbox"
+    },
+    {
+      "name": "v0.9-b2/authority-effect-evidence",
+      "role": "CANDIDATE_RED",
+      "head": "f74d48e2",
+      "note": "historical dev line (2026-08-28); superseded by v0.9-b1 merged into master (V1.0 engineering close)"
+    },
+    {
+      "name": "v0.9-b1/authority-effect-core",
+      "role": "ARCHIVE",
+      "head": "7c5669ae",
+      "note": "已合入 master，V1.0 工程收口 (merged into master at 793fa41, 2026-08-30)"
+    },
+    {
+      "name": "spec/v0.9-b1/authority-effect-core",
+      "role": "ACTIVE",
+      "head": "075480d3",
+      "note": "authorization/effect separation variant; OPEN QUESTION Q2: merge or abandon"
+    },
+    {
+      "name": "v0.8-integrate/adapter-final-4",
+      "role": "ACCEPTED_BASE",
+      "head": "e8c53d4a",
+      "note": "LAST_GREEN_BASE (repo-side tested green); pinned by v0.9 evidence module EXPECTED_BASE"
+    },
+    {
+      "name": "spec/v0.9-b2/authority-effect-evidence",
+      "role": "ARCHIVE",
+      "head": "ed15bd2a",
+      "note": "spec-side evidence artifact; superseded by v0.9-b2 publication"
+    },
+    {
+      "name": "spec/v0.8-final-candidate-anchor",
+      "role": "ARCHIVE",
+      "head": "b65a5126",
+      "note": "anchor spec for v0.8 final candidate"
+    },
+    {
+      "name": "v0.8-integrate/adapter-final-3",
+      "role": "DELETE_CANDIDATE",
+      "head": "0bb53362",
+      "note": "superseded by final-4"
+    },
+    {
+      "name": "v0.8-b1/adapter-core",
+      "role": "ARCHIVE",
+      "head": "a6634383",
+      "note": "content merged into integrate line"
+    },
+    {
+      "name": "v0.8-b2/adapter-registry",
+      "role": "ARCHIVE",
+      "head": "321db59f",
+      "note": "content merged into integrate line"
+    },
+    {
+      "name": "v0.8-b3/adapter-evidence",
+      "role": "ARCHIVE",
+      "head": "7860bd7e",
+      "note": "content merged into integrate line"
+    },
+    {
+      "name": "v0.8-b3/adapter-evidence-recovery-1",
+      "role": "ARCHIVE",
+      "head": "59c37944",
+      "note": "rework line, merged"
+    },
+    {
+      "name": "manual/v07-integrate2-core",
+      "role": "ARCHIVE",
+      "head": "027170c4",
+      "note": "v0.7 manual integration, superseded by v0.8 line"
+    },
+    {
+      "name": "manual/v07-integrate2-verify",
+      "role": "ARCHIVE",
+      "head": "5f4d7e99",
+      "note": "verification counterpart"
+    },
+    {
+      "name": "manual/v07-rework-core",
+      "role": "ARCHIVE",
+      "head": "0f1fee3d",
+      "note": "rework counterpart"
+    },
+    {
+      "name": "manual/v07-rework-verify",
+      "role": "ARCHIVE",
+      "head": "a184e2bd",
+      "note": "rework verification counterpart"
+    },
+    {
+      "name": "v0.7-int/relay-merge",
+      "role": "ARCHIVE",
+      "head": "c660d454",
+      "note": "inert strategic scaffold (disabled by default) merged forward"
+    },
+    {
+      "name": "v0.7-sb/strategic-brain-1",
+      "role": "ARCHIVE",
+      "head": "576756ae",
+      "note": "strategic brain contract line"
+    },
+    {
+      "name": "v0.7-sr/strategic-reuse-1",
+      "role": "ARCHIVE",
+      "head": "a9d4ba60",
+      "note": "strategic reuse contract line"
+    },
+    {
+      "name": "v0.7-c/c-correction-1",
+      "role": "ARCHIVE",
+      "head": "cad2977d",
+      "note": "route correction line"
+    },
+    {
+      "name": "v0.6-c/telemetry-replay",
+      "role": "ARCHIVE",
+      "head": "d84472d5",
+      "note": "EC telemetry slice D"
+    },
+    {
+      "name": "v0.6-c/telemetry-replay2",
+      "role": "ARCHIVE",
+      "head": "9d94dd4b",
+      "note": "replay iteration 2"
+    },
+    {
+      "name": "v0.6-c/telemetry-replay3",
+      "role": "ARCHIVE",
+      "head": "fd99281b",
+      "note": "replay iteration 3 (latest of line)"
+    },
+    {
+      "name": "v0.6-int/relay-merge",
+      "role": "ARCHIVE",
+      "head": "fd99281b",
+      "note": "same head as telemetry-replay3"
+    },
+    {
+      "name": "v0.6-b/ec-failclosed",
+      "role": "ARCHIVE",
+      "head": "7e25ddfe",
+      "note": "EC fail-closed gate per R NEXT_ACTION"
+    },
+    {
+      "name": "slice-v0.6/ec-lite",
+      "role": "ARCHIVE",
+      "head": "3da58bce",
+      "note": "EC lite origin"
+    },
+    {
+      "name": "v0.5-c/evidence-registry",
+      "role": "ARCHIVE",
+      "head": "b93ca1ad",
+      "note": "evidence registry lite (Slice C)"
+    },
+    {
+      "name": "v0.5-c/evidence-registry-replay1",
+      "role": "ARCHIVE",
+      "head": "1fb6f10e",
+      "note": "fail-closed single-snapshot hardening"
+    },
+    {
+      "name": "v0.5-int/relay-merge",
+      "role": "ARCHIVE",
+      "head": "1fb6f10e",
+      "note": "same head as replay1"
+    },
+    {
+      "name": "v0.5-b/pass-invalidation",
+      "role": "ARCHIVE",
+      "head": "d66e9146",
+      "note": "REWORK4 review-valid PASS binding"
+    },
+    {
+      "name": "slice-j2/send-guard",
+      "role": "ARCHIVE",
+      "head": "dd338394",
+      "note": "review-valid PASS binding validation"
+    },
+    {
+      "name": "slice-i/effect-safety-lite",
+      "role": "ARCHIVE",
+      "head": "0774fd0d",
+      "note": "authorization identity binding per effect reservation"
+    },
+    {
+      "name": "slice-c/goal-contract-lite-v2",
+      "role": "ARCHIVE",
+      "head": "26b187ef",
+      "note": "Goal Contract identity guard, v2"
+    },
+    {
+      "name": "slice-c/goal-contract-lite",
+      "role": "DELETE_CANDIDATE",
+      "head": "3065c423",
+      "note": "superseded by v2"
+    },
+    {
+      "name": "slice-b/unattended-harness-bootstrap",
+      "role": "ARCHIVE",
+      "head": "aeab79f2",
+      "note": "worker directory separation"
+    },
+    {
+      "name": "slice-b/entry-canonicalization",
+      "role": "ARCHIVE",
+      "head": "53f0d4ea",
+      "note": "entry checker false-positive fix"
+    },
+    {
+      "name": "bootstrap/builder-git-smoke",
+      "role": "ARCHIVE",
+      "head": "1f3b4300",
+      "note": "builder git write access proof"
+    },
+    {
+      "name": "review-result-return",
+      "role": "ARCHIVE",
+      "head": "61855bae",
+      "note": "R verdict durably bound into runtime state"
+    },
+    {
+      "name": "transport-recovery-lite",
+      "role": "ARCHIVE",
+      "head": "dec92bb1",
+      "note": "router-continue same-RUN phase continuation"
+    },
+    {
+      "name": "tmp-unused",
+      "role": "DELETE_CANDIDATE",
+      "head": "da6ab1e5",
+      "note": "declared unused by naming"
+    },
+    {
+      "name": "tmp-unused2",
+      "role": "DELETE_CANDIDATE",
+      "head": "da6ab1e5",
+      "note": "same head as tmp-unused"
+    },
+    {
+      "name": "tmp-v09-ignore",
+      "role": "DELETE_CANDIDATE",
+      "head": "f9ffbb3f",
+      "note": "declared ignore by naming"
+    },
+    {
+      "name": "v1.1-blackbox",
+      "role": "ACTIVE",
+      "head": "21352f2",
+      "note": "V1.1 blackbox dev line; R1/R2/R3/A1/D1-D6 all completed+reviewed 2026-08-31; matrix v4 67/10/0 (L3 pending owner); head synced 2026-08-31 (governance-only 21352f2 on top of 02e2e894)"
+    },
+    {
+      "name": "hardening/p0-gates-20260831",
+      "role": "ACTIVE",
+      "head": "0d68a49b",
+      "note": "P0 hardening construction line (from v1.1-blackbox@21352f2); batch A closed (external PASS + dual APPROVE + push), batch B/C GATE-5/6 landed + blind-review APPROVE + P2 dispositions, E2 achievement matrix (71 met/5 partial/0 gaps after batches D+E: §45/§71/§74-gate met, blind-review REWORK->PASS each); head synced 2026-09-01 governance-only"
+    }
+  ]
 }

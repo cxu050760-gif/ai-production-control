@@ -1,0 +1,71 @@
+{
+  "schema": "R_ADAPTER_CONFIG",
+  "schema_version": 1,
+  "default_timeout_sec": 120,
+  "note": "示例配置：provider 列表骨架，与 config/capability-registry.json providers 节衔接（只读）。api_key 一律走环境变量（api_key_env 只登记变量名），禁止硬编码/入仓。当前施工环境无真实 key：health 输出 UNCONFIGURED 即正确；真实调用留业主 L3。costs/quotas 字段待 D2 成本路由时补充（capability-registry.json 已有 costs/quotas 数据面，只读衔接）。",
+  "providers": [
+    {
+      "id": "r-prod-chatgpt-web",
+      "name": "R-PROD ChatGPT 网页审查会话（强 AI）",
+      "kind": "web_session",
+      "type": "WEB_SESSION",
+      "model": "chatgpt-web",
+      "provider": "chatgpt-web",
+      "api_key_env": "",
+      "priority": 1,
+      "health_timeout_sec": 30,
+      "notes": ["会话 URL 唯一来源=E:/执衡/05_资源/会话注册.json（凭据只登记路径）；",
+                "web_session 类不适用 file/command/port 探测（probe 恒 UNCONFIGURED，需会话 URL），故不配 health_check（DEF-3 架构会签）"]
+    },
+    {
+      "id": "r-deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash（主脑回退 1 的 R 化）",
+      "kind": "api_model",
+      "type": "API_MODEL",
+      "model": "deepseek/deepseek-chat",
+      "provider": "deepseek",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "priority": 2,
+      "health_timeout_sec": 10,
+      "health_check": {
+        "kind": "file",
+        "path": "C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy"
+      },
+      "notes": ["示例：key 由 L3 业主注入环境变量 DEEPSEEK_API_KEY"]
+    },
+    {
+      "id": "r-codex-local",
+      "name": "Codex Local（主脑回退 2 的 R 化）",
+      "kind": "api_model",
+      "type": "API_MODEL",
+      "model": "openai/gpt-5-codex",
+      "provider": "openai",
+      "api_key_env": "OPENAI_API_KEY",
+      "priority": 3,
+      "health_timeout_sec": 10,
+      "health_check": {
+        "kind": "file",
+        "path": "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+      },
+      "notes": ["示例：L3 业主接入点"]
+    },
+    {
+      "id": "r-catpaw",
+      "name": "CatPaw Provider（OpenAI 兼容，experimental）",
+      "kind": "api_model",
+      "type": "API_MODEL",
+      "model": "openai/LongCat-2.0",
+      "provider": "openai",
+      "api_key_env": "CATPAW_API_KEY",
+      "priority": 9,
+      "health_timeout_sec": 5,
+      "health_check": {
+        "kind": "port",
+        "host": "127.0.0.1",
+        "port": 32177,
+        "timeout_sec": 2
+      },
+      "notes": ["experimental：反代停机时 DOWN；proxy-key.dpapi 只登记路径"]
+    }
+  ]
+}

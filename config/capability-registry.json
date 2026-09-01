@@ -1,0 +1,3029 @@
+{
+ "schema": "CAPABILITY_REGISTRY",
+ "schema_version": 1,
+ "registry_generation": 1,
+ "generated_at": "2026-08-31",
+ "generated_by": "successor-session (D3 tools registry update)",
+ "constitution_anchor": "宪法 §63 Capability Registry（原文：系统必须维护机器可读能力注册表…这样系统才能真正做到：资源可替换）",
+ "constitution_related": [
+  "§5 AI/Provider/Agent Independence",
+  "§20 浏览器是通用生产执行面",
+  "§21 本地电脑是通用生产执行面",
+  "§59 Cost Routing"
+ ],
+ "status_enum": [
+  "official",
+  "experimental",
+  "deprecated"
+ ],
+ "path_convention": "所有路径使用正斜杠（/）规范化；来源为 config/production.json 的路径与其反斜杠形式一一对应，消费端应经 os.path.normpath 后再使用。",
+ "source_of_truth": [
+  "config/production.json",
+  "E:/WB/tools/ai-production-control/runtime/run.cmd",
+  "C:/Users/17838/.local/bin/chatgpt_bridge",
+  "E:/WB/tools/bsk-file-bridge/bsk-home/daemon.json",
+  "E:/WB/tools/catpaw-longcat-proxy/service-config.json",
+  "E:/WB/state/ai-production-control/construction-relay/relay.config.json",
+  "runtime/v08_adapter_registry.json",
+  "docs/asset-registry/FUSION_ASSESSMENT_FINAL.md",
+  "E:/执衡/05_资源/会话注册.json（仅登记路径，不读取内容）"
+ ],
+ "sections": {
+  "brains": [
+   {
+    "id": "brain-chatgpt-web",
+    "name": "ChatGPT Web Brain（主脑默认）",
+    "role": "brain",
+    "type": "WEB_SESSION",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge",
+      "open",
+      "https://chatgpt.com/"
+     ],
+     "cwd": null,
+     "note": "主脑默认：config/production.json brains.default_primary=chatgpt-web；实际经 chatgpt_bridge + bsk daemon 会话操作"
+    },
+    "health_check": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge",
+      "status"
+     ],
+     "expect": "Bridge: READY",
+     "read_only": true,
+     "timeout_sec": 30,
+     "note": "桥自检命令；2026-08-30 实测 READY（browsers connected >=1 视为会话可用）"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "note": "桥依赖 bsk daemon（端口以 bsk-home/daemon.json ws_port 为准；当前实测 52900）。仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "bridge READY"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "会话注册.json 只登记路径；默认 deny 外发"
+    },
+    "adapter": "adapter-web-session",
+    "source": "config/production.json: brains.default_primary",
+    "notes": [
+     "R-PROD 会话 URL 唯一来源：E:/执衡/05_资源/会话注册.json（凭据文件，只登记路径）"
+    ]
+   },
+   {
+    "id": "brain-workbuddy-deepseek-v4-flash",
+    "name": "WorkBuddy DeepSeek-V4-Flash（主脑回退 1）",
+    "role": "brain",
+    "type": "API_MODEL",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy"
+     ],
+     "cwd": null,
+     "note": "config/production.json brains.fallbacks[0]=workbuddy-deepseek-v4-flash；弱 AI 口径"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy",
+     "note": "CLI 存在性探测；深度健康需真实调用（experimental 档）"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "默认 deny 外发"
+    },
+    "adapter": "adapter-api-model",
+    "source": "config/production.json: brains.fallbacks[0]",
+    "notes": []
+   },
+   {
+    "id": "brain-codex-local",
+    "name": "Codex Local（主脑回退 2）",
+    "role": "brain",
+    "type": "API_MODEL",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+     ],
+     "cwd": null,
+     "note": "config/production.json brains.fallbacks[1]=codex-local"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Users/17838/AppData/Roaming/npm/codex.cmd",
+     "note": "codex.cmd 存在性探测"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "默认 deny 外发"
+    },
+    "adapter": "adapter-api-model",
+    "source": "config/production.json: brains.fallbacks[1]",
+    "notes": []
+   },
+   {
+    "id": "brain-trae-solo-cn",
+    "name": "Trae Solo CN（中继 builder 提供方）",
+    "role": "brain",
+    "type": "API_MODEL",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": null,
+     "cwd": null,
+     "note": "relay.config.json builder.provider=trae-solo-cn model=DeepSeek-V4-Flash 正式版Max；经 Trae CDP 127.0.0.1:9223"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 9223,
+     "timeout_sec": 2,
+     "note": "Trae CDP 端口（中继场景使用）"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "默认 deny 外发"
+    },
+    "adapter": "adapter-trae-ralph",
+    "source": "E:/WB/state/ai-production-control/construction-relay/relay.config.json: builder",
+    "notes": [
+     "construction_only 模式；非生产主链"
+    ]
+   }
+  ],
+  "workers": [
+   {
+    "id": "worker-local-python",
+    "name": "Local Python 3.12（规范解释器）",
+    "role": "worker",
+    "type": "LOCAL_RUNTIME",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe"
+     ],
+     "cwd": null,
+     "note": "config/production.json workers.local_python；run.cmd 的 APC_PY 规范依赖"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe",
+     "note": "存在性探测；缺失时 run.cmd 输出 RUNTIME_ENV_BLOCKED"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行，成本近似 0；仍待 D2 计入"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "文件存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "本地执行面，默认 deny 外发"
+    },
+    "adapter": "adapter-local-command",
+    "source": "config/production.json: workers.local_python",
+    "notes": []
+   },
+   {
+    "id": "worker-workbuddy-node",
+    "name": "WorkBuddy Node 22.22.2",
+    "role": "worker",
+    "type": "LOCAL_RUNTIME",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.workbuddy/binaries/node/versions/22.22.2/node.exe"
+     ],
+     "cwd": null,
+     "note": "config/production.json workers.workbuddy_node"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Users/17838/.workbuddy/binaries/node/versions/22.22.2/node.exe"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行，成本近似 0"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "文件存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "本地执行面，默认 deny 外发"
+    },
+    "adapter": "adapter-local-command",
+    "source": "config/production.json: workers.workbuddy_node",
+    "notes": []
+   },
+   {
+    "id": "worker-workbuddy-cli",
+    "name": "WorkBuddy CLI（AI Worker，CLI 型）",
+    "role": "worker",
+    "type": "AI_CLI",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy"
+     ],
+     "cwd": null,
+     "note": "config/production.json workers.workbuddy_cli；v08 注册表 worker-workbuddy-cli"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "默认 deny 外发"
+    },
+    "adapter": "adapter-api-model",
+    "capabilities": [
+     "cap-analysis",
+     "cap-mechanical-read",
+     "cap-proposal",
+     "cap-command-execution"
+    ],
+    "source": "config/production.json: workers.workbuddy_cli + runtime/v08_adapter_registry.json",
+    "notes": []
+   },
+   {
+    "id": "worker-codex-cli",
+    "name": "Codex CLI（AI Worker，CLI 型）",
+    "role": "worker",
+    "type": "AI_CLI",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+     ],
+     "cwd": null,
+     "note": "config/production.json workers.codex_cli；v08 注册表 worker-codex-cli；真实二进制 codex.exe（vendor/x86_64-pc-windows-msvc/bin/codex.exe）"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "默认 deny 外发；arbiter 场景 sandbox=read-only"
+    },
+    "adapter": "adapter-api-model",
+    "capabilities": [
+     "cap-analysis",
+     "cap-code-review",
+     "cap-proposal",
+     "cap-command-execution"
+    ],
+    "source": "config/production.json: workers.codex_cli + runtime/v08_adapter_registry.json",
+    "notes": []
+   },
+   {
+    "id": "worker-trae-builder",
+    "name": "Trae Builder（中继 builder worker）",
+    "role": "worker",
+    "type": "AI_CLI",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": null,
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "relay.config.json builder 角色；经 Trae CDP 127.0.0.1:9223，模型 DeepSeek-V4-Flash"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 9223,
+     "timeout_sec": 2
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "construction_only 模式"
+    },
+    "adapter": "adapter-trae-ralph",
+    "source": "E:/WB/state/ai-production-control/construction-relay/relay.config.json",
+    "notes": [
+     "非生产主链"
+    ]
+   }
+  ],
+  "correctors": [
+   {
+    "id": "c-ec-lite",
+    "name": "EC-lite 执行纠偏（规则/计数器）",
+    "role": "c",
+    "type": "RULES_MODULE",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe",
+      "runtime/ec_lite.py"
+     ],
+     "cwd": "C:/Users/17838/Documents/Qoder/2026-08-28/031cb4e3/b1",
+     "note": "经 run.cmd ec-record/ec-check/ec-gate 进入；纯确定性规则，不烧强 AI。模块位于 dev line runtime/（生产黑盒 E: runtime 仅含 run.cmd+runtime.py，子命令由 repo run.cmd 分发）"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Users/17838/Documents/Qoder/2026-08-28/031cb4e3/b1/runtime/ec_lite.py"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地规则模块，成本近似 0"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "阈值表在模块内（EC_MAX_RETRY 等）"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "文件存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "advisory-only；有 EC gate 可冻结 transport"
+    },
+    "adapter": "adapter-local-command",
+    "capabilities": [
+     "cap-correction"
+    ],
+    "source": "runtime/ec_lite.py",
+    "notes": [
+     "宪法 §11/§19/§23 执行纠偏"
+    ]
+   },
+   {
+    "id": "c-strategic-correction",
+    "name": "C 战略纠偏（advisory-only）",
+    "role": "c",
+    "type": "RULES_MODULE",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe",
+      "runtime/strategic_correction.py"
+     ],
+     "cwd": "C:/Users/17838/Documents/Qoder/2026-08-28/031cb4e3/b1",
+     "note": "V07-C-CONTRACT-2；检测 scope drift/过早 milestone/自审越权；无外部副作用。模块位于 dev line runtime/"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Users/17838/Documents/Qoder/2026-08-28/031cb4e3/b1/runtime/strategic_correction.py"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地规则模块，成本近似 0"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "文件存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "advisory_only=true, non_authority=true"
+    },
+    "adapter": "adapter-local-command",
+    "capabilities": [
+     "cap-correction"
+    ],
+    "source": "runtime/strategic_correction.py",
+    "notes": [
+     "C = 纠偏；宪法 §63 的 C 条"
+    ]
+   },
+   {
+    "id": "c-relay-corrector",
+    "name": "中继 corrector（Trae-Ralph probe）",
+    "role": "c",
+    "type": "AI_RELAY",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "node",
+      "src/relay/probe-corrector.js"
+     ],
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "Trae-Ralph package.json probe:corrector；construction 场景纠偏探测"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/Trae-Ralph/src/relay/probe-corrector.js"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "construction_only"
+    },
+    "adapter": "adapter-trae-ralph",
+    "source": "E:/WB/tools/Trae-Ralph/package.json",
+    "notes": [
+     "非生产主链"
+    ]
+   }
+  ],
+  "reviewers": [
+   {
+    "id": "r-prod-chatgpt-web",
+    "name": "R-PROD ChatGPT 网页审查会话（强 AI）",
+    "role": "r",
+    "type": "WEB_SESSION",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge",
+      "open",
+      "<R_URL>"
+     ],
+     "cwd": null,
+     "note": "R = ChatGPT 网页审查会话（强 AI）；会话 URL 来自 E:/执衡/05_资源/会话注册.json；runtime work/report 要求 --r-url 显式提供"
+    },
+    "health_check": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge",
+      "status"
+     ],
+     "expect": "Bridge: READY",
+     "read_only": true,
+     "timeout_sec": 30,
+     "note": "桥自检；2026-08-30 实测 READY"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "note": "桥依赖 bsk daemon。仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "bridge READY"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "R 判决写入 RUN state 允许；会话 URL 只读引用，不外传"
+    },
+    "adapter": "adapter-web-session",
+    "source": "config/production.json + docs/SUCCESSOR-MASTER-REPORT-20260830.md §会话注册表",
+    "notes": [
+     "R_URL 唯一来源=会话注册.json；runtime.py 拒绝继承/猜测 R_URL"
+    ]
+   },
+   {
+    "id": "r-e-lab-codex-cli",
+    "name": "E-LAB Codex CLI 审查者",
+    "role": "r",
+    "type": "AI_CLI",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+     ],
+     "cwd": null,
+     "note": "v08 注册表 reviewer e-lab-codex-cli；E_LAB 角色"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "默认 deny 外发"
+    },
+    "adapter": "adapter-api-model",
+    "source": "runtime/v08_adapter_registry.json",
+    "notes": [
+     "availability=UNVERIFIED_CURRENT"
+    ]
+   },
+   {
+    "id": "r-trae-ralph-relay",
+    "name": "Trae-Ralph review-relay 审查中继",
+    "role": "r",
+    "type": "AI_RELAY",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "node",
+      "src/review-relay.js",
+      "watch"
+     ],
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "relay.config.json reviewer.provider=web-bridge；review-relay.js watch"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/Trae-Ralph/src/review-relay.js"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "node",
+      "src/review-relay.js",
+      "watch"
+     ],
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "中继启动命令。仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": 24,
+     "unit": "次/天",
+     "source": "relay.config.json automation.strong_review_budget_per_day",
+     "note": "strong reviewer 日预算"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "construction_only"
+    },
+    "adapter": "adapter-trae-ralph",
+    "source": "E:/WB/tools/Trae-Ralph/package.json + relay.config.json",
+    "notes": [
+     "非生产主链；cheap_reviewer_enabled=false"
+    ]
+   }
+  ],
+  "browsers": [
+   {
+    "id": "browser-playwright-cdp",
+    "name": "Playwright CDP（浏览器主执行面）",
+    "role": "browser",
+    "type": "CDP",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": null,
+     "cwd": null,
+     "note": "config/production.json browser.primary=playwright-cdp；实际传输由 bsk daemon + Chrome 扩展完成"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 52900,
+     "timeout_sec": 2,
+     "note": "playwright-cdp 类监听端口（独立于 bsk daemon 52900，勿混淆）；探测结果反映 playwright 可用性，2026-08-30 复核时无监听"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "note": "playwright-cdp 的探测与 bsk daemon（52900）相互独立；此处 bsk daemon 为桥传输依赖，仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地浏览器执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "daemon UP"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "browser-profile 只登记路径"
+    },
+    "adapter": "adapter-bsk",
+    "source": "config/production.json: browser.primary",
+    "notes": [
+     "宪法 §20 浏览器执行面"
+    ]
+   },
+   {
+    "id": "browser-bsk",
+    "name": "BSK File-Bridge 浏览器通道（回退）",
+    "role": "browser",
+    "type": "CDP",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "cwd": null,
+     "note": "config/production.json browser.fallback=bsk；bsk_home=E:/WB/tools/bsk-file-bridge/bsk-home"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 52900,
+     "timeout_sec": 2,
+     "note": "bsk daemon ws_port；端口从 bsk-home/daemon.json 动态读取为准，此处为当前实测值（2026-08-31，52900）"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "note": "仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "daemon UP"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "browser-profile 只登记路径"
+    },
+    "adapter": "adapter-bsk",
+    "source": "config/production.json: browser.fallback + browser.bsk_executable/bsk_home/bsk_daemon_port",
+    "notes": []
+   },
+   {
+    "id": "browser-cft",
+    "name": "CFT Chrome（bsk-file-bridge 内置浏览器）",
+    "role": "browser",
+    "type": "CHROMIUM",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/cft/chrome-win64/chrome.exe"
+     ],
+     "cwd": null,
+     "note": "config/production.json browser.cft_executable"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/bsk-file-bridge/cft/chrome-win64/chrome.exe"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "文件存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "认证 profile 只登记路径"
+    },
+    "adapter": "adapter-bsk",
+    "source": "config/production.json: browser.cft_executable",
+    "notes": []
+   },
+   {
+    "id": "browser-chrome",
+    "name": "Google Chrome 系统安装",
+    "role": "browser",
+    "type": "CHROMIUM",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Program Files/Google/Chrome/Application/chrome.exe"
+     ],
+     "cwd": null,
+     "note": "config/production.json browser.chrome_executable"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Program Files/Google/Chrome/Application/chrome.exe"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "文件存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "browser-profile 只登记路径"
+    },
+    "adapter": "adapter-bsk",
+    "source": "config/production.json: browser.chrome_executable",
+    "notes": []
+   },
+   {
+    "id": "browser-generic-profile",
+    "name": "通用浏览器 profile（generic_profile）",
+    "role": "browser",
+    "type": "PROFILE",
+    "status": "experimental",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/state/ai-production-control/browser-profile",
+     "note": "config/production.json browser.generic_profile；⚠ 2026-08-30 实测路径不存在（与 production.json 差异点）"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/state/ai-production-control/browser-profile",
+     "note": "实测 MISSING；登记为 experimental 并告警"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "路径缺失"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "browser-profile 只登记路径"
+    },
+    "adapter": "adapter-bsk",
+    "source": "config/production.json: browser.generic_profile",
+    "notes": [
+     "差异点：production.json 声明但目录缺失；应由 Controller 决定是否创建或修正配置"
+    ]
+   },
+   {
+    "id": "browser-auth-profile-v1",
+    "name": "浏览器登录态 profile v1",
+    "role": "browser",
+    "type": "PROFILE",
+    "status": "official",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/state/ai-production-control/browser-auth-profile-v1",
+     "note": "Chromium Profile（Cookies/Trust Tokens/登录态）；S-02 轮换对象；只登记路径"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/state/ai-production-control/browser-auth-profile-v1"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "目录存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "凭据载体：只登记路径，不复制内容，不外传"
+    },
+    "adapter": "adapter-bsk",
+    "source": "docs/ops/ROTATION-CHECKLIST-S02-S03-S06.md",
+    "notes": [
+     "S-02 轮换对象；轮换执行主体=业主本人"
+    ]
+   },
+   {
+    "id": "browser-auth-profile-v2",
+    "name": "浏览器登录态 profile v2",
+    "role": "browser",
+    "type": "PROFILE",
+    "status": "official",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/state/ai-production-control/browser-auth-profile-v2",
+     "note": "Chromium Profile；S-03 轮换对象；只登记路径"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/state/ai-production-control/browser-auth-profile-v2"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "目录存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "凭据载体：只登记路径，不复制内容，不外传"
+    },
+    "adapter": "adapter-bsk",
+    "source": "docs/ops/ROTATION-CHECKLIST-S02-S03-S06.md",
+    "notes": [
+     "S-03 轮换对象"
+    ]
+   },
+   {
+    "id": "browser-cft-profile",
+    "name": "CFT 认证 profile（cft-profile-from-production）",
+    "role": "browser",
+    "type": "PROFILE",
+    "status": "official",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/tools/bsk-file-bridge/cft-profile-from-production",
+     "note": "config/production.json browser.authenticated_profile；只登记路径"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/bsk-file-bridge/cft-profile-from-production"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "目录存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "认证 profile：只登记路径，不外传"
+    },
+    "adapter": "adapter-bsk",
+    "source": "config/production.json: browser.authenticated_profile",
+    "notes": []
+   },
+   {
+    "id": "browser-bsk-extension",
+    "name": "BSK Chrome 扩展（chrome-mv3）",
+    "role": "browser",
+    "type": "EXTENSION",
+    "status": "experimental",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/tools/bsk-file-bridge/repo/apps/extension/dist/chrome-mv3",
+     "note": "config/production.json browser.bsk_extension"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/bsk-file-bridge/repo/apps/extension/dist/chrome-mv3"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地执行面"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "目录存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "扩展本体非凭据"
+    },
+    "adapter": "adapter-bsk",
+    "source": "config/production.json: browser.bsk_extension",
+    "notes": []
+   }
+  ],
+  "tools": [
+   {
+    "id": "tool-chatgpt-bridge",
+    "name": "chatgpt_bridge（统一桥 CLI）",
+    "role": "tool",
+    "type": "CLI_WRAPPER",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge"
+     ],
+     "cwd": null,
+     "note": "统一 WorkBuddy<->ChatGPT 传输层；status/open/upload/send/receive/close"
+    },
+    "health_check": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge",
+      "status"
+     ],
+     "expect": "Bridge: READY",
+     "read_only": true,
+     "timeout_sec": 30
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "note": "桥依赖 bsk daemon。仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地封装，成本=底层模型"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "status=READY"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "上传/发送属外部效果，须经授权闸门"
+    },
+    "adapter": "adapter-chatgpt-bridge",
+    "source": "C:/Users/17838/.local/bin/chatgpt_bridge",
+    "notes": [
+     "agent 只允许调用此命令，不直接接触 bsk/pipe/上传细节"
+    ]
+   },
+   {
+    "id": "tool-bsk-daemon",
+    "name": "BSK daemon（桥底层守护）",
+    "role": "tool",
+    "type": "DAEMON",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "cwd": null,
+     "note": "bsk-home=E:/WB/tools/bsk-file-bridge/bsk-home；daemon.json 记录 pid/sock/ws_port"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 52900,
+     "timeout_sec": 2,
+     "note": "bsk daemon ws_port；端口从 bsk-home/daemon.json 动态读取为准，此处为当前实测值（2026-08-31，52900）"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "note": "仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地守护进程"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "LISTENING pid=3604"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "daemon 只在本机"
+    },
+    "adapter": "adapter-bsk",
+    "source": "E:/WB/tools/bsk-file-bridge/bsk-home/daemon.json",
+    "notes": []
+   },
+   {
+    "id": "tool-runtime-run",
+    "name": "生产 Runtime 入口（run.cmd）",
+    "role": "tool",
+    "type": "CLI_ENTRY",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/ai-production-control/runtime/run.cmd",
+      "health"
+     ],
+     "cwd": null,
+     "note": "生产黑盒唯一入口；动词 work/report/health/status/start/step/...；只读不改"
+    },
+    "health_check": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/ai-production-control/runtime/run.cmd",
+      "health"
+     ],
+     "expect": null,
+     "read_only": true,
+     "timeout_sec": 60,
+     "note": "health 会触发 ensure_bridge_ready；无强依赖时可返回 RUNTIME_ENV_BLOCKED"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地运行时"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "见 policy.max_worker_retries/max_review_cycles"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "外发效果需三门：egress policy + tcb_verified + grant_authorization"
+    },
+    "adapter": "adapter-local-command",
+    "source": "E:/WB/tools/ai-production-control/runtime/run.cmd",
+    "notes": [
+     "W1 最小接线方案：tcb-verify / grant-auth 待主脑审阅后施工"
+    ]
+   },
+   {
+    "id": "tool-catpaw-proxy",
+    "name": "CatPaw LongCat 反代（32177）",
+    "role": "tool",
+    "type": "PROXY_SERVICE",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      "E:/WB/tools/catpaw-longcat-proxy/scripts/start-proxy.ps1"
+     ],
+     "cwd": null,
+     "note": "service-config.json port=32177；Base URL http://127.0.0.1:32177/v1；⚠ 2026-08-30 实测端口未监听（停）"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 32177,
+     "timeout_sec": 2,
+     "note": "实测 DOWN（当前停）"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      "E:/WB/tools/catpaw-longcat-proxy/scripts/restart-service.ps1"
+     ],
+     "note": "需要 CatPaw GUI 已登录。仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "DOWN"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "proxy-key.dpapi 是 DPAPI 密文，机器绑定；只登记路径不复制"
+    },
+    "adapter": "adapter-catpaw-openai",
+    "source": "E:/WB/tools/catpaw-longcat-proxy/service-config.json + docs/asset-registry/FUSION_ASSESSMENT_FINAL.md",
+    "notes": [
+     "S-06 轮换对象（proxy-key.dpapi）；执行主体=业主本人"
+    ]
+   },
+   {
+    "id": "tool-trae-ralph-relay",
+    "name": "Trae-Ralph review-relay 中继",
+    "role": "tool",
+    "type": "RELAY",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "node",
+      "src/review-relay.js",
+      "watch"
+     ],
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "package.json relay=node src/review-relay.js watch；relay:status=node src/review-relay.js status"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/Trae-Ralph/src/review-relay.js"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "node",
+      "src/review-relay.js",
+      "watch"
+     ],
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "construction_only"
+    },
+    "adapter": "adapter-trae-ralph",
+    "source": "E:/WB/tools/Trae-Ralph/package.json",
+    "notes": [
+     "非生产主链"
+    ]
+   },
+   {
+    "id": "tool-trae-ralph-guard",
+    "name": "Trae-Ralph outer-guard 外闸",
+    "role": "tool",
+    "type": "RELAY",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "node",
+      "src/relay/outer-guard.js",
+      "watch"
+     ],
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "package.json guard=node src/relay/outer-guard.js watch"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/Trae-Ralph/src/relay/outer-guard.js"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "node",
+      "src/relay/outer-guard.js",
+      "watch"
+     ],
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "本地中继"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "construction_only"
+    },
+    "adapter": "adapter-trae-ralph",
+    "source": "E:/WB/tools/Trae-Ralph/package.json",
+    "notes": [
+     "非生产主链"
+    ]
+   },
+   {
+    "id": "tool-windows-mcp-runtime",
+    "name": "Windows MCP Runtime",
+    "role": "tool",
+    "type": "LOCAL_RUNTIME",
+    "status": "experimental",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/tools/windows-mcp-runtime",
+     "note": "docs/asset-registry/FUSION_ASSESSMENT_FINAL.md 登记；本地 MCP 运行时，供本地工具接入"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/windows-mcp-runtime"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "目录存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "默认 deny 外发"
+    },
+    "adapter": null,
+    "source": "docs/asset-registry/FUSION_ASSESSMENT_FINAL.md",
+    "notes": [
+     "融合登记，零改动"
+    ]
+   },
+   {
+    "id": "tool-chatgpt-codex-bridge",
+    "name": "ChatGPT_Codex_Bridge",
+    "role": "tool",
+    "type": "BRIDGE",
+    "status": "experimental",
+    "entry": {
+     "kind": "path",
+     "path": "E:/AI_Projects/ChatGPT_Codex_Bridge",
+     "note": "docs/asset-registry/FUSION_ASSESSMENT_FINAL.md 登记；dist/server.js 运行中（2026-08-29 记录）；Codex 隧道/tunnel-profiles/codex-runner"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/AI_Projects/ChatGPT_Codex_Bridge"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "tunnel-profiles 只登记路径"
+    },
+    "adapter": null,
+    "source": "docs/asset-registry/FUSION_ASSESSMENT_FINAL.md",
+    "notes": [
+     "融合登记，零改动"
+    ]
+   },
+   {
+    "id": "tool-reuse-gate",
+    "name": "Reuse 门禁（§48-50 强制）",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe",
+      "scripts/reuse_gate.py",
+      "check"
+     ],
+     "cwd": "C:/Users/17838/Documents/Qoder/2026-08-28/031cb4e3/b1",
+     "note": "D3 交付 2026-08-31；--require-decision 强制无 Decision 不得 BUILD（BUILD_BLOCKED exit 1）"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "scripts/reuse_gate.py"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "python",
+      "scripts/reuse_gate.py",
+      "--help"
+     ],
+     "note": "决策留痕 docs/evidence/reuse-decisions.ndjson"
+    },
+    "permissions": {
+     "external_egress": "read-only-search",
+     "note": "GitHub 搜索指引模式（gh CLI 未装时 GUIDANCE_ONLY，不自动出网）"
+    },
+    "source": "D3-383007B5 (Reuse Decision, 2026-08-31)",
+    "type": "cli-tool"
+   },
+   {
+    "id": "tool-supply-chain-check",
+    "name": "供应链检查清单（§51）",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe",
+      "scripts/supply_chain_check.py",
+      "check"
+     ],
+     "cwd": "C:/Users/17838/Documents/Qoder/2026-08-28/031cb4e3/b1",
+     "note": "D3 交付 2026-08-31；pip-audit 复用（已装），未装→UNKNOWN 不伪造"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "scripts/supply_chain_check.py"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "python",
+      "scripts/supply_chain_check.py",
+      "--help"
+     ],
+     "note": "pip 网络坑：--proxy 127.0.0.1:7897 或清华镜像"
+    },
+    "permissions": {
+     "external_egress": "pypi-audit",
+     "note": "pip-audit 查询已知漏洞（只读）"
+    },
+    "source": "D3-383007B5 (Reuse Decision, 2026-08-31)",
+    "type": "cli-tool"
+   },
+   {
+    "id": "tool-browser-adapter",
+    "name": "Playwright 通用网页适配器（§20）",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe",
+      "runtime/browser_adapter.py",
+      "search"
+     ],
+     "cwd": "C:/Users/17838/Documents/Qoder/2026-08-28/031cb4e3/b1",
+     "note": "D3 交付 2026-08-31；search/fetch/download；登录态敏感站走 bsk（52900）互补"
+    },
+    "health_check": {
+     "kind": "command",
+     "command": [
+      "python",
+      "runtime/browser_adapter.py",
+      "--help"
+     ],
+     "note": "PLAYWRIGHT_NOT_INSTALLED 时输出明确状态"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "python",
+      "runtime/browser_adapter.py",
+      "--help"
+     ],
+     "note": "独立临时 profile，不碰凭据；NODE_OPTIONS=--use-system-ca 需清除"
+    },
+    "permissions": {
+     "external_egress": "general-web",
+     "note": "headless 通用站；登录态敏感站禁走此通道"
+    },
+    "source": "D3-383007B5 (Reuse Decision, 2026-08-31)",
+    "type": "cli-tool"
+   }
+  ],
+  "providers": [
+   {
+    "id": "provider-chatgpt-web",
+    "name": "ChatGPT Web Provider（WEB_SESSION）",
+    "role": "provider",
+    "type": "WEB_SESSION",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge",
+      "open",
+      "<R_URL>"
+     ],
+     "cwd": null,
+     "note": "v08 注册表 provider_id=chatgpt-web；transport_identity_owner=RUNTIME_CONTROLLER"
+    },
+    "health_check": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge",
+      "status"
+     ],
+     "expect": "Bridge: READY",
+     "read_only": true,
+     "timeout_sec": 30
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "note": "仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "bridge READY"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "会话 URL 只读引用"
+    },
+    "adapter": "adapter-web-session",
+    "source": "runtime/v08_adapter_registry.json + config/production.json",
+    "notes": [
+     "availability=UNVERIFIED_CURRENT（v08 口径）"
+    ]
+   },
+   {
+    "id": "provider-workbuddy",
+    "name": "WorkBuddy Provider（API_MODEL）",
+    "role": "provider",
+    "type": "API_MODEL",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy"
+     ],
+     "cwd": null,
+     "note": "v08 注册表 provider_id=workbuddy-cli"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Program Files/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "默认 deny 外发"
+    },
+    "adapter": "adapter-api-model",
+    "source": "runtime/v08_adapter_registry.json",
+    "notes": []
+   },
+   {
+    "id": "provider-codex",
+    "name": "Codex Provider（API_MODEL）",
+    "role": "provider",
+    "type": "API_MODEL",
+    "status": "official",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+     ],
+     "cwd": null,
+     "note": "v08 注册表 provider_id=codex-cli"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "C:/Users/17838/AppData/Roaming/npm/codex.cmd"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "relay.config.json automation.strong_review_budget_per_day=24（strong reviewer 日预算）"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "arbiter 场景 sandbox=read-only"
+    },
+    "adapter": "adapter-api-model",
+    "source": "runtime/v08_adapter_registry.json",
+    "notes": []
+   },
+   {
+    "id": "provider-catpaw",
+    "name": "CatPaw Provider（OpenAI 兼容 /v1）",
+    "role": "provider",
+    "type": "API_MODEL",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      "E:/WB/tools/catpaw-longcat-proxy/scripts/start-proxy.ps1"
+     ],
+     "cwd": null,
+     "note": "Base URL http://127.0.0.1:32177/v1；workBuddyModelId=LongCat-2.0；9 模型 API"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 32177,
+     "timeout_sec": 2,
+     "note": "实测 DOWN（当前停）"
+    },
+    "launch": {
+     "kind": "command",
+     "command": [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      "E:/WB/tools/catpaw-longcat-proxy/scripts/restart-service.ps1"
+     ],
+     "note": "需要 CatPaw GUI 已登录。仅打印建议，不自动执行"
+    },
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "DOWN"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "X-Passport-Token 鉴权；proxy-key.dpapi 只登记路径"
+    },
+    "adapter": "adapter-catpaw-openai",
+    "source": "E:/WB/tools/catpaw-longcat-proxy/README.md + SERVICE.md",
+    "notes": [
+     "CatPaw GUI 必须已登录；换号只在 GUI 操作"
+    ]
+   },
+   {
+    "id": "provider-trae-solo-cn",
+    "name": "Trae Solo CN Provider（中继）",
+    "role": "provider",
+    "type": "API_MODEL",
+    "status": "experimental",
+    "entry": {
+     "kind": "command",
+     "command": null,
+     "cwd": null,
+     "note": "relay.config.json builder.provider=trae-solo-cn；CDP 127.0.0.1:9223"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 9223,
+     "timeout_sec": 2
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "待 D2 校准"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "待 D2 校准"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": null,
+     "observed": null
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "construction_only"
+    },
+    "adapter": "adapter-trae-ralph",
+    "source": "E:/WB/state/ai-production-control/construction-relay/relay.config.json",
+    "notes": [
+     "非生产主链"
+    ]
+   }
+  ],
+  "login_state": [
+   {
+    "id": "login-session-registry",
+    "name": "会话注册.json（R-PROD 会话 URL 唯一来源）",
+    "role": "login_state",
+    "type": "CREDENTIAL_REFERENCE",
+    "status": "official",
+    "entry": {
+     "kind": "path",
+     "path": "E:/执衡/05_资源/会话注册.json",
+     "note": "⚠ 凭据文件：只登记路径，不复制内容、不读取、不外传；只读 URL 字段"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/执衡/05_资源/会话注册.json"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "n/a"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "n/a"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "文件存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "raw_credentials_in_authority_scope=DENY；credential_transport=REFERENCE_ONLY"
+    },
+    "adapter": null,
+    "source": "docs/SUCCESSOR-MASTER-REPORT-20260830.md §会话注册表",
+    "notes": [
+     "本注册表仅登记路径；内容访问按 §53 Credential Store 纪律"
+    ]
+   },
+   {
+    "id": "login-bridge-state",
+    "name": "bsk .bridge_state.json（当前会话缓存）",
+    "role": "login_state",
+    "type": "CREDENTIAL_REFERENCE",
+    "status": "official",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/tools/bsk-file-bridge/bsk-home/.bridge_state.json",
+     "note": "chatgpt_bridge 会话状态缓存（session/open time）；只登记路径"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/bsk-file-bridge/bsk-home/.bridge_state.json"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "n/a"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "n/a"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "文件存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "会话 URL 只读引用"
+    },
+    "adapter": null,
+    "source": "C:/Users/17838/.local/bin/chatgpt_bridge",
+    "notes": []
+   },
+   {
+    "id": "login-auth-profile-v1",
+    "name": "登录态 profile v1（路径）",
+    "role": "login_state",
+    "type": "CREDENTIAL_REFERENCE",
+    "status": "official",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/state/ai-production-control/browser-auth-profile-v1",
+     "note": "S-02 轮换对象；只登记路径"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/state/ai-production-control/browser-auth-profile-v1"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "n/a"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "n/a"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "目录存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "凭据载体，只登记路径"
+    },
+    "adapter": null,
+    "source": "docs/ops/ROTATION-CHECKLIST-S02-S03-S06.md",
+    "notes": []
+   },
+   {
+    "id": "login-auth-profile-v2",
+    "name": "登录态 profile v2（路径）",
+    "role": "login_state",
+    "type": "CREDENTIAL_REFERENCE",
+    "status": "official",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/state/ai-production-control/browser-auth-profile-v2",
+     "note": "S-03 轮换对象；只登记路径"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/state/ai-production-control/browser-auth-profile-v2"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "n/a"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "n/a"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "目录存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "凭据载体，只登记路径"
+    },
+    "adapter": null,
+    "source": "docs/ops/ROTATION-CHECKLIST-S02-S03-S06.md",
+    "notes": []
+   },
+   {
+    "id": "login-cft-profile",
+    "name": "CFT 认证 profile（路径）",
+    "role": "login_state",
+    "type": "CREDENTIAL_REFERENCE",
+    "status": "official",
+    "entry": {
+     "kind": "path",
+     "path": "E:/WB/tools/bsk-file-bridge/cft-profile-from-production",
+     "note": "authenticated_profile；只登记路径"
+    },
+    "health_check": {
+     "kind": "file",
+     "path": "E:/WB/tools/bsk-file-bridge/cft-profile-from-production"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "n/a"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "n/a"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "目录存在"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "认证 profile，只登记路径"
+    },
+    "adapter": null,
+    "source": "config/production.json: browser.authenticated_profile",
+    "notes": []
+   },
+   {
+    "id": "login-catpaw-gui",
+    "name": "CatPaw GUI 登录态",
+    "role": "login_state",
+    "type": "CREDENTIAL_REFERENCE",
+    "status": "experimental",
+    "entry": {
+     "kind": "note",
+     "path": null,
+     "note": "CatPaw GUI 登录态（auth.json 位置以 GUI 安装为准）；只登记存在性，不登记路径内容，不读取"
+    },
+    "health_check": {
+     "kind": "port",
+     "host": "127.0.0.1",
+     "port": 32177,
+     "timeout_sec": 2,
+     "note": "以反代端口作为可用性代理；GUI 登录由业主操作"
+    },
+    "launch": null,
+    "cost": {
+     "cost_per_call": null,
+     "cost_model": null,
+     "note": "n/a"
+    },
+    "quota": {
+     "limit": null,
+     "unit": null,
+     "note": "n/a"
+    },
+    "reliability": {
+     "level": "待实测",
+     "last_probe": "2026-08-30",
+     "observed": "DOWN（反代停）"
+    },
+    "permissions": {
+     "external_effect": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "note": "凭据仅存于 GUI 内，代理不持有明文"
+    },
+    "adapter": null,
+    "source": "E:/WB/tools/catpaw-longcat-proxy/README.md",
+    "notes": [
+     "换号只在 GUI 操作，代理无需重启"
+    ]
+   }
+  ],
+  "costs": [
+   {
+    "id": "cost-chatgpt-web",
+    "capability_id": "brain-chatgpt-web",
+    "cost_per_call": 0.3,
+    "cost_model": "per_call_estimate",
+    "source": "估算",
+    "note": "D2 已校准（估算）：ChatGPT Web 主脑单次调用（订阅摊销）；引用 config/cost_policy.json unit_prices.brain-chatgpt-web；官方价目待 L3 实测",
+    "status": "official"
+   },
+   {
+    "id": "cost-workbuddy-deepseek-v4-flash",
+    "capability_id": "brain-workbuddy-deepseek-v4-flash",
+    "cost_per_call": 0.05,
+    "cost_model": "per_call_estimate",
+    "source": "估算",
+    "note": "D2 已校准（估算）：弱模型便宜干活档；引用 config/cost_policy.json unit_prices.brain-workbuddy-deepseek-v4-flash",
+    "status": "official"
+   },
+   {
+    "id": "cost-codex-local",
+    "capability_id": "brain-codex-local",
+    "cost_per_call": 0.2,
+    "cost_model": "per_call_estimate",
+    "source": "估算",
+    "note": "D2 已校准（估算）：Codex Local 主脑回退 2（中等偏强）；引用 config/cost_policy.json unit_prices.brain-codex-local",
+    "status": "official"
+   },
+   {
+    "id": "cost-catpaw",
+    "capability_id": "provider-catpaw",
+    "cost_per_call": 0.1,
+    "cost_model": "per_call_estimate",
+    "source": "待实测",
+    "note": "D2 占位估算（source=待实测）：9 模型 API 定价未知，占位 0.1 仅供路由演示；cost_policy.json unit_prices.provider-catpaw.unit_price=null（路由输出'待校准'并跳过成本计算）；真实价目待 L3 实测",
+    "status": "experimental"
+   },
+   {
+    "id": "cost-trae-solo-cn",
+    "capability_id": "provider-trae-solo-cn",
+    "cost_per_call": 0.1,
+    "cost_model": "per_call_estimate",
+    "source": "待实测",
+    "note": "D2 占位估算（source=待实测）：Trae Solo CN 中继定价未知，占位 0.1 仅供路由演示；cost_policy.json unit_prices.provider-trae-solo-cn.unit_price=null（路由输出'待校准'并跳过成本计算）",
+    "status": "experimental"
+   },
+   {
+    "id": "cost-worker-workbuddy-cli",
+    "capability_id": "worker-workbuddy-cli",
+    "cost_per_call": 0.05,
+    "cost_model": "per_call_estimate",
+    "source": "估算",
+    "note": "D2 已校准（估算）：弱 Worker 执行档（宪法 §59 弱模型便宜干活）；引用 config/cost_policy.json unit_prices.worker-workbuddy-cli；与 D1 worker_adapter id 对齐",
+    "status": "official"
+   },
+   {
+    "id": "cost-worker-codex-cli",
+    "capability_id": "worker-codex-cli",
+    "cost_per_call": 0.2,
+    "cost_model": "per_call_estimate",
+    "source": "估算",
+    "note": "D2 已校准（估算）：强 Worker 执行档；引用 config/cost_policy.json unit_prices.worker-codex-cli；与 D1 worker_adapter id 对齐",
+    "status": "official"
+   },
+   {
+    "id": "cost-r-chatgpt-web",
+    "capability_id": "r-prod-chatgpt-web",
+    "cost_per_call": 0.3,
+    "cost_model": "per_call_estimate",
+    "source": "估算",
+    "note": "D2 已校准（估算）：强 R 审查会话单次调用（宪法 §59 强模型贵审查）；引用 config/cost_policy.json unit_prices.r-prod-chatgpt-web；与 D1 r_adapter provider id=r-prod-chatgpt-web 对齐",
+    "status": "official"
+   }
+  ],
+  "quotas": [
+   {
+    "id": "quota-chatgpt-web",
+    "capability_id": "brain-chatgpt-web",
+    "limit": null,
+    "unit": null,
+    "note": "待 D2 校准",
+    "status": "official"
+   },
+   {
+    "id": "quota-workbuddy",
+    "capability_id": "brain-workbuddy-deepseek-v4-flash",
+    "limit": null,
+    "unit": null,
+    "note": "待 D2 校准",
+    "status": "official"
+   },
+   {
+    "id": "quota-codex-strong-review",
+    "capability_id": "r-trae-ralph-relay",
+    "limit": 24,
+    "unit": "次/天",
+    "source": "relay.config.json automation.strong_review_budget_per_day",
+    "note": "strong reviewer 日预算（construction）",
+    "status": "experimental"
+   },
+   {
+    "id": "quota-catpaw",
+    "capability_id": "provider-catpaw",
+    "limit": null,
+    "unit": null,
+    "note": "待 D2 校准",
+    "status": "experimental"
+   },
+   {
+    "id": "quota-trae",
+    "capability_id": "provider-trae-solo-cn",
+    "limit": null,
+    "unit": null,
+    "note": "待 D2 校准",
+    "status": "experimental"
+   },
+   {
+    "id": "quota-review-cycles",
+    "capability_id": "tool-runtime-run",
+    "limit": 3,
+    "unit": "次/任务",
+    "source": "config/production.json policy.max_review_cycles",
+    "note": "生产策略：最大审查轮次",
+    "status": "official"
+   }
+  ],
+  "reliabilities": [
+   {
+    "id": "rel-chatgpt-web",
+    "capability_id": "brain-chatgpt-web",
+    "level": "待实测",
+    "metric": null,
+    "note": "2026-08-30 bridge READY；无正式成功率指标",
+    "status": "official"
+   },
+   {
+    "id": "rel-bsk-daemon",
+    "capability_id": "tool-bsk-daemon",
+    "level": "待实测",
+    "metric": null,
+    "note": "2026-08-30 daemon LISTENING pid=3604",
+    "status": "official"
+   },
+   {
+    "id": "rel-codex",
+    "capability_id": "worker-codex-cli",
+    "level": "待实测",
+    "metric": null,
+    "note": "无正式指标",
+    "status": "official"
+   },
+   {
+    "id": "rel-workbuddy",
+    "capability_id": "worker-workbuddy-cli",
+    "level": "待实测",
+    "metric": null,
+    "note": "无正式指标",
+    "status": "official"
+   },
+   {
+    "id": "rel-catpaw",
+    "capability_id": "provider-catpaw",
+    "level": "待实测",
+    "metric": null,
+    "note": "当前 DOWN（停）",
+    "status": "experimental"
+   },
+   {
+    "id": "rel-trae",
+    "capability_id": "provider-trae-solo-cn",
+    "level": "待实测",
+    "metric": null,
+    "note": "无正式指标",
+    "status": "experimental"
+   },
+   {
+    "id": "rel-runtime",
+    "capability_id": "tool-runtime-run",
+    "level": "待实测",
+    "metric": null,
+    "note": "无正式指标",
+    "status": "official"
+   }
+  ],
+  "capabilities": [
+   {
+    "id": "cap-analysis",
+    "name": "分析",
+    "type": "AI",
+    "provided_by": [
+     "worker-workbuddy-cli",
+     "worker-codex-cli",
+     "brain-chatgpt-web"
+    ],
+    "source": "v08_adapter_registry capabilities",
+    "status": "official"
+   },
+   {
+    "id": "cap-mechanical-read",
+    "name": "机械读取",
+    "type": "AI",
+    "provided_by": [
+     "worker-workbuddy-cli"
+    ],
+    "source": "v08_adapter_registry capabilities",
+    "status": "official"
+   },
+   {
+    "id": "cap-proposal",
+    "name": "提案",
+    "type": "AI",
+    "provided_by": [
+     "worker-workbuddy-cli",
+     "worker-codex-cli"
+    ],
+    "source": "v08_adapter_registry capabilities",
+    "status": "official"
+   },
+   {
+    "id": "cap-code-review",
+    "name": "代码审查",
+    "type": "AI",
+    "provided_by": [
+     "worker-codex-cli",
+     "r-e-lab-codex-cli"
+    ],
+    "source": "v08_adapter_registry capabilities",
+    "status": "official"
+   },
+   {
+    "id": "cap-browser-search",
+    "name": "浏览器-搜索",
+    "type": "BROWSER",
+    "provided_by": [
+     "browser-playwright-cdp"
+    ],
+    "source": "宪法 §20",
+    "status": "experimental",
+    "note": "通用网页操作未开发（SUCCESSOR 报告 §20 search 部分）"
+   },
+   {
+    "id": "cap-browser-read",
+    "name": "浏览器-阅读",
+    "type": "BROWSER",
+    "provided_by": [
+     "browser-playwright-cdp",
+     "tool-chatgpt-bridge"
+    ],
+    "source": "宪法 §20",
+    "status": "official",
+    "note": "R 审查会话 read 已可用（chatgpt_bridge receive）"
+   },
+   {
+    "id": "cap-browser-click",
+    "name": "浏览器-点击",
+    "type": "BROWSER",
+    "provided_by": [
+     "browser-playwright-cdp"
+    ],
+    "source": "宪法 §20",
+    "status": "experimental"
+   },
+   {
+    "id": "cap-browser-input",
+    "name": "浏览器-输入",
+    "type": "BROWSER",
+    "provided_by": [
+     "browser-playwright-cdp"
+    ],
+    "source": "宪法 §20",
+    "status": "experimental"
+   },
+   {
+    "id": "cap-browser-scroll",
+    "name": "浏览器-滚动",
+    "type": "BROWSER",
+    "provided_by": [
+     "browser-playwright-cdp"
+    ],
+    "source": "宪法 §20",
+    "status": "experimental"
+   },
+   {
+    "id": "cap-browser-form",
+    "name": "浏览器-表单",
+    "type": "BROWSER",
+    "provided_by": [
+     "browser-playwright-cdp"
+    ],
+    "source": "宪法 §20",
+    "status": "experimental"
+   },
+   {
+    "id": "cap-browser-upload",
+    "name": "浏览器-上传",
+    "type": "BROWSER",
+    "provided_by": [
+     "tool-chatgpt-bridge"
+    ],
+    "source": "宪法 §20 + chatgpt_bridge upload",
+    "status": "official",
+    "note": "桥 upload 已验证（注释：verified ChatGPT upload）"
+   },
+   {
+    "id": "cap-browser-download",
+    "name": "浏览器-下载",
+    "type": "BROWSER",
+    "provided_by": [
+     "browser-playwright-cdp"
+    ],
+    "source": "宪法 §20",
+    "status": "experimental",
+    "note": "SUCCESSOR 报告 §20 download ❌ 未开发"
+   },
+   {
+    "id": "cap-browser-login-state",
+    "name": "浏览器-登录态",
+    "type": "BROWSER",
+    "provided_by": [
+     "browser-auth-profile-v1",
+     "browser-auth-profile-v2",
+     "browser-cft-profile"
+    ],
+    "source": "宪法 §20",
+    "status": "official",
+    "note": "profile 存在；凭据只登记路径"
+   },
+   {
+    "id": "cap-local-filesystem",
+    "name": "本地-文件系统",
+    "type": "LOCAL",
+    "provided_by": [
+     "worker-local-python",
+     "tool-runtime-run"
+    ],
+    "source": "宪法 §21",
+    "status": "official"
+   },
+   {
+    "id": "cap-local-shell",
+    "name": "本地-Shell",
+    "type": "LOCAL",
+    "provided_by": [
+     "worker-local-python",
+     "tool-runtime-run"
+    ],
+    "source": "宪法 §21",
+    "status": "official"
+   },
+   {
+    "id": "cap-local-powershell",
+    "name": "本地-PowerShell",
+    "type": "LOCAL",
+    "provided_by": [
+     "worker-local-python"
+    ],
+    "source": "宪法 §21",
+    "status": "official"
+   },
+   {
+    "id": "cap-local-git",
+    "name": "本地-Git",
+    "type": "LOCAL",
+    "provided_by": [
+     "worker-local-python",
+     "tool-runtime-run"
+    ],
+    "source": "宪法 §21",
+    "status": "official"
+   },
+   {
+    "id": "cap-local-python",
+    "name": "本地-Python",
+    "type": "LOCAL",
+    "provided_by": [
+     "worker-local-python"
+    ],
+    "source": "宪法 §21",
+    "status": "official"
+   },
+   {
+    "id": "cap-local-node",
+    "name": "本地-Node",
+    "type": "LOCAL",
+    "provided_by": [
+     "worker-workbuddy-node"
+    ],
+    "source": "宪法 §21",
+    "status": "official"
+   },
+   {
+    "id": "cap-local-docker",
+    "name": "本地-Docker",
+    "type": "LOCAL",
+    "provided_by": [],
+    "source": "宪法 §21",
+    "status": "experimental",
+    "note": "未验证接入"
+   },
+   {
+    "id": "cap-local-api",
+    "name": "本地-API 调用",
+    "type": "LOCAL",
+    "provided_by": [
+     "worker-local-python",
+     "tool-catpaw-proxy"
+    ],
+    "source": "宪法 §21",
+    "status": "official"
+   },
+   {
+    "id": "cap-web-session",
+    "name": "网页会话收发（R/Brain）",
+    "type": "WEB_SESSION",
+    "provided_by": [
+     "tool-chatgpt-bridge",
+     "provider-chatgpt-web"
+    ],
+    "source": "chatgpt_bridge",
+    "status": "official",
+    "note": "send/receive/upload/close 已验证"
+   },
+   {
+    "id": "cap-command-execution",
+    "name": "命令行执行（弱 AI 口径）",
+    "type": "AI",
+    "provided_by": [
+     "worker-workbuddy-cli",
+     "worker-codex-cli",
+     "brain-workbuddy-deepseek-v4-flash"
+    ],
+    "source": "弱 AI 口径（混元3/豆包级）",
+    "status": "official",
+    "note": "能执行命令行、读简单指令、易犯错——需 C 纠偏"
+   },
+   {
+    "id": "cap-brain-planning",
+    "name": "拆解规划（Brain）",
+    "type": "AI",
+    "provided_by": [
+     "brain-chatgpt-web",
+     "brain-workbuddy-deepseek-v4-flash",
+     "brain-codex-local"
+    ],
+    "source": "弱 AI 口径 / 强 AI 分工",
+    "status": "official"
+   },
+   {
+    "id": "cap-correction",
+    "name": "纠偏（C）",
+    "type": "RULES",
+    "provided_by": [
+     "c-ec-lite",
+     "c-strategic-correction"
+    ],
+    "source": "宪法 §63 C",
+    "status": "official",
+    "note": "advisory-only"
+   }
+  ],
+  "lifecycle_status": [
+   {
+    "id": "lifecycle-official",
+    "name": "Official（正式）",
+    "definition": "已在 config/production.json 或生产 run.cmd 中声明/接线，或有实测可用证据（health probe 通过），资源可被调度直接使用。",
+    "entries": [
+     "brain-chatgpt-web",
+     "brain-workbuddy-deepseek-v4-flash",
+     "brain-codex-local",
+     "worker-local-python",
+     "worker-workbuddy-node",
+     "worker-workbuddy-cli",
+     "worker-codex-cli",
+     "c-ec-lite",
+     "c-strategic-correction",
+     "r-prod-chatgpt-web",
+     "browser-playwright-cdp",
+     "browser-bsk",
+     "browser-cft",
+     "browser-chrome",
+     "browser-auth-profile-v1",
+     "browser-auth-profile-v2",
+     "browser-cft-profile",
+     "tool-chatgpt-bridge",
+     "tool-bsk-daemon",
+     "tool-runtime-run",
+     "provider-chatgpt-web",
+     "provider-workbuddy",
+     "provider-codex",
+     "login-session-registry",
+     "login-bridge-state",
+     "login-auth-profile-v1",
+     "login-auth-profile-v2",
+     "login-cft-profile"
+    ]
+   },
+   {
+    "id": "lifecycle-experimental",
+    "name": "Experimental（试验）",
+    "definition": "已登记且路径/二进制存在，但未在生产主链验证、当前停机、或属 construction_only 融合登记；不得在生产调度中作为默认依赖。",
+    "entries": [
+     "brain-trae-solo-cn",
+     "worker-trae-builder",
+     "c-relay-corrector",
+     "r-e-lab-codex-cli",
+     "r-trae-ralph-relay",
+     "browser-generic-profile",
+     "browser-bsk-extension",
+     "tool-catpaw-proxy",
+     "tool-trae-ralph-relay",
+     "tool-trae-ralph-guard",
+     "tool-windows-mcp-runtime",
+     "tool-chatgpt-codex-bridge",
+     "provider-catpaw",
+     "provider-trae-solo-cn",
+     "login-catpaw-gui"
+    ]
+   },
+   {
+    "id": "lifecycle-deprecated",
+    "name": "Deprecated（弃用）",
+    "definition": "已被新能力取代或明确不再使用，保留登记仅为审计/历史。调度不得选择。",
+    "entries": [
+     {
+      "id": "legacy-bsk-no-upload",
+      "name": "旧生产 bsk（无上传能力）",
+      "note": "chatgpt_bridge 注释明示：The legacy production bsk (no upload) is never used；当前桥固定使用支持上传的 bsk-dev（dist/bsk-dev.exe）",
+      "source": "C:/Users/17838/.local/bin/chatgpt_bridge"
+     }
+    ]
+   }
+  ],
+  "permissions": [
+   {
+    "id": "perm-default",
+    "name": "全局默认权限",
+    "policy_ref": "config/production.json policy",
+    "rules": {
+     "unknown_data_classification": "PRIVATE_LOCAL",
+     "default_external_effect": "DENY",
+     "missing_authorization": "DENY",
+     "executor_self_grant": "DENY",
+     "stale_generation": "DENY",
+     "stale_fence": "DENY",
+     "revoked_or_expired_authorization": "DENY",
+     "authorization_scope_mismatch": "DENY",
+     "effect_count_exhausted": "DENY",
+     "secret_egress": "DENY",
+     "unknown_outcome_ordinary_retry": "DENY",
+     "raw_credentials_in_authority_scope": "DENY",
+     "credential_transport": "REFERENCE_ONLY",
+     "high_risk_human_gate": "REQUIRED",
+     "external_effect_requires_tcb_verified": true
+    },
+    "status": "official",
+    "source": "config/production.json: policy"
+   },
+   {
+    "id": "perm-session-registry",
+    "name": "会话注册.json 权限",
+    "scope": "E:/执衡/05_资源/会话注册.json",
+    "rules": {
+     "read_url_field": "ALLOW",
+     "copy_content": "DENY",
+     "external_egress": "DENY",
+     "transport": "REFERENCE_ONLY"
+    },
+    "status": "official",
+    "source": "docs/SUCCESSOR-MASTER-REPORT-20260830.md"
+   },
+   {
+    "id": "perm-browser-profiles",
+    "name": "浏览器认证 profile 权限",
+    "scope": "browser-auth-profile-v1/v2, cft-profile-from-production",
+    "rules": {
+     "path_reference": "ALLOW",
+     "copy_content": "DENY",
+     "external_egress": "DENY",
+     "rotation_actor": "OWNER_ONLY"
+    },
+    "status": "official",
+    "source": "docs/ops/ROTATION-CHECKLIST-S02-S03-S06.md"
+   },
+   {
+    "id": "perm-external-effect",
+    "name": "外发效果三门",
+    "scope": "send/upload/浏览器外部效果",
+    "rules": {
+     "egress_policy": "REQUIRED",
+     "tcb_verified": "REQUIRED",
+     "grant_authorization": "REQUIRED",
+     "default": "DENY"
+    },
+    "status": "official",
+    "source": "docs/ops/W1-MINIMAL-WIRING-PLAN.md"
+   },
+   {
+    "id": "perm-catpaw",
+    "name": "CatPaw 反代权限",
+    "scope": "provider-catpaw",
+    "rules": {
+     "proxy_key": "PATH_ONLY_DPAPI",
+     "external_egress": "DENY",
+     "auth_header": "X-Passport-Token",
+     "gui_login": "OWNER_ONLY"
+    },
+    "status": "experimental",
+    "source": "E:/WB/tools/catpaw-longcat-proxy/README.md"
+   }
+  ],
+  "adapters": [
+   {
+    "id": "adapter-web-session",
+    "name": "WebSessionProvider（网页会话适配器）",
+    "type": "PROVIDER_ADAPTER",
+    "status": "official",
+    "provider_ids": [
+     "provider-chatgpt-web"
+    ],
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge"
+     ],
+     "note": "统一桥封装 web 会话"
+    },
+    "contract": "V08_PROVIDER_CONTRACT",
+    "source": "runtime/v08_adapter_registry.json",
+    "notes": [
+     "宪法 §5 Provider Independence：资源可替换的关键适配点"
+    ]
+   },
+   {
+    "id": "adapter-api-model",
+    "name": "APIModelProvider（API 模型适配器）",
+    "type": "PROVIDER_ADAPTER",
+    "status": "official",
+    "provider_ids": [
+     "provider-workbuddy",
+     "provider-codex"
+    ],
+    "entry": {
+     "kind": "command",
+     "command": null,
+     "note": "CLI 型 API 模型统一接口"
+    },
+    "contract": "V08_PROVIDER_CONTRACT",
+    "source": "runtime/v08_adapter_registry.json",
+    "notes": []
+   },
+   {
+    "id": "adapter-chatgpt-bridge",
+    "name": "chatgpt_bridge CLI 适配器",
+    "type": "CLI_ADAPTER",
+    "status": "official",
+    "provider_ids": [
+     "provider-chatgpt-web"
+    ],
+    "entry": {
+     "kind": "command",
+     "command": [
+      "C:/Users/17838/.local/bin/chatgpt_bridge"
+     ],
+     "note": "status/open/upload/send/receive/close"
+    },
+    "contract": "BRIDGE_CLI",
+    "source": "C:/Users/17838/.local/bin/chatgpt_bridge",
+    "notes": []
+   },
+   {
+    "id": "adapter-bsk",
+    "name": "BSK 浏览器适配器（daemon+扩展）",
+    "type": "BROWSER_ADAPTER",
+    "status": "official",
+    "provider_ids": [],
+    "entry": {
+     "kind": "command",
+     "command": [
+      "E:/WB/tools/bsk-file-bridge/dist/bsk-dev.exe",
+      "daemon",
+      "start"
+     ],
+     "note": "WS 52900（以 bsk-home/daemon.json ws_port 为准，当前实测）"
+    },
+    "contract": "BSK_DAEMON",
+    "source": "config/production.json: browser",
+    "notes": []
+   },
+   {
+    "id": "adapter-catpaw-openai",
+    "name": "CatPaw OpenAI 兼容适配器",
+    "type": "PROVIDER_ADAPTER",
+    "status": "experimental",
+    "provider_ids": [
+     "provider-catpaw"
+    ],
+    "entry": {
+     "kind": "command",
+     "command": null,
+     "note": "Base URL http://127.0.0.1:32177/v1；OpenAI 兼容"
+    },
+    "contract": "OPENAI_COMPATIBLE",
+    "source": "E:/WB/tools/catpaw-longcat-proxy/README.md",
+    "notes": []
+   },
+   {
+    "id": "adapter-trae-ralph",
+    "name": "Trae-Ralph 中继适配器",
+    "type": "RELAY_ADAPTER",
+    "status": "experimental",
+    "provider_ids": [
+     "provider-trae-solo-cn"
+    ],
+    "entry": {
+     "kind": "command",
+     "command": [
+      "node",
+      "src/review-relay.js",
+      "watch"
+     ],
+     "cwd": "E:/WB/tools/Trae-Ralph",
+     "note": "review-relay + outer-guard"
+    },
+    "contract": "RELAY_WATCH",
+    "source": "E:/WB/tools/Trae-Ralph/package.json",
+    "notes": [
+     "construction_only"
+    ]
+   },
+   {
+    "id": "adapter-local-command",
+    "name": "本地命令适配器（python/node/git）",
+    "type": "LOCAL_ADAPTER",
+    "status": "official",
+    "provider_ids": [],
+    "entry": {
+     "kind": "command",
+     "command": null,
+     "note": "本地解释器/CLI 直接执行（宪法 §21）"
+    },
+    "contract": "LOCAL_EXEC",
+    "source": "config/production.json: workers",
+    "notes": []
+   }
+  ]
+ },
+ "role_bindings": {
+  "brain": [
+   "brain-chatgpt-web",
+   "brain-workbuddy-deepseek-v4-flash",
+   "brain-codex-local",
+   "brain-trae-solo-cn"
+  ],
+  "worker": [
+   "worker-local-python",
+   "worker-workbuddy-node",
+   "worker-workbuddy-cli",
+   "worker-codex-cli",
+   "worker-trae-builder"
+  ],
+  "c": [
+   "c-ec-lite",
+   "c-strategic-correction",
+   "c-relay-corrector"
+  ],
+  "r": [
+   "r-prod-chatgpt-web",
+   "r-e-lab-codex-cli",
+   "r-trae-ralph-relay"
+  ],
+  "browser": [
+   "browser-playwright-cdp",
+   "browser-bsk",
+   "browser-cft",
+   "browser-chrome",
+   "browser-generic-profile",
+   "browser-auth-profile-v1",
+   "browser-auth-profile-v2",
+   "browser-cft-profile",
+   "browser-bsk-extension"
+  ],
+  "tool": [
+   "tool-chatgpt-bridge",
+   "tool-bsk-daemon",
+   "tool-runtime-run",
+   "tool-catpaw-proxy",
+   "tool-trae-ralph-relay",
+   "tool-trae-ralph-guard",
+   "tool-windows-mcp-runtime",
+   "tool-chatgpt-codex-bridge"
+  ],
+  "provider": [
+   "provider-chatgpt-web",
+   "provider-workbuddy",
+   "provider-codex",
+   "provider-catpaw",
+   "provider-trae-solo-cn"
+  ]
+ },
+ "notes": [
+  "本注册表为机器可读能力清单（宪法 §63）；成本字段已由 D2 校准为估算值（source=估算/待实测，引用 config/cost_policy.json 模型单价；真实价目待 L3 实测），配额/可靠性无数据时一律 null 并注明待校准；不得编造不存在的能力。",
+  "凭据纪律：会话注册.json、browser profile、proxy-key.dpapi 一律只登记路径，不复制内容、不读取、不外传（§52/§53/§57）。",
+  "与 production.json 的差异点：browser.generic_profile（E:/WB/state/ai-production-control/browser-profile）2026-08-30 实测目录缺失，已登记为 experimental 并标注告警。",
+  "catpaw 反代（32177）当前停机；其 proxy-key.dpapi 为 DPAPI 机器绑定密文，轮换执行主体=业主本人（S-06）。",
+  "运行时消费点：docs/ops/registry-launch.py 读取本注册表探测健康并输出拉起建议；D2 成本路由已消费 costs/quotas 字段（runtime/cost_router.py + config/cost_policy.json，见 docs/ops/cost-router-README.md）；§5 Adapter 将消费 adapters 字段。"
+ ]
+}

@@ -4,6 +4,11 @@ version = "1.0.0"
 requires-python = ">=3.12"
 description = "Windows-local AI production control plane"
 
+# D1 全角色 Adapter 可选依赖（R-Adapter 需 LiteLLM；仅 Python312 生产解释器安装）。
+# 安装：C:/Users/17838/AppData/Local/Programs/Python/Python312/python.exe -m pip install -e ".[adapters]"
+[project.optional-dependencies]
+adapters = ["litellm==1.83.0"]
+
 [tool.unittest]
 start-directory = "tests"
 

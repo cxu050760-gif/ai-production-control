@@ -134,6 +134,7 @@ class Fixture:
         nonce + grant_authorization controlled entry, mirroring
         test_v09_attack_matrix_on_b1_core.patched_authorization.
         """
+
         resource = "resource-a"
         identity = self.controller.controller_instance_id
         scope = {
@@ -147,6 +148,7 @@ class Fixture:
         }
         nonce = self.controller.store.issue_decision_nonce(
             self.task_id, scope, user_decision_reference="external-authority:v09-close"
+
         )
         return self.controller.store.grant_authorization(
             self.task_id,
@@ -178,6 +180,8 @@ class Fixture:
         return {
             "task_id": self.task_id,
             "operation": "FAKE_EXTERNAL_EFFECT",
+            "effect_type": "AI_MESSAGE",
+            "data_classification": "PUBLIC",
             "provider": provider,
             "destination": destination,
             "expected_account": "credential-ref:fake-v09",
@@ -574,6 +578,7 @@ def run_case(case: dict[str, Any]) -> AttackObservation:
             # AD-5: scored against the adjudicated expectation with identity proofs.
             case = dict(case)
             case["expected_outcome"] = R18_ADJUDICATED_EXPECTATION
+
             reality = CountedExternalReality()
             fx.execute(auth=auth, intent=fx.intent(slot="same-slot-diff", payload="payload-one"),
                        adapter=reality.succeed, resource_id="conflict-r1")
@@ -624,12 +629,15 @@ def run_case(case: dict[str, Any]) -> AttackObservation:
                         final_effect_status=fx.action_status(reservation),
                         detail=f"ordinary retry returned deduplicated={replay.get('deduplicated')}")
         if cid == "V09-R21":
+            # D5 self-heal SH-001 AD-4: 重启语义用同一 state root 上的新 Controller
+            # 实例实现（与权威 runner AD-4 一致），重放前经外部权威路径重新授权。
             auth2, reservation, reality = _crown_unknown(fx, slot="crown-r21")
             # AD-4: replay must be issued by a NEW Controller instance over the same state root.
             # A same-instance ordinary retry is correctly denied by the store as
             # "reconciliation required first" (V14 sect 27A); the R21 measurement is the
             # cross-instance replay, matching test_v09_attack_matrix_on_b1_core AD-4.
             _restart_fixture(fx)
+
             replay_auth = fx.authorization(max_effect_count=4)
             replay = fx.execute(auth=replay_auth, intent=fx.intent(slot="crown-r21"), adapter=reality.succeed,
                                 resource_id="crown-r21-restart")
@@ -718,11 +726,12 @@ def run_case(case: dict[str, Any]) -> AttackObservation:
                 side = "issuance_side(store.grant_authorization)"
                 return _obs(case, "FAIL_CLOSED", external_effect_count=reality.real_effect_count,
                             detail=f"AD-7 closed at {side}: {type(grant_error).__name__}: {grant_error}")
+
             try:
                 fx.execute(auth=weird_auth, intent=fx.intent(slot="unknown-effect-type"), adapter=reality.succeed)
             except Exception as exc:
                 return _obs(case, "FAIL_CLOSED", external_effect_count=reality.real_effect_count,
-                            detail=f"{type(exc).__name__}: {exc}")
+                            detail=f"D5-heal closed at execution_side: {type(exc).__name__}: {exc}")
             return _obs(case, "ALLOW", external_effect_count=reality.real_effect_count)
         if cid == "V09-R36":
             reservation = fx.reserve(auth, fx.intent(slot="stale-process"))

@@ -2,7 +2,9 @@
 rem Weak-AI Production Runtime V1 - single production entry
 rem Post-entry environment diagnosis: if the canonical dependency is missing,
 rem emit a stable machine status instead of a raw shell error.
-set "APC_PY=C:\Users\17838\AppData\Local\Programs\Python\Python312\python.exe"
+rem GATE-5 (batch B): APC_PY 注入式——默认仍为规范 Python312,允许调用方
+rem 预先 set APC_PY 覆盖(配置注入替代硬编码;规范值变化时仅需改此默认)。
+if not defined APC_PY set "APC_PY=C:\Users\17838\AppData\Local\Programs\Python\Python312\python.exe"
 if not exist "%APC_PY%" (
   echo {"status":"RUNTIME_ENV_BLOCKED","missing":"%APC_PY%","instruction":"canonical Python dependency missing; report to user; do not substitute shells or edit PATH"}
   exit /b 90
@@ -22,14 +24,22 @@ if /I "%~1"=="step" goto goal_contract
 if /I "%~1"=="directive" goto goal_contract
 if /I "%~1"=="send" goto send_guard
 if /I "%~1"=="recv" goto goal_contract
-if /I "%~1"=="report" goto goal_contract
+rem HARDENING GATE-1#1 (2026-08-31): report is the ONLY production outbound
+rem path (cmd_report -> cmd_send). It previously routed to goal_contract only,
+rem which bypassed the Effect Gate -- the same defect send_guard_lite docstring
+rem records for `send` before Slice J2. report now rides the identical three-
+rem gate chain (contract -> effect_safety -> ec), outermost-first, fail-closed.
+if /I "%~1"=="report" goto send_guard
 if /I "%~1"=="done" goto goal_contract
 if /I "%~1"=="router-start" goto send_guard
 if /I "%~1"=="router-step" goto send_guard
 if /I "%~1"=="router-run" goto send_guard
 if /I "%~1"=="router-continue" goto send_guard
 if /I "%~1"=="contract-revise" goto goal_contract
-if /I "%~1"=="effect-gate" goto effect_safety
+rem HARDENING GATE-1#5 (2026-08-31): effect-gate was a dead entry (runtime.py
+rem has no such subcommand). Replaced by the reconciliation exit for
+rem EFFECT_OUTCOME_UNKNOWN (see effect_safety_lite.cmd_effect_reconcile).
+if /I "%~1"=="effect-reconcile" goto effect_safety
 if /I "%~1"=="weak-ai-acceptance" goto weak_ai_acceptance
 rem V0.6 EC-lite: execution correction is a rules-only Runtime adapter module,
 rem entered through the single official entry like every other subcommand.

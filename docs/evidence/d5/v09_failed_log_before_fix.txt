@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\runtime\_pre_fix_probe.py", line 708, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\runtime\_pre_fix_probe.py", line 679, in main
+    observations = run_all()
+                   ^^^^^^^^^
+  File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\runtime\_pre_fix_probe.py", line 660, in run_all
+    return [run_case(case) for case in matrix["cases"]]
+            ^^^^^^^^^^^^^^
+  File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\runtime\_pre_fix_probe.py", line 432, in run_case
+    auth = fx.authorization(max_effect_count=4)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\runtime\_pre_fix_probe.py", line 125, in authorization
+    return self.controller.scoped_authorization(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\src\aicontrol\controller.py", line 331, in scoped_authorization
+    raise GateDenied("pre-existing scoped authorization required; Controller self-grant is forbidden")
+aicontrol.store.GateDenied: pre-existing scoped authorization required; Controller self-grant is forbidden

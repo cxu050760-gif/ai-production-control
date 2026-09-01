@@ -56,6 +56,7 @@
   "summary": "seed session reused preferentially (runtime/lib/yz_ds_lib.sh: mode-request path reuses the healthy seed session first; double-sample guard against false negatives; opens another only when seed unreachable/mode-mismatch/busy, to keep review context)"
  }
 },
+
  "trunk_policy": {
   "master": {
    "branch": "master",
@@ -74,6 +75,7 @@
     "type": "commit",
     "value": "2f1188ad81a3a101cf23752a4d72895eab9ff0b2"
    }
+
   },
   "current_accepted_base": {
    "branch": "v0.8-integrate/adapter-final-4",

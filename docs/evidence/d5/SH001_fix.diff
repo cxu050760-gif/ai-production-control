@@ -1,0 +1,140 @@
+--- docs/evidence/d5/test_v09_attack_matrix_offline_PRE_FIX.py	2026-08-31 02:20:43.346662200 +0800
++++ runtime/test_v09_attack_matrix_offline.py	2026-08-31 02:21:28.168930500 +0800
+@@ -122,15 +122,33 @@
+         effect_type: str = "AI_MESSAGE",
+         max_effect_count: int = 3,
+     ) -> dict[str, Any]:
+-        return self.controller.scoped_authorization(
+-            task_id=self.task_id,
++        # D5 self-heal SH-001: b1 core 禁止 Controller 自授（controller.py
++        # scoped_authorization 只返回既有授权），因此经外部权威路径签发：
++        # issue_decision_nonce -> grant_authorization（与权威 runner
++        # test_v09_attack_matrix_on_b1_core.py AD-1/AD-3 语义一致）。
++        resource = "resource-a"
++        identity = self.controller.controller_instance_id
++        scope = {
++            "provider": provider,
++            "destination": destination,
++            "resource": resource,
++            "purpose": purpose,
++            "effect_type": effect_type,
++            "data_classes": ["PUBLIC"],
++            "identity": identity,
++        }
++        nonce = self.controller.store.issue_decision_nonce(
++            self.task_id, scope, user_decision_reference="external-authority:v09-d5-heal"
++        )
++        return self.controller.store.grant_authorization(
++            self.task_id,
++            nonce["decision_nonce"],
++            scope,
+             provider=provider,
+-            destination=destination,
++            resource=resource,
+             purpose=purpose,
+             effect_type=effect_type,
+-            data_classes=["PUBLIC"],
+             max_effect_count=max_effect_count,
+-            user_decision_reference="fake-human-reference-v09",
+         )
+ 
+     def intent(
+@@ -150,6 +168,8 @@
+         return {
+             "task_id": self.task_id,
+             "operation": "FAKE_EXTERNAL_EFFECT",
++            "effect_type": "AI_MESSAGE",
++            "data_classification": "PUBLIC",
+             "provider": provider,
+             "destination": destination,
+             "expected_account": "credential-ref:fake-v09",
+@@ -533,6 +553,10 @@
+             return _obs(case, observed, external_effect_count=reality.real_effect_count,
+                         final_effect_status=str(replay["reservation"].status), authorization_identity=auth["authorization_id"])
+         if cid == "V09-R18":
++            # D5 self-heal SH-001 AD-5: R18 期望经裁决修订为 ALLOW_DISTINCT_EFFECT
++            # （同 slot 不同 payload = 两个不同逻辑效果，各自经完整闸门独立通过可共存）。
++            case = dict(case)
++            case["expected_outcome"] = "ALLOW_DISTINCT_EFFECT"
+             reality = CountedExternalReality()
+             fx.execute(auth=auth, intent=fx.intent(slot="same-slot-diff", payload="payload-one"),
+                        adapter=reality.succeed, resource_id="conflict-r1")
+@@ -541,7 +565,28 @@
+                            adapter=reality.succeed, resource_id="conflict-r2")
+             except GateDenied as exc:
+                 return _obs(case, "CONFLICT_OR_DENY", external_effect_count=reality.real_effect_count, detail=str(exc))
+-            return _obs(case, "ALLOW", external_effect_count=reality.real_effect_count)
++            rows = fx.controller.store.connection.execute(
++                "SELECT logical_effect_id, logical_effect_slot, attempt_id, effect_intent_hash,"
++                " COUNT(*) OVER (PARTITION BY logical_effect_id) AS copies"
++                " FROM actions WHERE task_id=?",
++                (fx.task_id,),
++            ).fetchall()
++            distinct_ids = {row["logical_effect_id"] for row in rows}
++            same_slot = {row["logical_effect_slot"] for row in rows}
++            distinct_hashes = {row["effect_intent_hash"] for row in rows}
++            independent = len(rows) == 2 and all(row["copies"] == 1 for row in rows)
++            ok = (
++                reality.real_effect_count == 2
++                and len(distinct_ids) == 2
++                and len(distinct_hashes) == 2
++                and len(same_slot) == 1
++                and independent
++            )
++            return _obs(case, "ALLOW_DISTINCT_EFFECT" if ok else "ALLOW_NOT_DISTINCT",
++                        external_effect_count=reality.real_effect_count,
++                        detail=f"AD-5 identity proof: slots={sorted(same_slot)} "
++                               f"logical_effect_ids={len(distinct_ids)} intent_hashes={len(distinct_hashes)} "
++                               f"action_rows={len(rows)} independent_reservations={independent}")
+         if cid == "V09-R19":
+             auth2, reservation, reality = _crown_unknown(fx, slot="crown-r19")
+             status = fx.action_status(reservation)
+@@ -562,13 +607,21 @@
+                         final_effect_status=fx.action_status(reservation),
+                         detail=f"ordinary retry returned deduplicated={replay.get('deduplicated')}")
+         if cid == "V09-R21":
++            # D5 self-heal SH-001 AD-4: 重启语义用同一 state root 上的新 Controller
++            # 实例实现（与权威 runner AD-4 一致），重放前经外部权威路径重新授权。
+             auth2, reservation, reality = _crown_unknown(fx, slot="crown-r21")
+-            replay = fx.execute(auth=auth2, intent=fx.intent(slot="crown-r21"), adapter=reality.succeed,
++            fx.controller.close()
++            fx.controller = Controller(fx.config_path)
++            fx.lease = fx.controller.acquire_lease()
++            replay_auth = fx.authorization(max_effect_count=4)
++            replay = fx.execute(auth=replay_auth, intent=fx.intent(slot="crown-r21"), adapter=reality.succeed,
+                                 resource_id="crown-r21-restart")
+             observed = "RECONCILE_FIRST" if (replay.get("reconciliation_required") is True and
+                                              reality.real_effect_count == 1) else "DEDUPLICATED_WITHOUT_RECONCILE"
+             return _obs(case, observed, external_effect_count=reality.real_effect_count,
+-                        final_effect_status=fx.action_status(reservation), reconciliation_result="REQUIRED")
++                        final_effect_status=fx.action_status(reservation), reconciliation_result="REQUIRED",
++                        authorization_identity=replay_auth["authorization_id"],
++                        detail="AD-4: replay issued by a new Controller instance over the same state root")
+         if cid in ("V09-R22", "V09-R23", "V09-R24"):
+             if cid == "V09-R22":
+                 auth2, reservation, reality = _crown_unknown(fx, slot="crown-r22")
+@@ -634,13 +687,22 @@
+                 return _obs(case, "FAIL_CLOSED", detail=f"{type(exc).__name__}: {exc}")
+             return _obs(case, "ALLOW")
+         if cid == "V09-R34":
+-            weird_auth = fx.authorization(effect_type="TOTALLY_UNKNOWN_EFFECT_TYPE", max_effect_count=1)
+             reality = CountedExternalReality()
++            grant_error: Exception | None = None
++            try:
++                weird_auth = fx.authorization(effect_type="TOTALLY_UNKNOWN_EFFECT_TYPE", max_effect_count=1)
++            except Exception as exc:
++                grant_error = exc
++                weird_auth = None
++            if grant_error is not None:
++                return _obs(case, "FAIL_CLOSED", external_effect_count=reality.real_effect_count,
++                            detail=f"D5-heal closed at issuance_side(store.grant_authorization): "
++                                   f"{type(grant_error).__name__}: {grant_error}")
+             try:
+                 fx.execute(auth=weird_auth, intent=fx.intent(slot="unknown-effect-type"), adapter=reality.succeed)
+             except Exception as exc:
+                 return _obs(case, "FAIL_CLOSED", external_effect_count=reality.real_effect_count,
+-                            detail=f"{type(exc).__name__}: {exc}")
++                            detail=f"D5-heal closed at execution_side: {type(exc).__name__}: {exc}")
+             return _obs(case, "ALLOW", external_effect_count=reality.real_effect_count)
+         if cid == "V09-R36":
+             reservation = fx.reserve(auth, fx.intent(slot="stale-process"))

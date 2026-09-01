@@ -1,0 +1,33 @@
+GOAL: 修复运行错误：GateDenied: pre-existing scoped authorization required; Controller self-grant is forbidden
+
+要什么成果:
+  - 让 C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\src\aicontrol\controller.py 的测试转绿（通过、exit 0），且不破坏既有权威矩阵/冻结测试。
+  - 对应测试文件运行返回 0（通过）
+  - 相关权威/冻结测试保持通过（零回归）
+  - 改动最小且可审阅（diff 入证据）
+  - 不修改 TCB/冻结文件
+
+怎么算做完:
+  - 对应测试文件运行返回 0（通过）
+  - 相关权威/冻结测试保持通过（零回归）
+  - 改动最小且可审阅（diff 入证据）
+  - 不修改 TCB/冻结文件
+
+约束:
+  - 最小改动
+  - 不改 src/aicontrol/
+  - 不改 config/production.json
+  - 不改权威矩阵测试
+
+缺陷摘要:
+  - 类型: ERROR_TEXT
+  - 摘要: GateDenied: pre-existing scoped authorization required; Controller self-grant is forbidden
+  - 文件: C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\src\aicontrol\controller.py
+  - 期望: GateDenied
+  - 实际: pre-existing scoped authorization required; Controller self-grant is forbidden
+
+证据（原文节选）:
+  | GateDenied: pre-existing scoped authorization required; Controller self-grant is forbidden
+  | File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\runtime\_pre_fix_probe.py", line 432
+  | File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\runtime\_pre_fix_probe.py", line 125
+  | File "C:\Users\17838\Documents\Qoder\2026-08-28\031cb4e3\b1\src\aicontrol\controller.py", line 331
