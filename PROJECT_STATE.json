@@ -294,11 +294,15 @@
   "E2_ACHIEVEMENT": {
    "value": "71/5/0",
    "source": "docs/evidence/V1.0-ACHIEVEMENT-MATRIX-20260901.md (current: satisfied 71 / partial 5 / gap 0 / scaffold 0, batch D moved 45/71 to satisfied); BUILD_MISSION_JOURNAL.md records the pre-batch-D 69/7/0"
+  },
+  "POSTMERGE_20260901": {
+   "value": "63/14/0",
+   "source": "docs/evidence/DEFINITION-77-SECTIONS-V5-POSTMERGE-20260901.md (post-merge health check on HEAD 33a5311; matches V4, no up/down)"
   }
  },
  "adopted": {
   "value": "63/14/0",
-  "reason": "DEFINITION-77-SECTIONS-V4.md sect conclusion: QA draft (67/10/0) vs ARCH draft (54/23/0) reconciled; final tally per audit rule R = 63 satisfied / 14 partial / 0 gap. E2 achievement matrix (71/5/0 current, was 69/7/0 pre-batch-D) is the hardening-line forward-looking measure; FINAL (41/35/1) is the superseded v3 baseline."
+  "reason": "DEFINITION-77-SECTIONS-V5-POSTMERGE-20260901.md (2026-09-01 post-merge health check on HEAD 33a5311): 63/14/0 with no up/down vs V4 baseline. Today two real weak-model RUNs (RUN-180051/190029, DONE rework 1+13 PASS) and d3 activation (playwright+chromium PLAYWRIGHT_READY) are insufficient to promote any half section: sect 3/4/5/74 bound by hard rule 8b; sect 20 d3 activation covers only search/fetch/download subitems; other half sections keep real gaps. E2 (71/5/0) is the hardening-line forward measure; FINAL (41/35/1) superseded v3."
  }
 }
 }

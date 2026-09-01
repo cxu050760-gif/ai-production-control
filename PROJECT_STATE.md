@@ -29,8 +29,9 @@
 | 机器复核（QA 稿） | 67/10/0 | `docs/evidence/DEFINITION-77-SECTIONS-V4.md`（software-qa-d6 独立复核稿） |
 | 审计改判（最终统计） | 63/14/0 | `docs/evidence/DEFINITION-77-SECTIONS-V4.md`（审计规则 R 复核后：§34/§55/§59/§68 降等） |
 | E2 达成矩阵 | 71/5/0 | `docs/evidence/V1.0-ACHIEVEMENT-MATRIX-20260901.md`（满足 71 / 部分 5 / 差距 0 / 脚手架 0；批次 D 将 §45/§71 转满足；`BUILD_MISSION_JOURNAL.md` 记录批次 D 前 69/7/0） |
+| POST-MERGE 复核（V5） | 63/14/0 | `docs/evidence/DEFINITION-77-SECTIONS-V5-POSTMERGE-20260901.md`（合并后 HEAD 33a5311 体检，与 V4 一致无升降；今日两轮真实 RUN 与 d3 激活均不足以升 ✅） |
 
-**最终采信：63/14/0**（`DEFINITION-77-SECTIONS-V4.md` 结论速览）——理由：QA 稿（67/10/0）与 ARCH 稿（54/23/0）差异经主理人合并，最终统计按审计规则 R 复核取 63 满足 / 14 部分 / 0 差距；E2 达成矩阵（71/5/0，批次 D 前 69/7/0）为硬化线前瞻口径（§3/§20/§60/§68/§74 记部分）；FINAL（41/35/1）为已被取代的 v3 基线。
+**最终采信：63/14/0**（`DEFINITION-77-SECTIONS-V5-POSTMERGE-20260901.md`，2026-09-01 合并后体检）——理由：V5 以 V4（63/14/0）为基线对合并后 HEAD 33a5311 逐节重判，63 满足 / 14 部分 / 0 差距，**无升降**（今日两轮真实 RUN 与 d3 激活均不足以升 ✅：§3/§4/§5/§74 受 §8b 硬规则约束，§20 的 d3 激活仅覆盖 search/fetch/download 子项，其余 🟡 缺闭环真实成立）；E2 达成矩阵（71/5/0）为硬化线前瞻口径；FINAL（41/35/1）为已被取代的 v3 基线。
 
 ## 2026-09-01 能力变更（git verified，全部并入 master）
 
