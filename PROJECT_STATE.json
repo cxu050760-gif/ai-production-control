@@ -2,8 +2,8 @@
  "schema": "PROJECT_STATE_1",
  "generated_at": "2026-09-01",
  "generated_by": "takeover-planning-session (actor=planner-brain, verified via repo clone + local test runs)",
- "release_status": "READY_FOR_USER_ACCEPTANCE",
- "current_stage": "V1_ENGINEERING_CLOSED",
+ "release_status": "READY_FOR_L3_OWNER_TESTS",
+ "current_stage": "V1_1_BLACKBOX_DEV_COMPLETE",
  "capabilities_2026_09_01": {
  "deepseek_dual_channel_three_mode": {
   "commits": [
@@ -60,20 +60,20 @@
  "trunk_policy": {
   "master": {
    "branch": "master",
-   "head": "2f1188ad81a3a101cf23752a4d72895eab9ff0b2",
+   "head": "76f218808eb7196c07c8efd95821e040f9c13423",
    "status": "CURRENT",
-   "note": "merged v0.9-b1/authority-effect-core (V1.0 engineering close, FINAL_SIGNING_PACKAGE Part 3, 2026-08-30); tag v1.0-engineering-close; 2026-09-01 capability landing (DeepSeek dual-channel three-mode, WB_DONE neutral protocol, effect-safety triple wiring) tracked on HEAD 2f1188a"
+   "note": "2026-09-01: hardening/p0-gates-20260831 (114 commits, v1.1-blackbox line) merged into master via merge/hardening-20260901 76f2188; master-side DeepSeek increment (dual-channel three-mode, WB_DONE protocol, effect-safety triple, RECONCILE) preserved; prior history: V1.0 engineering close 793fa41/tag v1.0-engineering-close"
   }
  },
  "baselines": {
   "current_development_head": {
    "branch": "master",
-   "head": "2f1188ad81a3a101cf23752a4d72895eab9ff0b2",
-   "verdict": "DEV_HEAD_SYNCED_2026_09_01",
+   "head": "76f218808eb7196c07c8efd95821e040f9c13423",
+   "verdict": "DEV_HEAD_SYNCED_2026_09_01_MERGED_HARDENING",
    "evidence_level": "VERIFIED",
    "anchor": {
     "type": "commit",
-    "value": "2f1188ad81a3a101cf23752a4d72895eab9ff0b2"
+    "value": "76f218808eb7196c07c8efd95821e040f9c13423"
    }
 
   },
@@ -275,5 +275,30 @@
   "ai-control.cmd revival as official entry",
   "F004-class dead ends (Chrome login-state copying)",
   "any merge before Phase 0 lands (user ruling 2026-08-28)"
- ]
+ ],
+ "matrix_caliber": {
+ "note": "77-section core-definition matrix versions seen across the repo (2026-09-01)",
+ "versions": {
+  "FINAL": {
+   "value": "41/35/1",
+   "source": "docs/evidence/batch-e1e4-20260830/RESULT_BLOCK.md C-3 self-assessment v3 after downgrades (44/32/1 -> 41/35/1)"
+  },
+  "MACHINE_REVIEW": {
+   "value": "67/10/0",
+   "source": "docs/evidence/DEFINITION-77-SECTIONS-V4.md QA independent review draft (software-qa-d6)"
+  },
+  "AUDIT_ADJUDICATED": {
+   "value": "63/14/0",
+   "source": "docs/evidence/DEFINITION-77-SECTIONS-V4.md final tally after audit rule R re-review (34/55/59/68 downgraded)"
+  },
+  "E2_ACHIEVEMENT": {
+   "value": "71/5/0",
+   "source": "docs/evidence/V1.0-ACHIEVEMENT-MATRIX-20260901.md (current: satisfied 71 / partial 5 / gap 0 / scaffold 0, batch D moved 45/71 to satisfied); BUILD_MISSION_JOURNAL.md records the pre-batch-D 69/7/0"
+  }
+ },
+ "adopted": {
+  "value": "63/14/0",
+  "reason": "DEFINITION-77-SECTIONS-V4.md sect conclusion: QA draft (67/10/0) vs ARCH draft (54/23/0) reconciled; final tally per audit rule R = 63 satisfied / 14 partial / 0 gap. E2 achievement matrix (71/5/0 current, was 69/7/0 pre-batch-D) is the hardening-line forward-looking measure; FINAL (41/35/1) is the superseded v3 baseline."
+ }
+}
 }

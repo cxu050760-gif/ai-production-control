@@ -1,15 +1,12 @@
-> ⚠️ **历史快照（V1.0 收口时点 2026-08-30）** — 本文件已停更；唯一权威 = `PROJECT_STATE.json`（`scripts/state_doctor.py` 校验对象）。
-> 下文内容仅反映 V1.0 收口时点（master@793fa41, tag v1.0-engineering-close），不反映 v1.1-blackbox 开发线进展。
-
 # PROJECT_STATE — 执衡 / ai-production-control
 
 > 本文件与 `PROJECT_STATE.json` 是项目状态的**唯一权威**（二者必须一致，由
 > `scripts/state_doctor.py` 校验）。其余文档（README/STATUS/Journal）均为派生视图。
 > 断言证据等级：VERIFIED（有锚点且已复核）/ INFERRED（有依据未复核）/ UNVERIFIED（假设）。
 
-## 状态（2026-09-01，V1_ENGINEERING_CLOSED）
+## 状态（2026-09-01，V1_1_BLACKBOX_DEV_COMPLETE）
 
-- 发布状态：**READY_FOR_USER_ACCEPTANCE**（V1.0 工程收口签字后晋升；边界注记见 `docs/governance/SIGNING-V1-ENGINEERING-CLOSE.md`——**北极星"自动调度闭环"未达成，"执衡可自动生产"宣称不成立**，达成前不得再晋升）
+- 发布状态：**READY_FOR_L3_OWNER_TESTS**（2026-09-01 合并 hardening/p0-gates-20260831 后；v1.1-blackbox 开发线完成，GATE-1/2/3 硬化 + E2 达成矩阵 71/5/0 入仓；北极星"自动调度闭环"待业主 L3 实测，达成前不得再晋升）
 - 路线：Phase 0 → V0.9 收口 → V0.10 单类真实 GOAL → V0.11 REWORK/RECOVERY → V1.0 硬化（用户已批准）→ **V1.0 工程收口（2026-08-30 执行完毕）**
 - 总纪律：KEEP > REPAIR > SIMPLIFY > REPLACE > REBUILD
 
@@ -17,10 +14,23 @@
 
 | 概念 | 值 | 等级 |
 |---|---|---|
-| 当前开发头 | `master@2f1188a`（实际 HEAD，2026-09-01 17:25:54 +0800；上一权威 9407f49 并入其历史） | VERIFIED |
+| 当前开发头 | `merge/hardening-20260901@76f2188`（2026-09-01 20:11:39 +0800；hardening 合入后合并 HEAD） | VERIFIED |
 | 当前被接受基线 | `v0.8-integrate/adapter-final-4@e8c53d4a`（v0.9 证据模块硬编码指认） | VERIFIED |
-| 最后绿基线 | `master@2f1188a`（112+ 测试全绿 + 累计 8 次真实 GOAL（3+5）全 PASS + 封印 manifest + 2026-09-01 能力合并） | VERIFIED |
-| master | `@2f1188a`，**CURRENT**（2026-09-01 能力合并：DeepSeek 双通道三模式 + WB_DONE 中立协议 + 效果安全三件套接线；历史：V1.0 工程收口时合并 v0.9-b1/authority-effect-core） | VERIFIED |
+| 最后绿基线 | `merge/hardening-20260901@76f2188`（runtime 49 套件全绿 + tests 219 passed + b1_core 36+1 MATCH + 858/858 硬化线基线） | VERIFIED |
+| master | `@76f2188`（合并后 HEAD，待阶段 E 推送），**CURRENT**（2026-09-01 hardening 合入：保留 hardening 门禁 + master DeepSeek 增量；历史：V1.0 工程收口 793fa41/tag v1.0-engineering-close） | VERIFIED |
+
+## 矩阵口径说明（2026-09-01）
+
+77 节核心定义矩阵在仓库内出现过多个版本，口径统一如下（依据均 git 可查）：
+
+| 版本 | 数值 | 出处 |
+|---|---|---|
+| FINAL（v3 自评降级后） | 41/35/1 | `docs/evidence/batch-e1e4-20260830/RESULT_BLOCK.md`（C-3 自评矩阵 v3，44/32/1→41/35/1） |
+| 机器复核（QA 稿） | 67/10/0 | `docs/evidence/DEFINITION-77-SECTIONS-V4.md`（software-qa-d6 独立复核稿） |
+| 审计改判（最终统计） | 63/14/0 | `docs/evidence/DEFINITION-77-SECTIONS-V4.md`（审计规则 R 复核后：§34/§55/§59/§68 降等） |
+| E2 达成矩阵 | 71/5/0 | `docs/evidence/V1.0-ACHIEVEMENT-MATRIX-20260901.md`（满足 71 / 部分 5 / 差距 0 / 脚手架 0；批次 D 将 §45/§71 转满足；`BUILD_MISSION_JOURNAL.md` 记录批次 D 前 69/7/0） |
+
+**最终采信：63/14/0**（`DEFINITION-77-SECTIONS-V4.md` 结论速览）——理由：QA 稿（67/10/0）与 ARCH 稿（54/23/0）差异经主理人合并，最终统计按审计规则 R 复核取 63 满足 / 14 部分 / 0 差距；E2 达成矩阵（71/5/0，批次 D 前 69/7/0）为硬化线前瞻口径（§3/§20/§60/§68/§74 记部分）；FINAL（41/35/1）为已被取代的 v3 基线。
 
 ## 2026-09-01 能力变更（git verified，全部并入 master）
 
