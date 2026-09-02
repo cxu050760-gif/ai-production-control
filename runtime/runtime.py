@@ -793,7 +793,18 @@ if [ ! -d "$PROFILE" ]; then
 fi
 
 # prerequisite 1: canonical daemon, explicit port (idempotent; the exact form
-# dev_env.sh daemon-up uses, so the port can never drift)
+# dev_env.sh daemon-up uses, so the port can never drift). 2026-09-02 addendum:
+# the daemon idle-exits after 10 min, and any bare bsk CLI call then auto-starts
+# it on the DEFAULT port (52800), whose lock makes our 52900 start silently
+# no-op while the extension (baked to ws://127.0.0.1:52900) can never connect
+# — observed twice on 2026-09-02 (10:42 and 14:50). Normalize: if the running
+# daemon is not on 52900, recycle it before ensuring the canonical one; a
+# connected extension reconnects in <1s, a suspended one within its 30s alarm.
+DPORT=$(grep -o '"ws_port"[ ]*:[ ]*[0-9]*' "$BSK_HOME/daemon.json" 2>/dev/null | grep -o '[0-9]*$')
+if [ -n "$DPORT" ] && [ "$DPORT" != "52900" ]; then
+  "$DEV" daemon stop >/dev/null 2>&1 || true
+  sleep 1
+fi
 "$DEV" daemon start --port 52900 >/dev/null 2>&1 || true
 
 # prerequisite 2+3: EXACTLY ONE browser instance (the bridge-profile Chrome)
