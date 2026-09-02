@@ -112,6 +112,17 @@ yz_wait_attachment() {
   local sid="$1" kw="$2" t="$3"
   local dl=$(( $(date +%s) + t ))
   while [ "$(date +%s)" -lt "$dl" ]; do
+    # 真源判据(2026-09-02 修复)：file input 已置文件 = bsk 注入成功的权威信号，
+    # 不依赖界面渲染位置；ChatGPT 新版附件芯片在 composer 容器外时旧判据误报。
+    local fin; fin=$("$DEV" evaluate --session "$sid" "(()=>{const i=document.querySelector('input[type=file]');return i&&i.files&&i.files.length?('X'+i.files.length):'';})()" 2>/dev/null | tr -d '\r\n')
+    if [ -n "$fin" ]; then
+      echo "ATTACHED"; return 0
+    fi
+    # 文档级判据：附件芯片渲染在任意容器（composer 外/悬浮条）都能命中
+    if echo "$("$DEV" evaluate --session "$sid" "document.body.innerText" 2>/dev/null)" | grep -q "$kw"; then
+      echo "ATTACHED"; return 0
+    fi
+    # 原判据(composer 容器文本)兜底
     if echo "$(yz_composer_text "$sid")" | grep -q "$kw"; then
       echo "ATTACHED"; return 0
     fi
