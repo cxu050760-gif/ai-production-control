@@ -390,6 +390,13 @@ def prepare_effect(
             prior["deduplicated"] = True
             state["effect_safety"] = prior
             return prior
+        if status == "RECONCILED_NOT_OCCURRED":
+            # P0-0(2026-09-02 双复核 PASS): 已人工确认"未发生"(evidence 落库)。
+            # 负向确认消除了"可能已发出"的不确定性, 允许以新授权重试同 payload
+            # (重放仍需下方 _valid_authorization 显式授权); 防重复投递锁
+            # (OUTCOME_UNKNOWN)语义不变。break 而非 continue: 同 id 在 effect log
+            # 至多一条, 已处理当前记录无需再溯更旧记录。
+            break
         if status == "OUTCOME_UNKNOWN":
             raise EffectDenied("OUTCOME_UNKNOWN requires reconciliation; ordinary retry denied")
         if status in UNRESOLVED_EFFECT_STATES:
@@ -608,8 +615,11 @@ def reconcile_effect(
         record["status"] = "SUCCESS"
         event = "EFFECT_RECONCILED_SUCCESS"
     else:
-        # Negative inspection is not itself replay authority. V0.9 remains
-        # fail-closed; any later replay needs a new explicit authority decision.
+        # Negative inspection is not itself replay authority, but (2026-09-02,
+        # dual-review PASS) it must not permanently block an ordinary resend of
+        # the same payload: evidence confirms the effect never occurred, so the
+        # uncertainty that justifies the anti-duplication lock is gone. Replay
+        # still requires a NEW explicit authorization via prepare_effect.
         record["status"] = "RECONCILED_NOT_OCCURRED"
         event = "EFFECT_RECONCILED_NOT_OCCURRED"
     state["effect_safety"] = record
@@ -801,6 +811,29 @@ def install(rt, options: dict) -> None:
         destination = str(state.get("r_url") or "")
         record = None
         try:
+            # P0-0(2026-09-02 双复核 PASS): 桥健康预检前置到 effect WAL 之前。
+            # "执行前失败"(桥不可用/浏览器未就绪)不写 INTENT/不 begin/不落
+            # OUTCOME_UNKNOWN 锁——弱 AI 在桥自愈后可按预算重试同一条命令,
+            # 避免"第一次桥抖动即锁死、必须人工"的自动化断裂。仅 RUNNING 态预检。
+            if state.get("status") == "RUNNING":
+                _pre_health = rt.ensure_bridge_ready(force=True)
+                if not _pre_health.get("ready"):
+                    _mm = state.setdefault("metrics", {})
+                    _mm["bridge_retries"] = int(_mm.get("bridge_retries", 0)) + 1
+                    rt.save_state(state)
+                    _detail = str(_pre_health.get("detail", ""))
+                    if _mm["bridge_retries"] > getattr(rt, "MAX_BRIDGE_RETRIES", 3):
+                        rt.hard_block(state, "bridge health failed beyond retry budget: " + _detail)
+                        rt.emit({"status": "HARD_BLOCKED",
+                                 "reason": str(state.get("blocked_reason") or _detail)})
+                        return rt.EXIT_HARD_BLOCKED
+                    rt.journal(state["run_id"], "BRIDGE_UNHEALTHY",
+                               detail=_detail, bridge_retries=_mm["bridge_retries"])
+                    rt.emit({"status": "BRIDGE_UNHEALTHY", "detail": _detail,
+                             "bridge_retries": _mm["bridge_retries"],
+                             "instruction": "Bridge unhealthy. Retry the same command later "
+                                            "(budget limited); do not open the bridge internals."})
+                    return rt.EXIT_ERR
             record = _prepare_runtime_send(
                 rt,
                 state,

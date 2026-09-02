@@ -57,6 +57,7 @@ instances 的 RUNTIME_BROWSER_BLOCKED，说明主 Chrome 里的扩展未卸载�
 - exit 0 + `"status":"OK"` → 成功。
 - `"status":"MISSING_R_URL"` → 停止，找用户要 R_URL。
 - `"status":"RUN_PAUSED"` / `"DENIED"` → 不要绕过；等用户 directive。
+- `"status":"BRIDGE_UNHEALTHY"` → 桥暂时不可用（runtime 正在自动拉起桥浏览器）。**按预算重试同一条命令**，不要停下、不要碰桥、不要研究端口/浏览器；预算用尽后才会 HARD_BLOCKED。
 - `"status":"HARD_BLOCKED"` → 停止；把 state 文件路径报告给用户。
 - `"status":"DUPLICATE_ACTION"` → 禁止重复同一动作。
 

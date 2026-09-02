@@ -1856,6 +1856,21 @@ def cmd_recv(args) -> int:
         if getattr(args, "candidate_commit", None) or getattr(args, "evidence_id", None) \
                 or getattr(args, "review_id", None):
             save_state(state)
+        # P0-0(2026-09-02 双复核 PASS): recv 桥健康预检+自愈,与 send 对齐。
+        # 桥不可用/浏览器未就绪时自动 bootstrap;失败按 budget 可重试,
+        # 不再无声 ACQUIRE_FAILED 死等。
+        health = ensure_bridge_ready(force=True)
+        if not health.get("ready"):
+            state["metrics"]["bridge_retries"] = int(state["metrics"].get("bridge_retries", 0)) + 1
+            save_state(state)
+            if state["metrics"]["bridge_retries"] > MAX_BRIDGE_RETRIES:
+                hard_block(state, "recv bridge health failed beyond retry budget: "
+                           + str(health.get("detail", "")))
+                emit({"status": "HARD_BLOCKED", "reason": state["blocked_reason"]})
+                return EXIT_HARD_BLOCKED
+            emit({"status": "BRIDGE_UNHEALTHY", "detail": str(health.get("detail", "")),
+                  "instruction": "recv bridge unhealthy; retry later (budget limited)."})
+            return EXIT_ERR
         sid = (state.get("session") or {}).get("sid") or ""
         rd = run_dir(args.run_id)
         reply_file = rd / f"recv_{int(time.time())}_{uuid.uuid4().hex[:6]}.txt"
@@ -2209,7 +2224,8 @@ def _router_step(state: dict, timeout: int) -> dict:
         return {"stepped": False, "phase": phase, "run_status": state["status"]}
     # health gate: a transiently unhealthy bridge keeps the phase (retryable);
     # only an exhausted budget hard-blocks (same semantics as legacy send).
-    health = bridge_health(force=False)
+    # P0-0(2026-09-02): 强制真实体检 + 自愈,不再信任 ≤5min 缓存(桥中途死会打死桥)。
+    health = ensure_bridge_ready(force=True)
     if not health.get("ready"):
         state["metrics"]["bridge_retries"] = int(state["metrics"].get("bridge_retries", 0)) + 1
         if state["metrics"]["bridge_retries"] > MAX_BRIDGE_RETRIES:

@@ -12,12 +12,17 @@ import effect_safety_lite as es
 
 class FakeRuntime:
     EXIT_OK = 0
+    EXIT_ERR = 1
     EXIT_HARD_BLOCKED = 6
 
     def __init__(self, root: Path):
         self.root = root
         self.journal_events = []
         self.saved = []
+
+    def ensure_bridge_ready(self, force=True):
+        # 2026-09-02: gated_cmd_send 前置健康预检; 离线假体恒就绪。
+        return {"ready": True, "cached": False}
 
     def run_dir(self, rid):
         p = self.root / "runs" / rid
