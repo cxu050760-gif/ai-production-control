@@ -1608,10 +1608,14 @@ def cmd_send(args) -> int:
                                  "Do NOT repeat mechanically. Change content or advance the step first."})
             return EXIT_DENIED
 
-        # Fast path: cached health
-        health = bridge_health(force=args.force_health)
-        if health.get("cached"):
-            state["metrics"]["health_checks_skipped"] = int(state["metrics"].get("health_checks_skipped", 0)) + 1
+        # Fresh, self-healing health check (2026-09-02): never trust the TTL
+        # cache on the send path. A stale READY cache let a send run against a
+        # bridge browser the user had just closed (RUN-20260902-153355-25bd:
+        # transport exit 1 -> OUTCOME_UNKNOWN -> manual reconcile). force=True
+        # re-probes for real and, on the two self-healable signatures
+        # ('no browser' / 'daemon unreachable'), bootstraps the bridge-profile
+        # Chrome automatically before the transport ever starts.
+        health = ensure_bridge_ready(force=True)
         if not health.get("ready"):
             state["metrics"]["bridge_retries"] = int(state["metrics"].get("bridge_retries", 0)) + 1
             if state["metrics"]["bridge_retries"] > MAX_BRIDGE_RETRIES:

@@ -121,11 +121,22 @@ def main() -> int:
     check("T5b_values", s["goal"] == "goal-A" and s["current_step"] == "step-X done"
           and s["checkpoint"]["text"].startswith("ckpt"), "wrong values")
 
+    # ---- deterministic READY wrapper for the send-path health gate (2026-09-02) ----
+    # cmd_send now force-probes bridge health (ensure_bridge_ready(force=True),
+    # no TTL cache), so offline send cases must stub the wrapper; the INJECT
+    # seam only fakes the transport side and cannot fake a health probe.
+    wrap_ready = tmp / "stub_wrapper_ready.sh"
+    wrap_ready.write_text("#!/bin/bash\ncase \"$1\" in status) echo 'Bridge: READY'; echo 'Browser: chrome'; "
+                          "echo 'Instance: stubready'; echo 'Upload: READY'; exit 0;; *) exit 2;; esac\n",
+                          encoding="utf-8")
+    _wrp = str(wrap_ready).replace("\\", "/")
+    WRAP_READY = {"APC_RUNTIME_BRIDGE_WRAPPER": "/" + _wrp[0].lower() + _wrp[2:]}
+
     # ---- T7 failure chain (offline, deterministic seam) ----
     # health cache: seed a READY cache so the chain reaches the transport seam
     (tmp / "health.json").write_text(json.dumps(
         {"ready": True, "detail": "seeded", "checked_at": "x", "checked_epoch": 9e18}), encoding="utf-8")
-    env_fail = {"APC_RUNTIME_INJECT_BRIDGE_FAIL": "1"}
+    env_fail = {"APC_RUNTIME_INJECT_BRIDGE_FAIL": "1", **WRAP_READY}
     outcomes = []
     for i in range(6):
         code, out, _ = run_cli(tmp, ["send", "--run-id", run_b, "--message", f"attempt {i}"], env_extra=env_fail)
@@ -162,16 +173,16 @@ def main() -> int:
     _, outD, _ = run_cli(tmp, ["start", "--goal", "goal-D", "--r-url", URL_D, "--worker-id", "wD"])
     run_d = outD.get("run_id", "")
     code1, out1, _ = run_cli(tmp, ["send", "--run-id", run_d, "--message", "dup-msg"],
-                             env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK"})
+                             env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK", **WRAP_READY})
     check("C1a_first_attempt_ok", code1 == 0 and out1.get("status") == "OK", str(out1))
     code2, out2, _ = run_cli(tmp, ["send", "--run-id", run_d, "--message", "dup-msg"],
-                             env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK"})
+                             env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK", **WRAP_READY})
     check("C1_duplicate_guard", out2.get("status") == "DUPLICATE_ACTION" and code2 == 5,
           f"first={out1.get('status')} second={out2.get('status')}")
     # advancing the step must lift the guard (same content, new step => allowed)
     run_cli(tmp, ["step", "--run-id", run_d, "--current", "advanced", "--next", "onward"])
     code3, out3, _ = run_cli(tmp, ["send", "--run-id", run_d, "--message", "dup-msg"],
-                             env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK"})
+                             env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK", **WRAP_READY})
     check("C1b_guard_lifted_after_step", code3 == 0 and out3.get("status") == "OK", str(out3))
 
     # ---- E1/E2/E3: encoding robustness (acceptance rework P0-1/P0-2) ----
@@ -226,7 +237,7 @@ def main() -> int:
     run_u4a = out4a.get("run_id", "")
     code, out, _ = run_cli(tmp, ["send", "--run-id", run_u4a, "--message", "u4a",
                                   "--file", str(HERE / "runtime.py")],
-                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "UPLOAD"})
+                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "UPLOAD", **WRAP_READY})
     check("U4a_upload_chain_hard_blocked", out.get("status") == "HARD_BLOCKED" and code == 6, str(out)[:200])
     _, s4a, _ = run_cli(tmp, ["status", "--run-id", run_u4a])
     check("U4a_durable", s4a.get("status") == "HARD_BLOCKED"
@@ -245,7 +256,7 @@ def main() -> int:
     run_u4b = out4b.get("run_id", "")
     code, out, _ = run_cli(tmp, ["send", "--run-id", run_u4b, "--message", "u4b",
                                   "--file", str(HERE / "runtime.py")],
-                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "UPLOAD_HEALTHY"})
+                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "UPLOAD_HEALTHY", **WRAP_READY})
     check("U4b_upload_chain_hard_blocked", out.get("status") == "HARD_BLOCKED" and code == 6, str(out)[:200])
     _, s4b, _ = run_cli(tmp, ["status", "--run-id", run_u4b])
     check("U4b_no_rebuild", int(s4b["metrics"].get("session_recoveries", 0)) == 0
@@ -260,7 +271,7 @@ def main() -> int:
     _, out5, _ = run_cli(tmp, ["start", "--goal", "u5", "--r-url", URL_D, "--worker-id", "u5"])
     run_u5 = out5.get("run_id", "")
     code, out, _ = run_cli(tmp, ["send", "--run-id", run_u5, "--message", "u5 text review"],
-                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK"})
+                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK", **WRAP_READY})
     check("U5_text_only_no_upload", code == 0 and out.get("attachment_mode") == "text-only"
           and out.get("files_uploaded") == [], str(out)[:200])
 
@@ -269,13 +280,13 @@ def main() -> int:
     mfile = tmp / "ml_body.txt"
     mfile.write_text(body, encoding="utf-8")
     code, out, _ = run_cli(tmp, ["send", "--run-id", run_u5, "--message-file", str(mfile)],
-                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK"})
+                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK", **WRAP_READY})
     sent_files = sorted((tmp / "runs" / run_u5).glob("msg_*"))
     delivered = [f.read_text(encoding="utf-8") for f in sent_files]
     check("M1_message_file_delivered_full", code == 0 and out.get("status") == "OK"
           and body in delivered, repr(delivered)[-200:])
     code, out, _ = run_cli(tmp, ["send", "--run-id", run_u5, "--message", "line1\nline2"],
-                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK"})
+                           env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK", **WRAP_READY})
     check("M2_multiline_message_rejected", code == 2 and out.get("status") == "MULTILINE_MESSAGE_UNSAFE", str(out)[:160])
 
     # ---- PB: P0-A browser bootstrap + P0-B production entry (offline) ----
