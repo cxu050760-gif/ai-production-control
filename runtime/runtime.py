@@ -1126,6 +1126,38 @@ REQUERY_TEXT = ("The previous reply did not contain a parseable ===REVIEW_VERDIC
                 "Please reply ONLY with the final verdict line: ===REVIEW_VERDICT=== PASS or REWORK or BLOCKED, "
                 "then ===NEXT_ACTION=== and one short sentence.")
 
+# Reviewer readiness handshake (2026-09-02, dual-review PASS). A new reviewer
+# conversation must confirm it is prepared to act as 执衡 reviewer BEFORE any
+# real submission is sent to it; otherwise an uninitialized chat session would
+# rubber-stamp partial work (observed: two RUNs passed on part 1 of 2).
+# Confirmation marker is deliberately OUTSIDE the verdict protocol so a bare
+# session's free-text reply can never count as either verdict or readiness.
+REVIEWER_READY_CONFIRM = "===REVIEWER_READY==="
+REVIEWER_READY_SKIP_ENV = "APC_RUNTIME_SKIP_REVIEWER_READY"
+# 生产严禁设置 APC_RUNTIME_SKIP_REVIEWER_READY=1:它会静默关闭审查者就位保护
+# (2026-09-02 橡皮章事故的防线)。该 env 仅供离线测试(offline seams)驱动;任何
+# 生产 RUN 若携带此变量将被视为配置错误并拒绝启动 send。
+
+
+def reviewer_handshake_text(goal: str) -> str:
+    """System-initialization message for a reviewer conversation. Self-labels as
+    NOT a submission and asks ONLY for the readiness confirmation marker."""
+    return (f"【执衡系统·审查者初始化】(这是系统初始化消息,不是待审提交,请勿裁决任何内容)\n"
+            f"你已被指定为本次任务的审查者 R。待审目标 GOAL 摘录：{goal[:400]}\n"
+            f"确认你已就位后,请只回复一行:{REVIEWER_READY_CONFIRM}")
+
+
+def reviewer_ready_satisfied(state: dict) -> bool:
+    """True when the current reviewer conversation is already prepared: either
+    an explicit handshake landed for this epoch, or the RUN has already
+    produced a real verdict this epoch (implicit readiness)."""
+    rr = state.get("reviewer_ready") or {}
+    if rr.get("ready") and rr.get("epoch") == state.get("review_epoch"):
+        return True
+    if state.get("last_r_verdict") in ("PASS", "REWORK", "BLOCKED"):
+        return True
+    return False
+
 
 def parse_verdict(text: str) -> tuple[str | None, str]:
     verdict = None
@@ -1245,6 +1277,7 @@ def _new_run(goal: str, r_url: str, worker_id: str) -> dict:
         "checkpoint": None,
         "scope_notes": [],
         "session": {"sid": None, "epoch": 1},
+        "reviewer_ready": {"epoch": 1, "ready": False, "handshake_sent": False},
         "evidence_ledger": {},
         "last_action_fingerprint": None,
         "last_action_context": None,
@@ -1473,6 +1506,8 @@ def cmd_directive(args) -> int:
             state["review_epoch"] = int(state["review_epoch"]) + 1
             # invalidate everything bound to the old reviewer epoch
             state["session"] = {"sid": None, "epoch": state["review_epoch"]}
+            state["reviewer_ready"] = {"epoch": state["review_epoch"], "ready": False,
+                                       "handshake_sent": False}
             state["last_r_verdict"] = None
             state["last_r_next_action"] = ""
             state["last_reply_path"] = None
@@ -1517,6 +1552,10 @@ def cmd_directive(args) -> int:
             # EC says CHANGE_TOOL/REQUEUE 但两者无指令入口,此处即其宿主接线)。
             if isinstance(state.get("ec"), dict):
                 state["ec"]["consecutive_failures"] = 0
+            # 2026-09-02: 用户权威介入 = 审查者会话已修复/已初始化,重置握手标记
+            # 使下一次 send 重新发起就位确认(而非永远 REVIEWER_NOT_READY)。
+            if isinstance(state.get("reviewer_ready"), dict):
+                state["reviewer_ready"]["handshake_sent"] = False
             if s in ("HARD_BLOCKED", "STOPPED"):
                 state["status"] = "RUNNING"
                 state["paused"] = False
@@ -1544,6 +1583,81 @@ def _check_duplicate(state: dict, fingerprint: str) -> bool:
 def _record_action(state: dict, fingerprint: str) -> None:
     state["last_action_fingerprint"] = fingerprint
     state["last_action_context"] = f"{state['review_epoch']}::{state['current_step']}"
+
+
+def _ensure_reviewer_ready(rt_state: dict, run_d: Path, stored_sid: str) -> int:  # noqa: C901
+    """Reviewer readiness gate for send (2026-09-02, dual-review PASS).
+
+    Returns:
+      0     -> ready / skip (continue normally)
+      EXIT_ERR          -> REVIEWER_NOT_READY or BRIDGE_UNHEALTHY (retryable)
+      EXIT_HARD_BLOCKED -> bridge budget exhausted (rare)
+    Never writes an effect-WAL record (this is NOT a delivery effect); state
+    journal BRIDGE_UNHEALTHY / REVIEWER_NOT_READY is the durability record.
+    """
+    if os.environ.get(REVIEWER_READY_SKIP_ENV) == "1":
+        return EXIT_OK  # offline seam: existing fixtures skip the handshake
+    if os.environ.get("APC_RUNTIME_INJECT_BRIDGE_FAIL"):
+        return EXIT_OK  # offline seam (1/OK/UPLOAD/SCRIPT): transport is faked,
+        # no real reviewer conversation exists; skip readiness handshake
+    if reviewer_ready_satisfied(rt_state):
+        return EXIT_OK
+    rr = rt_state.setdefault("reviewer_ready", {})
+    if rr.get("handshake_sent"):
+        journal(rt_state["run_id"], "REVIEWER_NOT_READY", detail="handshake already sent, not confirmed")
+        emit({"status": "REVIEWER_NOT_READY", "run_status": rt_state["status"],
+              "instruction": "Reviewer conversation has not confirmed readiness. Stop and report to the user; "
+                             "do NOT resend the submission."})
+        return EXIT_ERR
+    hs_msg = run_d / f"handshake_{int(time.time())}_{uuid.uuid4().hex[:6]}.txt"
+    hs_rep = run_d / f"handshake_reply_{int(time.time())}_{uuid.uuid4().hex[:6]}.txt"
+    atomic_write_text(hs_msg, reviewer_handshake_text(rt_state.get("goal", "")))
+    try:
+        proc = bash_run(
+            send_script(rt_state["r_url"], to_posix(str(hs_msg)), [], to_posix(str(hs_rep)), 180,
+                        stored_sid=stored_sid),
+            timeout=420)
+        mk = parse_markers(proc.stdout)
+        res = mk.get("RUNTIME_SEND", "")
+        if res in ("DONE", "DONE_NO_MARKER") and hs_rep.exists():
+            rtext = hs_rep.read_text(encoding="utf-8", errors="replace")
+            if REVIEWER_READY_CONFIRM in rtext:
+                rr.update({"epoch": rt_state.get("review_epoch"), "ready": True,
+                           "ready_sid": mk.get("RUNTIME_SID") or stored_sid or "",
+                           "handshake_sent": True, "at": utc_now()})
+                save_state(rt_state)
+                journal(rt_state["run_id"], "REVIEWER_READY",
+                        epoch=rt_state.get("review_epoch"),
+                        sid=rr.get("ready_sid"))
+                return EXIT_OK
+            rr["handshake_sent"] = True
+            save_state(rt_state)
+            journal(rt_state["run_id"], "REVIEWER_NOT_READY",
+                    detail="handshake reply lacked readiness confirmation")
+            emit({"status": "REVIEWER_NOT_READY", "run_status": rt_state["status"],
+                  "instruction": "Reviewer conversation did not confirm readiness. Stop and report to the user; "
+                                 "do NOT resend the submission."})
+            return EXIT_ERR
+        # transport-level failure: mirror the send budget chain
+        rt_state["metrics"]["bridge_retries"] = int(rt_state["metrics"].get("bridge_retries", 0)) + 1
+        save_state(rt_state)
+        if rt_state["metrics"]["bridge_retries"] > MAX_BRIDGE_RETRIES:
+            hard_block(rt_state, "bridge health failed beyond retry budget: " + str(res))
+            emit({"status": "HARD_BLOCKED", "reason": rt_state["blocked_reason"]})
+            return EXIT_HARD_BLOCKED
+        journal(rt_state["run_id"], "BRIDGE_UNHEALTHY", detail=str(res),
+                bridge_retries=rt_state["metrics"]["bridge_retries"])
+        emit({"status": "BRIDGE_UNHEALTHY", "detail": str(res),
+              "bridge_retries": rt_state["metrics"]["bridge_retries"],
+              "instruction": "Bridge unhealthy during reviewer handshake. Retry the same command later (budget limited)."})
+        return EXIT_ERR
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        rt_state["metrics"]["bridge_retries"] = int(rt_state["metrics"].get("bridge_retries", 0)) + 1
+        save_state(rt_state)
+        journal(rt_state["run_id"], "BRIDGE_UNHEALTHY", detail=REVIEWER_READY_SKIP_ENV + ":" + str(exc)[:120])
+        emit({"status": "BRIDGE_UNHEALTHY", "detail": "reviewer handshake transport error",
+              "instruction": "Retry the same command later (budget limited)."})
+        return EXIT_ERR
 
 
 def cmd_send(args) -> int:
@@ -1628,6 +1742,11 @@ def cmd_send(args) -> int:
                   "instruction": "Bridge unhealthy. Retry the same command later (budget limited); do not open the bridge internals."})
             return EXIT_ERR
 
+        # Reviewer readiness is enforced by send_guard's gated_cmd_send
+        # BEFORE the effect WAL (2026-09-02): see effect_safety_lite.install.
+        # No handshake here — keep the gate as the single enforcement point so a
+        # failure can never land inside an effect record (OUTCOME_UNKNOWN lock).
+
         # evidence delta: only upload new/changed files for this epoch
         epoch_key = str(state["review_epoch"])
         ledger = state["evidence_ledger"].setdefault(epoch_key, {})
@@ -1641,7 +1760,11 @@ def cmd_send(args) -> int:
 
         rd = run_dir(args.run_id)
         msg_file = rd / f"msg_{int(time.time())}_{uuid.uuid4().hex[:6]}.txt"
-        atomic_write_text(msg_file, args.message)
+        _msg_body = str(args.message or "")
+        if _msg_body and not _msg_body.startswith("[执衡系统·审查者初始化]"):
+            _msg_body += ("\n\n[审查提示]本次为完整交付，请阅读全部内容后再给出"
+                          "===REVIEW_VERDICT=== 裁决；若分多部分提交，请等最后一部分到达后统一裁决。")
+        atomic_write_text(msg_file, _msg_body)
         reply_file = rd / f"reply_epoch{state['review_epoch']}_{int(time.time())}_{uuid.uuid4().hex[:6]}.txt"
 
         send_attempts = 0

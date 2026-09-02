@@ -270,5 +270,73 @@ class SendGuardComposeTests(unittest.TestCase):
         self.assertIn("router-send", [r.get("operation") for r in state.get("effect_safety_log", [])])
 
 
+
+    def test_j5_reviewer_ready_handshake_unit(self):
+        """2026-09-02: readiness predicate + handshake text contract.
+        (Handshake transport itself is covered by the SCRIPT-seam send tests;
+        this locks the pure-logic contract: not-ready -> handshake text ->
+        ready, and implicit readiness after a real verdict.)"""
+        import runtime as rt_mod
+
+        state = {
+            "run_id": "RUN-20260902-000000-xxxx", "review_epoch": 1,
+            "goal": "Build X", "r_url": R1,
+            "reviewer_ready": {"epoch": 1, "ready": False, "handshake_sent": False},
+            "last_r_verdict": None, "metrics": {"bridge_retries": 0},
+        }
+        self.assertFalse(rt_mod.reviewer_ready_satisfied(state))
+        state["last_r_verdict"] = "PASS"
+        self.assertTrue(rt_mod.reviewer_ready_satisfied(state))
+        state["last_r_verdict"] = None
+        text = rt_mod.reviewer_handshake_text("Build X")
+        self.assertIn("审查者初始化", text)
+        self.assertIn(rt_mod.REVIEWER_READY_CONFIRM, text)
+        self.assertIn("不是待审提交", text)
+        state["reviewer_ready"] = {"epoch": 1, "ready": True, "handshake_sent": True}
+        self.assertTrue(rt_mod.reviewer_ready_satisfied(state))
+
+
+
+    def test_j6_reviewer_not_ready_never_locks_effect_wal(self):
+        """2026-09-02 (dual-review): a reviewer handshake failure must NEVER
+        fall into OUTCOME_UNKNOWN — the readiness gate runs before the effect
+        WAL, so retries stay retryable. Handcrafted env WITHOUT the INJECT
+        seam (so the readiness gate truly short-circuits to NOT_READY without
+        touching transport): pre-mark handshake_sent=True, verify:
+        (1) send -> REVIEWER_NOT_READY (EXIT_ERR) and effect_safety has NO
+        OUTCOME_UNKNOWN record; (2) USER_OVERRIDE resets reviewer_ready."""
+        goal = self.root / "goal.txt"; goal.write_text("Build X", encoding="utf-8")
+        # Handcrafted environment: ready bridge wrapper, NO injected transport
+        egress = self.root / "egress_j6.json"
+        egress.write_text(json.dumps(SCENARIO_EGRESS_POLICY), encoding="utf-8")
+        env = dict(os.environ)
+        env["APC_RUNTIME_STATE_ROOT"] = str(self.root / "state")
+        env["APC_RUNTIME_BRIDGE_WRAPPER"] = _ready_wrapper(self.root)
+        env["APC_SCENARIO_EGRESS_POLICY"] = str(egress)
+        code, out, raw = _run_json(ADAPTER, ["start", "--goal", "Build X", "--r-url", R1,
+                                             "--acceptance", "A", "--egress-policy-file", str(egress)], env)
+        self.assertEqual(code, 0, raw)
+        rid = out["run_id"]
+        # Pre-mark handshake_sent so the readiness gate short-circuits to NOT_READY
+        state_path = Path(env["APC_RUNTIME_STATE_ROOT"]) / "runs" / rid / "state.json"
+        st = json.loads(state_path.read_text(encoding="utf-8"))
+        st["reviewer_ready"] = {"epoch": 1, "ready": False, "handshake_sent": True}
+        state_path.write_text(json.dumps(st), encoding="utf-8")
+        _declare_scenario_world(env, rid)
+        code, out, raw = _run_json(ADAPTER, ["send", "--run-id", rid, "--message", "review packet"], env)
+        self.assertEqual(code, 1, raw[-800:])  # EXIT_ERR
+        self.assertEqual(out.get("status"), "REVIEWER_NOT_READY", raw[-800:])
+        st2 = json.loads(state_path.read_text(encoding="utf-8"))
+        es_status = (st2.get("effect_safety") or {}).get("status")
+        self.assertNotEqual(es_status, "OUTCOME_UNKNOWN", "handshake failure must not lock effect WAL")
+        # USER_OVERRIDE resets the handshake flag so a real retry can re-handshake
+        code, out, raw = _run_json(ADAPTER, ["directive", "--run-id", rid, "USER_OVERRIDE",
+                                             "--note", "reviewer fixed"], env)
+        self.assertEqual(code, 0, raw[-400:])
+        st3 = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertFalse((st3.get("reviewer_ready") or {}).get("handshake_sent"),
+                         "USER_OVERRIDE must reset the handshake flag")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

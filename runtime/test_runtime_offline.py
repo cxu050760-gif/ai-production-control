@@ -45,6 +45,7 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 def run_cli(state_root: Path, argv: list, env_extra: dict = None) -> tuple[int, dict, str]:
     env = dict(os.environ)
     env["APC_RUNTIME_STATE_ROOT"] = str(state_root)
+    env["APC_RUNTIME_SKIP_REVIEWER_READY"] = "1"  # 2026-09-02: 既有 send 用例跳过审查者握手
     env.pop("APC_RUNTIME_INJECT_BRIDGE_FAIL", None)
     env.pop("PYTHONIOENCODING", None)  # CLI must not depend on ambient encoding env
     if env_extra:
@@ -283,8 +284,13 @@ def main() -> int:
                            env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK", **WRAP_READY})
     sent_files = sorted((tmp / "runs" / run_u5).glob("msg_*"))
     delivered = [f.read_text(encoding="utf-8") for f in sent_files]
+    # 2026-09-02: cmd_send 会在正式提交正文尾部追加[审查提示]; 精确相等已失效。
+    # 改为跨全部 msg 文件扫描: 消息首行必须出现在某个文件中,且该文件含审查提示
+    # (run_u5 可能累积多个 msg 文件,故用 any 而非 [0])。
     check("M1_message_file_delivered_full", code == 0 and out.get("status") == "OK"
-          and body in delivered, repr(delivered)[-200:])
+          and delivered
+          and any(body.splitlines()[0] in d for d in delivered)
+          and any("[审查提示]" in d for d in delivered), repr(delivered)[-200:])
     code, out, _ = run_cli(tmp, ["send", "--run-id", run_u5, "--message", "line1\nline2"],
                            env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "OK", **WRAP_READY})
     check("M2_multiline_message_rejected", code == 2 and out.get("status") == "MULTILINE_MESSAGE_UNSAFE", str(out)[:160])

@@ -834,6 +834,18 @@ def install(rt, options: dict) -> None:
                              "instruction": "Bridge unhealthy. Retry the same command later "
                                             "(budget limited); do not open the bridge internals."})
                     return rt.EXIT_ERR
+            # P0-1(2026-09-02 双复核 PASS): 审查者就位校验与桥健康预检同级——
+            # 必须位于 _prepare_runtime_send 之前,否则握手失败会被 effect gate
+            # 记成 OUTCOME_UNKNOWN,把"审查者未就位→可重试"变成死锁(违背用户
+            # "不新增锁/不要动不动就停"诉求)。未就位直接 return,不写 INTENT/
+            # 不 begin/不落 OU 锁;弱 AI 在用户修好审查者后可重试同一条 send。
+            if state.get("status") == "RUNNING":
+                _hs = getattr(rt, "_ensure_reviewer_ready", None)
+                if _hs is not None:
+                    _hs_code = _hs(state, rt.run_dir(args.run_id),
+                                   (state.get("session") or {}).get("sid") or "")
+                    if _hs_code != rt.EXIT_OK:
+                        return _hs_code
             record = _prepare_runtime_send(
                 rt,
                 state,
