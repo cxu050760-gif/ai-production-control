@@ -368,7 +368,20 @@ def main() -> int:
           "daemon start --port 52900" in scr and "tasklist.exe" in scr
           and "RUNTIME_BROWSER_CTX" in scr and "about:blank" in scr
           and "netstat.exe" in scr and "daemon stop" in scr
-          and "--user-data-dir" not in scr and "--load-extension" not in scr, scr[:200])
+          and "--user-data-dir" in scr and "bridge-profile" in scr
+          and "--load-extension" not in scr, scr[:200])
+    # PB9b: launch-param guard — a chrome launch line without --user-data-dir
+    # (the 2026-09-02 main-browser breach shape) must be rejected outright.
+    guard_rejected = True
+    try:
+        rt9._audit_browser_launch(
+            '  "/c/Program Files/Google/Chrome/Application/chrome.exe" '
+            '--no-first-run --no-default-browser-check about:blank &')
+        guard_rejected = False
+    except RuntimeError:
+        pass
+    check("PB9b_launch_guard_rejects_bare_launch", guard_rejected,
+          "guard must reject chrome launch without --user-data-dir")
 
     # PB10: host-PATH independence — the health probe must resolve the frozen
     # wrapper's bare awk/grep even when the dispatched environment's PATH has

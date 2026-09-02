@@ -63,20 +63,31 @@ YZ_LIB = os.environ.get("APC_RUNTIME_YZ_LIB", "/e/WB/workspace/2026-08-16-21-49-
 YZ_LIB_DS = os.environ.get("APC_RUNTIME_YZ_LIB_DS", "/e/WB/workspace/2026-08-16-21-49-32/work/yz_ds_lib.sh")
 BRIDGE_WRAPPER = os.environ.get("APC_RUNTIME_BRIDGE_WRAPPER", "/c/Users/17838/.local/bin/chatgpt_bridge")
 
-# Canonical browser bootstrap chain (P0-A). Per the frozen Bridge handover
-# (§1: production Chrome default profile, dev extension instance 7da8483f —
-# the only one, never create a second instance), the canonical browser is the
-# production Chrome whose DEFAULT profile already carries the dev extension
-# installed; the extension auto-connects to the baked ws://127.0.0.1:52900 and
-# registers with its persistent instance id. Cold start therefore launches the
-# default-profile Chrome with NO --user-data-dir/--load-extension flags (those
-# would create a second dev instance and are forbidden). The Runtime owns this
-# chain; weak Workers never see or set any of it. APC_RUNTIME_* overrides are
-# offline test seams only.
+# Canonical browser bootstrap chain (P0-A, REVISED 2026-09-02 after the
+# main-browser privacy breach). OLD design (frozen Bridge handover §1): the
+# carrier was the production Chrome DEFAULT profile (dev extension installed
+# there), so a cold bootstrap launched the user's personal Chrome with NO
+# --user-data-dir — a privacy-boundary breach witnessed 2026-09-02 (window
+# opened on about:blank carrying all user logins). NEW design: the carrier is
+# a DEDICATED isolated profile (E:\WB\tools\bsk-file-bridge\bridge-profile),
+# initialized once by the owner (chrome://extensions -> Load unpacked
+# <CHROME_EXT>, then log in to the reviewer sites; runbook in
+# WEAK_WORKER_START_HERE.md). --load-extension is NOT used (Chrome 137+
+# branded builds ignore that flag); the unpacked install persists inside the
+# profile, so every runtime-owned launch carries ONLY
+# --user-data-dir=<bridge profile>. The CHROME_EXT directory must never move
+# (the profile records its path). The user's main Chrome / main profile must
+# NEVER be launched, attached, or reused: _audit_browser_launch enforces this
+# at script generation, and the bootstrap fails CLOSED when more than one
+# browser instance registers (dev extension still installed in the personal
+# Chrome). The Runtime owns this chain; weak Workers never see or set any of
+# it. APC_RUNTIME_* overrides are offline test seams only.
 BSK_EXE = os.environ.get("APC_RUNTIME_BSK_EXE", "/e/WB/tools/bsk-file-bridge/repo/target/release/bsk.exe")
 BSK_HOME_DIR = os.environ.get("APC_RUNTIME_BSK_HOME", "/e/WB/tools/bsk-file-bridge/bsk-home")
 CHROME_BIN = os.environ.get("APC_RUNTIME_CHROME", "/c/Program Files/Google/Chrome/Application/chrome.exe")
 CHROME_EXT = os.environ.get("APC_RUNTIME_CHROME_EXT", "/e/WB/tools/bsk-file-bridge/repo/apps/extension/dist/chrome-mv3")
+BRIDGE_PROFILE_DIR = Path(os.environ.get("APC_RUNTIME_BRIDGE_PROFILE",
+                                         r"E:\WB\tools\bsk-file-bridge\bridge-profile"))
 BROWSER_BOOTSTRAP_WAIT_SEC = 90
 
 # Host-PATH independence (real counter-example 2026-08-18 23:5x: weak worker's
@@ -692,15 +703,57 @@ def bridge_health(force: bool = False) -> dict:
 # and never assumes a browser pre-exists. Only the canonical, historically
 # proven chrome-up path is used; there is no second bridge/browser design.
 # ---------------------------------------------------------------------------
+def _audit_browser_launch(script: str) -> None:
+    r"""P0 修复（2026-09-02）启动参数审计：生产模板中任何 Chrome 启动行
+    必须携带 --user-data-dir 且指向桥专用 profile（BRIDGE_PROFILE_DIR）；
+    禁止出现用户主 profile 路径（AppData\\...\\Google\\Chrome\\User Data
+    树，含子路径）与 --load-extension（Chrome 137+ 品牌构建会忽略该
+    flag，出现即配置错误——扩展必须预装在桥 profile 内）。违反即抛错
+    拒绝生成脚本。仅作用于生产模板；seam 整体替换路径不经过本函数。"""
+    expected = BRIDGE_PROFILE_DIR.resolve().as_posix().casefold()
+    for i, line in enumerate(script.splitlines(), 1):
+        if "--no-default-browser-check" not in line:
+            continue  # 桥启动行特征 flag（模板中仅启动行携带）
+        lowered = line.casefold()
+        if "--load-extension" in lowered:
+            raise RuntimeError(
+                f"browser launch audit: --load-extension forbidden on line {i}"
+                " (Chrome 137+ branded builds ignore it; the extension must"
+                " be pre-installed in the bridge profile)")
+        if "--user-data-dir" not in lowered:
+            raise RuntimeError(
+                f"browser launch audit: chrome launch without"
+                f" --user-data-dir forbidden on line {i}")
+        m = re.search(r"--user-data-dir=\"?([^\"\s]+)", line)
+        if not m:
+            raise RuntimeError(
+                f"browser launch audit: cannot parse --user-data-dir on"
+                f" line {i}")
+        given = Path(m.group(1)).resolve().as_posix().casefold()
+        if given != expected:
+            raise RuntimeError(
+                "browser launch audit: --user-data-dir must point at the"
+                f" dedicated bridge profile, got {m.group(1)!r}")
+    whole = script.casefold()
+    for hint in ("appdata/local/google/chrome/user data",
+                 "appdata\\local\\google\\chrome\\user data"):
+        if hint in whole:
+            raise RuntimeError(
+                "browser launch audit: user main Chrome profile path is"
+                " forbidden in the bootstrap script")
+
+
 def ensure_browser_script() -> str:
     seam = os.environ.get("APC_RUNTIME_BROWSER_ENSURE", "")
     if seam:
         # Offline test seam: replace the bootstrap script wholesale.
         return Path(seam).read_text(encoding="utf-8", errors="replace")
-    return f"""set -u
+    profile = BRIDGE_PROFILE_DIR.as_posix()
+    script = f"""set -u
 {PATH_PROLOGUE}
 export BSK_HOME="{BSK_HOME_DIR}"
 DEV="{BSK_EXE}"
+PROFILE="{profile}"
 CHROME_WS=0   # 1 = a chrome.exe process holds an ESTABLISHED conn to 52900
 DRESTART=0    # 1 = daemon-view desync recovery was executed
 LASTOUT=""
@@ -713,35 +766,70 @@ chrome_holds_ws() {{
   done
   return 1
 }}
-poll_inst() {{
-  OUT=$("$DEV" browsers 2>&1)
+# `bsk browsers` prints an "INSTANCE BROWSER EXT LABEL SESSIONS" header only
+# when at least one browser is registered; the empty registry prints a single
+# "(no browsers connected)" line with NO header. Parse header-gated, from
+# stdout only (2>/dev/null) so daemon error text can never fake an instance.
+# poll() emits "<count> <first-instance-id>" from one snapshot; refresh()
+# loads it into CNT / INST.
+poll() {{
+  OUT=$("$DEV" browsers 2>/dev/null)
   LASTOUT=$(printf '%s' "$OUT" | tr -d '\\r' | tail -1)
-  printf '%s' "$OUT" | awk 'NR==2{{print $1}}'
+  printf '%s' "$OUT" | tr -d '\\r' | awk 'NR==1{{ok=($1=="INSTANCE")}} ok&&NR>1&&NF>0{{c++; if(c==1) inst=$1}} END{{print c+0, inst}}'
 }}
+refresh() {{ read -r CNT INST <<< "$(poll)"; }}
+multi_blocked() {{
+  echo "RUNTIME_BROWSER_ENSURE=BLOCKED:multiple bridge browser instances registered (expected exactly 1); remove the dev extension from your personal Chrome, then retry"
+  echo "RUNTIME_BROWSER_CTX=count=$CNT last=[${{LASTOUT:0:60}}]"
+}}
+
+# prerequisite 0: the dedicated bridge profile must exist (one-time owner
+# initialization: Load unpacked extension + reviewer login; runbook in
+# WEAK_WORKER_START_HERE.md). Fail fast with an actionable message; never
+# launch anything in its place (2026-09-02 breach fix).
+if [ ! -d "$PROFILE" ]; then
+  echo "RUNTIME_BROWSER_ENSURE=BLOCKED:bridge browser profile not initialized; complete the one-time initialization in WEAK_WORKER_START_HERE.md before running browser-channel GOALs"
+  exit 0
+fi
 
 # prerequisite 1: canonical daemon, explicit port (idempotent; the exact form
 # dev_env.sh daemon-up uses, so the port can never drift)
 "$DEV" daemon start --port 52900 >/dev/null 2>&1 || true
 
-# prerequisite 2+3: browser instance registered by the extension handshake?
-INST=$(poll_inst)
+# prerequisite 2+3: EXACTLY ONE browser instance (the bridge-profile Chrome)
+# registered by the extension handshake. More than one means the dev extension
+# is still installed in the user's personal Chrome (or a stray instance):
+# fail CLOSED — the transport cannot disambiguate, and production traffic must
+# never risk landing in the user's main browser (2026-09-02 breach fix).
+refresh
+if [ "$CNT" -gt 1 ]; then
+  multi_blocked
+  exit 0
+fi
 
 # ---- W1: canonical launch/nudge + bounded poll ----
-# Chrome OFF -> fresh default-profile launch (onStartup fast path, proven ~23s).
-# Chrome ON  -> process-reuse opens one new tab; the extension SW's top-level
+# Bridge-profile Chrome OFF -> fresh ISOLATED launch (dedicated persistent
+# user-data-dir; the unpacked extension and reviewer logins live inside it).
+# Bridge-profile Chrome ON -> the per-profile single-instance lock forwards
+# the new about:blank tab to the bridge instance; the extension SW's top-level
 # tabs.onUpdated/onActivated listeners wake the suspended worker, whose
-# top-level attach() reconnects. Non-destructive: no window close, no second
-# profile, no second extension.
+# top-level attach() reconnects. --user-data-dir guarantees both the cold
+# launch and the tab-forward target stay inside the bridge profile: the
+# user's personal Chrome is never touched (2026-09-02 breach fix).
 if [ -z "$INST" ]; then
   if [ ! -f "{CHROME_BIN}" ] || [ ! -d "{CHROME_EXT}" ]; then
     echo "RUNTIME_BROWSER_ENSURE=BLOCKED:canonical browser dependency missing"
     exit 0
   fi
   CHR=$(chrome_count)
-  "{CHROME_BIN}" --no-first-run --no-default-browser-check about:blank >/dev/null 2>&1 &
+  "{CHROME_BIN}" --user-data-dir="{profile}" --no-first-run --no-default-browser-check about:blank >/dev/null 2>&1 &
   DL=$(( $(date +%s) + 45 ))
   while [ "$(date +%s)" -lt "$DL" ]; do
-    INST=$(poll_inst)
+    refresh
+    if [ "$CNT" -gt 1 ]; then
+      multi_blocked
+      exit 0
+    fi
     [ -n "$INST" ] && break
     sleep 3
   done
@@ -762,7 +850,11 @@ if [ -z "$INST" ] && chrome_holds_ws; then
   DRESTART=1
   DL=$(( $(date +%s) + 30 ))
   while [ "$(date +%s)" -lt "$DL" ]; do
-    INST=$(poll_inst)
+    refresh
+    if [ "$CNT" -gt 1 ]; then
+      multi_blocked
+      exit 0
+    fi
     [ -n "$INST" ] && break
     sleep 2
   done
@@ -770,10 +862,14 @@ fi
 
 # ---- W3: final re-nudge (covers SW woke late / first nudge raced) ----
 if [ -z "$INST" ] && [ -f "{CHROME_BIN}" ]; then
-  "{CHROME_BIN}" --no-first-run --no-default-browser-check about:blank >/dev/null 2>&1 &
+  "{CHROME_BIN}" --user-data-dir="{profile}" --no-first-run --no-default-browser-check about:blank >/dev/null 2>&1 &
   DL=$(( $(date +%s) + 30 ))
   while [ "$(date +%s)" -lt "$DL" ]; do
-    INST=$(poll_inst)
+    refresh
+    if [ "$CNT" -gt 1 ]; then
+      multi_blocked
+      exit 0
+    fi
     [ -n "$INST" ] && break
     sleep 3
   done
@@ -785,6 +881,8 @@ if [ -z "$INST" ]; then
 fi
 echo "RUNTIME_BROWSER_INST=$INST"
 """
+    _audit_browser_launch(script)
+    return script
 
 
 def ensure_bridge_ready(force: bool = False) -> dict:

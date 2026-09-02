@@ -18,6 +18,20 @@ PowerShell 示例：`& "E:\WB\tools\ai-production-control\runtime\run.cmd" statu
 5. 用户指令 PAUSE/STOP/RESUME/R_URL_CHANGE/CHANGE_SCOPE/USER_OVERRIDE 必须立即执行：
    `run directive --run-id <ID> <ACTION> [--new-r-url ...] [--note ...]`。先落盘再行动是 runtime 内置的，你只需调用并读取返回。
 6. 上下文被压缩、换了会话/模型后：第一件事 `run status --run-id <ID>`，以 state 的 `status`/`next_action` 为唯一权威。你自己对"新旧会话"的判断不作数。
+7. **禁止**直接启动或操作任何浏览器（Chrome/Edge/Chromium 等）、禁止使用/读取/附着用户主浏览器与主 profile。桥载体浏览器（专用 bridge-profile）由 Runtime 独占管理；看到 `RUNTIME_BROWSER_BLOCKED`（含 bridge browser profile not initialized / multiple instances 字样）就停止并报告用户，不要自行修复。
+
+## 桥专用浏览器 profile（业主一次性初始化；弱 AI 禁止执行本节任何步骤）
+
+2026-09-02 主浏览器泄漏事故后，桥载体改为专用隔离 profile
+`E:\WB\tools\bsk-file-bridge\bridge-profile`（不再使用你的主 Chrome）。
+业主一次性初始化步骤：
+1. **先**在你自己的主 Chrome 中卸载 bsk dev 扩展（chrome://extensions → 移除）；
+2. 启动桥浏览器：`& "C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir=E:\WB\tools\bsk-file-bridge\bridge-profile`；
+3. 在该窗口 chrome://extensions → 打开开发者模式 → "加载已解压的扩展程序" → 选择 `E:\WB\tools\bsk-file-bridge\repo\apps\extension\dist\chrome-mv3`（此目录此后不可移动/改名）；
+4. 在该窗口登录 DeepSeek（启用 ChatGPT 审查通道前再登录 ChatGPT 一次）；
+5. 初始化完成后可关闭该窗口；Runtime 之后会按需用同一 profile 自动拉起。
+验收：初始化后 `bsk browsers` 应恰好显示 1 个实例；若 RUN 报 multiple
+instances 的 RUNTIME_BROWSER_BLOCKED，说明主 Chrome 里的扩展未卸载干净。
 
 ## 标准循环
 
