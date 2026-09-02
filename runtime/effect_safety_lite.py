@@ -907,6 +907,21 @@ def install(rt, options: dict) -> None:
                 )
             except EffectDenied:
                 pass
+            # 2026-09-02 (dual-review): surface the effect id + unlock commands
+            # directly in the HARD_BLOCKED emit so a weak AI can relay them to
+            # the user without reading the contract. Pure additive fields; the
+            # gate/lock semantics are unchanged.
+            _eid = str(record.get("logical_effect_id") or "")
+            rt.emit({"status": "HARD_BLOCKED",
+                     "reason": "EFFECT_OUTCOME_UNKNOWN: reconcile reality before any retry",
+                     "effect_id": _eid,
+                     "instruction": ("Report to the user. Unlock requires, IN ORDER: "
+                                     "(1) run directive --run-id " + str(current.get("run_id")) +
+                                     " RECONCILE --effect-id " + _eid +
+                                     " --observed not_occurred --note <evidence>; "
+                                     "(2) run directive --run-id " + str(current.get("run_id")) +
+                                     " USER_OVERRIDE --note <why>; (3) only then resend.")})
+            return rt.EXIT_HARD_BLOCKED
         return code
 
     rt.cmd_send = gated_cmd_send

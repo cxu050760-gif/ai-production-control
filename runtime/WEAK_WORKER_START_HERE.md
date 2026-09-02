@@ -33,6 +33,37 @@ PowerShell 示例：`& "E:\WB\tools\ai-production-control\runtime\run.cmd" statu
 验收：初始化后 `bsk browsers` 应恰好显示 1 个实例；若 RUN 报 multiple
 instances 的 RUNTIME_BROWSER_BLOCKED，说明主 Chrome 里的扩展未卸载干净。
 
+## HARD_BLOCKED 自救手册（2026-09-02，遇到就照做，不要自己发明操作）
+
+**硬性边界（必读）**：`directive` 的所有动作（RECONCILE / USER_OVERRIDE /
+R_URL_CHANGE / CHANGE_SCOPE）**只有用户能发起**。即使它们出现在 HARD_BLOCKED
+状态的 `allowed_actions` 里，你**也绝不自行执行任何 directive**——你的职责
+是 `run status` 读清 `blocked_reason`，然后把下面的建议**逐字转述给用户**，
+由用户来发指令。违反=越权（铁律 2）。
+
+遇到 `"status":"HARD_BLOCKED"` 时：
+
+1. `run status --run-id <ID>`——`blocked_reason` 与 `effect_safety` 字段（尤其
+   `effect_safety.logical_effect_id`，这就是解锁要用的 effect-id；它**不在**
+   blocked_reason 里，在 `effect_safety` 对象里）都在输出里。
+2. 按 blocked_reason 分类报告，并附用户可执行的解锁建议：
+   - 含 `OUTCOME_UNKNOWN`（"结果未知"）：runtime 无法确定上一条提交是否已发给
+     审查者。**绝不重发**（防重复投递）。向用户报告并建议：
+     - 若实际未发出（命令在发出前就报错）→ 用户执行：
+       `run directive --run-id <ID> RECONCILE --effect-id <effect_id> --observed not_occurred --note <证据>`
+     - 若可能已发出 → 用户先 `RECONCILE --observed occurred` 对账。
+   - 含 `existing logical effect is unresolved`：同属效果记录未结清，处置同上
+     （RECONCILE 后 USER_OVERRIDE）。
+   - 含 `REVIEWER_NOT_READY`：审查者会话未确认就位，停止报告（见上文）。
+   - 其他（EC 熔断 / RUNTIME_BROWSER_BLOCKED 等）：停止报告；EC 熔断类冻结同样
+     由用户 `USER_OVERRIDE`（会清零熔断计数）解除。
+3. **解锁顺序必须是**：`RECONCILE`（把效果对账为 occurred / not_occurred）
+   → `USER_OVERRIDE`（把 RUN 复位到 RUNNING）→ **之后**才重试 send。
+   若跳过 RECONCILE 直接 USER_OVERRIDE 再发，会被 OUTCOME_UNKNOWN 锁再次
+   拒绝（先 override 再 send 无效）。
+4. 注意只用 `run directive ... RECONCILE` 这种形式（`--effect-id / --observed /
+   --note`）；系统里另一个 `effect-reconcile` 入口参数不同，不要混用。
+
 ## 标准循环
 
 1. `run status --run-id <ID>` → 读 `status` 与 `next_action`。
