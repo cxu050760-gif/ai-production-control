@@ -392,7 +392,14 @@ yz_fill_react() {
     document.execCommand('insertText', false, $jtext);
     return 'inserted';
   })()" 2>/dev/null
-  sleep 1.5
+  # 2026-09-02: 大文本(>8KB)需要更久渲染, 就绪缓冲按长度自适应(每8KB+1s, 上限8s)
+  local _plen; _plen=${#text}
+  if [ "$_plen" -gt 8192 ]; then
+    local _psec; _psec=$(( _plen / 8192 )); [ "$_psec" -gt 8 ] && _psec=8
+    sleep "$_psec"
+  else
+    sleep 1.5
+  fi
 }
 
 # 点击发送，返回 0 表示 prompt-textarea 已清空（消息已提交）
@@ -421,17 +428,28 @@ yz_send_text() {
   local base_acount; base_acount=$(yz_assistant_count "$sid")
   case "$base_acount" in ''|*[!0-9]*) base_acount=0;; esac
   # 发送 + 用 user turn 的 [WB_TASK:task_id] 验证（不依赖 user 总数量）；失败则重新 fill 重试
+  # 2026-09-02: 确认窗口从固定15s改为按文本长度自适应(每10KB+15s, 上限120s),
+  #   修复38KB大消息在15s内未完成渲染提交而被误判SEND_FAILED的竞态; 重试前先清空
+  #   输入框防两段叠加; 重试次数2->3。
+  local _flen; _flen=${#full}
+  local _wsec=15; if [ "$_flen" -gt 10240 ]; then
+    _wsec=$(( _wsec + (_flen / 10240) * 15 )); [ "$_wsec" -gt 120 ] && _wsec=120
+  fi
   local sent=NO i
-  for i in 1 2; do
+  for i in 1 2 3; do
     yz_fill_react "$sid" "$full" >/dev/null 2>&1
     # 提交用 JS 触发真实 send button：bsk 坐标点击可能被 browser-skill overlay 截走
     # （2026-08-17 实测：同一文本 bsk click 两次未提交，JS btn.click() 立即提交）
     "$DEV" evaluate --session "$sid" "(()=>{const b=document.querySelector('$SENDBTN'); if(b){b.click(); return 'CLICKED';} return 'NO_BTN';})()" >/dev/null 2>&1
-    local dl=$(( $(date +%s) + 15 ))
+    local dl=$(( $(date +%s) + _wsec ))
     while [ "$(date +%s)" -lt "$dl" ]; do
       if yz_user_turn_has_task "$sid" "$task_id"; then sent=YES; break 2; fi
       sleep 0.8
     done
+    if [ "$sent" != "YES" ] && [ "$i" -lt 3 ]; then
+      "$DEV" evaluate --session "$sid" "(()=>{const p=document.querySelector('#prompt-textarea'); if(p){p.focus(); document.execCommand('selectAll',false,null); document.execCommand('delete',false,null);} return 'cleared';})()" >/dev/null 2>&1
+      sleep 1
+    fi
   done
   if [ "$sent" != "YES" ]; then echo "SEND_FAILED"; return 1; fi
   yz_wait_reply_done "$sid" 90 "$timeout" "$task_id" "$base_acount"

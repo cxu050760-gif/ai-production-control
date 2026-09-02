@@ -100,9 +100,11 @@ BROWSER_BOOTSTRAP_WAIT_SEC = 90
 PATH_PROLOGUE = 'export PATH="/usr/bin:/mingw64/bin:$PATH:/c/Windows/System32"'
 
 HEALTH_TTL_SEC = 300
-MAX_BRIDGE_RETRIES = 3
-MAX_SESSION_RECOVERIES = 2
-MAX_UPLOAD_RETRIES = 2
+# 2026-09-02 (用户授权: 放宽"脾气"锁): 重试预算倍增至自动恢复所需轮数, 避免桥/
+# 页面偶发抖动就 HARD_BLOCKED; 底线未动(隔离/防重复/审查者就位)。
+MAX_BRIDGE_RETRIES = 9
+MAX_SESSION_RECOVERIES = 6
+MAX_UPLOAD_RETRIES = 5
 MAX_VERDICT_REQUERIES = 2
 DEFAULT_SEND_TIMEOUT = 900
 LOCK_STALE_SEC = 180
@@ -1154,15 +1156,33 @@ def reviewer_handshake_text(goal: str) -> str:
             f"确认你已就位后,请只回复一行:{REVIEWER_READY_CONFIRM}")
 
 
+REVIEWER_READY_GLOBAL = Path(r"E:\WB\state\ai-production-control\runtime-v1\reviewer_ready_global.json")
+
+
 def reviewer_ready_satisfied(state: dict) -> bool:
     """True when the current reviewer conversation is already prepared: either
     an explicit handshake landed for this epoch, or the RUN has already
-    produced a real verdict this epoch (implicit readiness)."""
+    produced a real verdict this epoch (implicit readiness).
+
+    2026-09-02 (双复核通过): 审查者就位改为跨RUN全局记忆——同一审查会话
+    (r_url) 在任何RUN里 ready 过, 新RUN直接跳过握手, 不再重复初始化
+    (用户痛点: 每个新RUN都初始化一次还卡很久)。全局文件由 runtime 独占。"""
     rr = state.get("reviewer_ready") or {}
     if rr.get("ready") and rr.get("epoch") == state.get("review_epoch"):
         return True
     if state.get("last_r_verdict") in ("PASS", "REWORK", "BLOCKED"):
         return True
+    # 全局记忆: 同审查会话跨RUN已就位
+    rurl = state.get("r_url") or ""
+    try:
+        if rurl and REVIEWER_READY_GLOBAL.exists():
+            g = json.loads(REVIEWER_READY_GLOBAL.read_text(encoding="utf-8"))
+            if g.get(rurl, {}).get("ready"):
+                # 同步回本RUN state, 便于同RUN内重复检查命中
+                state.setdefault("reviewer_ready", {})["ready"] = True
+                return True
+    except (OSError, ValueError):
+        pass
     return False
 
 
@@ -1633,6 +1653,20 @@ def _ensure_reviewer_ready(rt_state: dict, run_d: Path, stored_sid: str) -> int:
                            "ready_sid": mk.get("RUNTIME_SID") or stored_sid or "",
                            "handshake_sent": True, "at": utc_now()})
                 save_state(rt_state)
+                # 2026-09-02: 全局记忆落盘, 跨RUN共享(同审查会话不再重复初始化)
+                try:
+                    g = {}
+                    rurl = rt_state.get("r_url") or ""
+                    if REVIEWER_READY_GLOBAL.exists():
+                        g = json.loads(REVIEWER_READY_GLOBAL.read_text(encoding="utf-8"))
+                    g[rurl] = {"ready": True, "at": utc_now(),
+                               "ready_sid": rr.get("ready_sid")}
+                    REVIEWER_READY_GLOBAL.parent.mkdir(parents=True, exist_ok=True)
+                    REVIEWER_READY_GLOBAL.write_text(
+                        json.dumps(g, ensure_ascii=False, indent=2), encoding="utf-8")
+                except OSError as _e:
+                    journal(rt_state["run_id"], "REVIEWER_READY_GLOBAL_WRITE_FAIL",
+                            detail=str(_e)[:140])
                 journal(rt_state["run_id"], "REVIEWER_READY",
                         epoch=rt_state.get("review_epoch"),
                         sid=rr.get("ready_sid"))
