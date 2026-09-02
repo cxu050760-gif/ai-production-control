@@ -258,15 +258,18 @@ def main() -> int:
     code, out, _ = run_cli(tmp, ["send", "--run-id", run_u4b, "--message", "u4b",
                                   "--file", str(HERE / "runtime.py")],
                            env_extra={"APC_RUNTIME_INJECT_BRIDGE_FAIL": "UPLOAD_HEALTHY", **WRAP_READY})
-    check("U4b_upload_chain_hard_blocked", out.get("status") == "HARD_BLOCKED" and code == 6, str(out)[:200])
+    # 2026-09-02(双复核 PASS): 健康会话单次上传失败 -> 自动降级 text-only-degraded,
+    # 不再 HARD_BLOCKED。U4a(死会话)仍保留 HARD_BLOCKED 语义(UPLOAD seam)。
+    check("U4b_upload_degraded_to_text", out.get("status") == "OK"
+          and out.get("attachment_mode") == "text-only-degraded", str(out)[:240])
     _, s4b, _ = run_cli(tmp, ["status", "--run-id", run_u4b])
     check("U4b_no_rebuild", int(s4b["metrics"].get("session_recoveries", 0)) == 0
-          and int(s4b["metrics"].get("upload_retries", 0)) >= 3
-          and "no rebuild" in str(s4b.get("blocked_reason")), json.dumps(s4b["metrics"])[:200])
+          and s4b.get("status") == "RUNNING", json.dumps(s4b["metrics"])[:200])
     jr4b = [json.loads(l) for l in (tmp / "runs" / run_u4b / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
-    inplace = [e for e in jr4b if e.get("action") == "IN_PLACE_RETRY" and e.get("kind") == "attachment"]
-    check("U4b_inplace_retries_journaled", len(inplace) >= 3
-          and not any(e["event"] == "SESSION_REPLACED" for e in jr4b), str(inplace)[:200])
+    check("U4b_degraded_journaled",
+          any(e["event"] == "SEND_DEGRADED_FROM_UPLOAD" for e in jr4b)
+          and not any(e["event"] == "SESSION_REPLACED" for e in jr4b),
+          str([e["event"] for e in jr4b])[:200])
 
     # U5: ordinary text-only review never triggers upload (explicit semantics).
     _, out5, _ = run_cli(tmp, ["start", "--goal", "u5", "--r-url", URL_D, "--worker-id", "u5"])

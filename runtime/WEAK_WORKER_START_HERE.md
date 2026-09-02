@@ -74,7 +74,7 @@ R_URL_CHANGE / CHANGE_SCOPE）**只有用户能发起**。即使它们出现在 
    `run send --run-id <ID> --message "<简洁正文>" [--file 证据文件 ...]`
    - **多行正文必须**先写成文件再用 `--message-file <路径>`；`--message` 只传单行（入口层换行会截断，多行会被拒绝）。
    - **默认 text-only**：简短日志、状态摘要、metrics、verdict 请求一律直接写进正文，不要为它们创建并上传 txt。只有审查方确实需要文件内容时才加 `--file`。
-   - `--file` = **attachment-required**：上传超预算会 HARD_BLOCKED，runtime 不会偷偷丢附件改文本；不带 `--file` = text-only，绝不触发上传。返回的 `attachment_mode` 字段会显式告诉你本次是哪种。
+   - `--file` = **attachment-required**：优先尝试上传；若目标通道不支持/上传失败且会话健康，runtime 会自动**降级为文本**（消息中显式标注 `[RUNTIME_DEGRADED_ATTACHMENT]` + 文件哈希，二进制只附文件名；返回 `attachment_mode=text-only-degraded`）。会话死亡仍按预算 HARD_BLOCKED。不带 `--file` = text-only，绝不触发上传。返回的 `attachment_mode` 会显式告诉你本次是哪种。
    - 只传增量：已经传过且未变的文件 runtime 会自动跳过，放心列全。
    - 返回的 `last_r_verdict` 已由 runtime 解析好：
      - `PASS` → 收尾后 `run done --run-id <ID>`
@@ -105,7 +105,11 @@ run start --goal "<GOAL>" --r-url "<R_URL>" --worker-id "<你的名字>"
 
 - R_URL 可以来自两个通道，由 URL 自动识别，调用方式完全相同：
   ChatGPT `https://chatgpt.com/c/<id>`；DeepSeek `https://chat.deepseek.com/a/chat/s/<id>`。
-- DeepSeek 的三模式（快速/专家/识图）由 runtime **按任务内容自动路由**
+- DeepSeek 的三模式（快速/专家/识图）由 runtime **按任务内容自动路由**，并遵守通道能力表：
+  - 快速模式：可上传附件、可联网；
+  - 专家模式：**不能上传附件、不能联网**（深度推理专用）；带附件时会自动降级为文本标注后发送，不改变模式；
+  - 识图模式：可上传图片附件。
+  - ChatGPT：可上传附件；上传失败时自动降级为文本标注后发送。
   （带图片附件→识图；难任务→专家；其余→快速），并在需要时自动开新对话。
   你不需要、也不应该在正文里描述或请求模式；模式选择不是你的一部分。
 - 强制指定模式是**用户/宿主**的权力（环境变量 `APC_DS_MODE=fast|expert|vision`）；
